@@ -1,0 +1,14 @@
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.zygo/
+archive/
+.env
+.env.*
+__pycache__/
+.cursor/
+.vscode/
+.idea/
+.DS_Store
+**/*.egg-info/

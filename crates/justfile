@@ -1,0 +1,24 @@
+set dotenv-load
+
+cli := "cargo run -p zygo-cli --quiet --"
+
+setup:
+    @echo "Setting up..."
+    mkdir -p "`{{cli}} store-root`"
+    touch "`{{cli}} db-path`"
+
+migrate:
+    @echo "Running migrations..."
+    sqlx migrate run --source core/src/db/migrations
+
+clean:
+    @echo "Cleaning up..."
+    rm -f "`{{cli}} db-path`"
+
+build:
+    @echo "Building..."
+    cargo build --all
+
+test:
+    @echo "Testing..."
+    cargo test --all

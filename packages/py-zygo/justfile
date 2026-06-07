@@ -1,0 +1,111 @@
+# ---- Config -----------------------------------------------------------------
+
+src_dirs := "src tests examples"
+proto_dir := "../../core/crates/proto"
+proto_file := proto_dir / "orchestrator.proto"
+proto_out_dir := "src/zygo/_internal/grpc/proto"
+
+# ---- Meta -------------------------------------------------------------------
+
+# List available recipes
+default:
+    @just --list
+
+# ---- Environment ------------------------------------------------------------
+
+[group('environment')]
+_install-dev:
+    uv pip install -e .
+
+# Initialize the virtual environment
+[group('environment')]
+init:
+    uv venv
+    uv sync
+    source .venv/bin/activate
+    uv pip install -e .
+
+# ---- Formatting & Linting ---------------------------------------------------
+
+# Format code with ruff
+[group('lint')]
+fmt:
+    uvx ruff format {{ src_dirs }}
+
+# Check formatting only
+[group('lint')]
+fmt-check:
+    uvx ruff format --check {{ src_dirs }}
+
+# Lint with ruff
+[group('lint')]
+lint:
+    uvx ruff check {{ src_dirs }}
+
+# Lint and auto-fix with ruff
+[group('lint')]
+lint-fix:
+    uvx ruff check --fix {{ src_dirs }}
+
+# Type-check with basedpyright
+[group('lint')]
+typecheck:
+    uvx basedpyright {{ src_dirs }}
+
+# Format and auto-fix all issues
+[group('lint')]
+fix: fmt lint-fix
+
+# ---- CI-ish -----------------------------------------------------------------
+
+# Run fmt-check + lint + typecheck (reports all failures)
+[group('ci')]
+check:
+    #!/usr/bin/env bash
+    exit_code=0
+    echo "Running fmt-check..."
+    just fmt-check || exit_code=1
+    echo "Running lint..."
+    just lint || exit_code=1
+    echo "Running typecheck..."
+    just typecheck || exit_code=1
+    exit $exit_code
+
+# Run tests with pytest
+[group('ci')]
+test:
+    uv run pytest tests -v
+
+# ---- Codegen ----------------------------------------------------------------
+
+# Generate gRPC client code from proto files
+[group('codegen')]
+gen-proto:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Generating gRPC client code from {{ proto_file }}..."
+    mkdir -p {{ proto_out_dir }}
+    uv run -m grpc_tools.protoc \
+        --proto_path={{ proto_dir }} \
+        --python_out={{ proto_out_dir }} \
+        --grpc_python_out={{ proto_out_dir }} \
+        --pyi_out={{ proto_out_dir }} \
+        --mypy_grpc_out={{ proto_out_dir }} \
+        {{ proto_file }}
+    echo "Fixing imports in generated gRPC files..."
+    for grpc_file in {{ proto_out_dir }}/*_grpc.py {{ proto_out_dir }}/*_grpc.pyi; do
+        if [ -f "$grpc_file" ]; then
+            sed -i '' 's/^import \([a-z_]*_pb2\)\(.*\)$/from . import \1\2/' "$grpc_file" 2>/dev/null || \
+            sed -i 's/^import \([a-z_]*_pb2\)\(.*\)$/from . import \1\2/' "$grpc_file"
+        fi
+    done
+    echo "Generated files in {{ proto_out_dir }}"
+    touch {{ proto_out_dir }}/__init__.py
+
+# ---- Housekeeping -----------------------------------------------------------
+
+# Remove caches and generated proto files
+[group('housekeeping')]
+clean:
+    find . -type d -name __pycache__ -exec rm -rf {} +  2>/dev/null || true
+    rm -rf .ruff_cache .pyright .ty_cache .mypy_cache .pytest_cache {{ proto_out_dir }}

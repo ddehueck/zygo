@@ -1,0 +1,220 @@
+syntax = "proto3";
+package orchestrator.v1;
+
+import "google/protobuf/timestamp.proto";
+
+service OrchestratorService {
+  // Mutative RPCs
+  rpc RegisterWorkflow(RegisterWorkflowRequest) returns (RegisterWorkflowResponse);
+  rpc HandleEvent(HandleEventRequest) returns (HandleEventResponse);
+
+  // Query RPCs
+  // rpc GetWorkflowVersionSchema(GetWorkflowVersionSchemaRequest) returns (GetWorkflowVersionSchemaResponse);
+  // rpc ListRuns(ListRunsRequest) returns (ListRunsResponse);
+  // rpc ListRunEvents(ListRunEventsRequest) returns (ListRunEventsResponse);
+  // rpc ListWorkflows(ListWorkflowsRequest) returns (ListWorkflowsResponse);
+  // rpc Livestream(LivestreamRequest) returns (LivestreamResponse);
+}
+
+// ============================================================================
+// Registration RPCs
+// ============================================================================
+
+message RegisterWorkflowRequest {
+  string name = 1;
+  string content_hash = 2;
+  repeated ChannelSchema channels = 3;
+  repeated JobSchema jobs = 4;
+}
+
+message ChannelSchema {
+  string name = 1;
+}
+
+message JobSchema {
+  string name = 1;
+  string content_hash = 2;
+  string input_channel_name = 3;
+  repeated string output_channel_names = 4;
+
+  oneof entrypoint {
+    LocalEntrypoint local_entrypoint = 10;
+    RemoteEntrypoint remote_entrypoint = 11;
+  }
+}
+
+message RegisterWorkflowResponse {
+  string workflow_version_id = 1;
+  map<string, string> channel_ids_by_name = 2;
+  map<string, string> job_ids_by_name = 3;
+  string workflow_id = 4;
+}
+
+// ============================================================================
+// Data References
+// ============================================================================
+
+message DataReference {
+  string uri = 2;
+  string etag = 3;
+  optional string content_type = 4;
+  optional uint64 size_bytes = 5;
+}
+
+// ============================================================================
+// Event RPCs
+// ============================================================================
+
+message HandleEventRequest {
+  JobRunEvent event = 1;
+}
+
+message HandleEventResponse {
+  JobRunEvent event = 1;
+}
+
+// ============================================================================
+// Run Events
+// ============================================================================
+
+message JobRunEvent {
+  string id = 1;
+  RunId run_id = 2;
+
+  // Source: what caused this event to be generated?
+  oneof source {
+    InputSource input_source = 5;
+    JobRunSource job_run_source = 6;
+  }
+
+  oneof event {
+    DataReferenceInsertedEvent data_reference_inserted = 10;
+    ChannelItemInsertedEvent channel_item_inserted = 11;
+    JobRequestedEvent job_requested = 12;
+    JobStartedEvent job_started = 13;
+    JobSucceededEvent job_succeeded = 14;
+    JobFailedEvent job_failed = 15;
+  }
+}
+
+message RunId {
+  string workflow_id = 1;
+  string workflow_version_id = 2;
+  string workflow_run_id = 3;
+}
+
+// Source: the event was triggered by an external input to kick off the workflow
+message InputSource {}
+
+// Source: the event was derived from a specific run of a job
+message JobRunSource {
+  string job_id = 1;
+  string job_run_id = 2;
+}
+
+message DataReferenceInsertedEvent {
+  DataReference data_reference = 1;
+}
+
+message ChannelItemInsertedEvent {
+  string channel_id = 1;
+  DataReference data_reference = 2;
+}
+
+message JobRequestedEvent {
+  string job_id = 1;
+  DataReference data_reference = 2;
+  google.protobuf.Timestamp requested_at = 3;
+}
+
+message JobStartedEvent {
+  google.protobuf.Timestamp started_at = 1;
+}
+
+message JobSucceededEvent {
+  google.protobuf.Timestamp succeeded_at = 1;
+}
+
+message JobFailedEvent {
+  google.protobuf.Timestamp failed_at = 1;
+  string error_message = 2;
+}
+
+// ============================================================================
+// Entrypoints
+// ============================================================================
+
+message LocalEntrypoint {
+  string cwd = 1;
+  string exec = 2;
+}
+
+message RemoteEntrypoint {
+  string url = 1;
+  map<string, string> headers = 2;
+}
+
+// ============================================================================
+// Proto Model Types
+// ============================================================================
+
+message ProtoJob {
+  string id = 1;
+  string workflow_version_id = 2;
+  string name = 3;
+  string content_hash = 4;
+}
+
+message ProtoChannel {
+  string id = 1;
+  string name = 2;
+  string workflow_version_id = 3;
+}
+
+message ProtoEdge {
+  string workflow_version_id = 1;
+  string job_id = 2;
+  string channel_id = 3;
+  EdgeKind kind = 4;
+}
+
+enum EdgeKind {
+  EDGE_KIND_UNSPECIFIED = 0;
+  EDGE_KIND_INPUT = 1;
+  EDGE_KIND_OUTPUT = 2;
+}
+
+message ProtoRun {
+  string id = 1;
+  string workflow_version_id = 2;
+  google.protobuf.Timestamp created_at = 3;
+}
+
+message ProtoWorkflow {
+  string id = 1;
+  string name = 2;
+}
+
+message ProtoEvent {
+  string id = 1;
+  string workflow_version_id = 2;
+  bool is_replay = 3;
+  google.protobuf.Timestamp timestamp = 4;
+  string workflow_run_id = 5;
+  optional int64 sequence_number = 6;
+
+  // Source information
+  oneof source {
+    InputSource input_source = 7;
+    JobRunSource job_run_source = 8;
+  }
+
+  oneof kind {
+    DataReferenceInsertedEvent data_reference_inserted = 10;
+    ChannelItemInsertedEvent channel_item_inserted = 11;
+    JobRequestedEvent job_requested = 12;
+    JobStartedEvent job_started = 13;
+    JobSucceededEvent job_succeeded = 14;
+    JobFailedEvent job_failed = 15;
+  }
+}

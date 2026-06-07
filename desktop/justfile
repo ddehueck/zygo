@@ -1,0 +1,19 @@
+
+setup:
+    pnpm install
+
+generate-bindings:
+    cd src-tauri && cargo tauri generate-bindings
+
+# Compile TypeScript bindings from Tauri Rust commands
+build:
+    cd src-tauri && cargo build
+
+
+typecheck:
+    pnpm tsc --noEmit
+
+# Run the Tauri app in development mode
+dev: build
+    pnpm tauri dev
+

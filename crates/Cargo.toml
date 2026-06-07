@@ -1,0 +1,32 @@
+[workspace]
+members = [
+    "core",
+    "cli", "testing",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+authors = ["Devin <devin@dehueck.com>"]
+license = "MIT"
+
+[workspace.dependencies]
+# Common dependencies that can be shared across crates
+prost = "0.14.1"
+prost-types = "0.14.1"
+tonic = "0.14.2"
+tonic-build = "0.14.2"
+tokio = { version = "1.41.0", features = ["macros", "rt-multi-thread"] }
+anyhow = "1.0.100"
+serde = { version = "1.0.214", features = ["derive"] }
+serde_json = "1.0.132"
+uuid = { version = "1.11.0", features = ["v5", "v7"] }
+
+# Compile-time verified queries do quite a bit of work at compile time.
+# Incremental actions like cargo check and cargo build can be significantly
+# faster when using an optimized build for sqlx-macros.
+# More information in the Profiles section of The Cargo Book.
+[profile.dev.package.sqlx-macros]
+opt-level = 3
+

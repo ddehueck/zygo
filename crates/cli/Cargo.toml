@@ -1,0 +1,11 @@
+[package]
+name = "zygo-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+zygo-core = { path = "../core" }
+anyhow = { workspace = true }
+

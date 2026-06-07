@@ -1,0 +1,43 @@
+[package]
+name = "zygo-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+build = "build.rs"
+
+[dependencies]
+# gRPC/protobuf dependencies (needed for proto definitions and the gRPC server in core)
+tonic = { workspace = true }
+tonic-prost = "0.14.2"
+tonic-reflection = "0.14.0"
+prost = { workspace = true }
+prost-types = { workspace = true }
+# Async runtime
+tokio = { workspace = true }
+async-trait = "0.1"
+# Error handling
+anyhow = { workspace = true }
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+# UUID generation
+uuid = { workspace = true }
+# Database
+sqlx = { version = "0.8.6", features = ["runtime-tokio", "sqlite", "macros", "migrate", "chrono"] }
+chrono = { version = "0.4", features = ["serde"] }
+# Environment variables
+dotenvy = "0.15.7"
+# Directory management
+directories = "6.0.0"
+# HTTP client (for remote entrypoints)
+reqwest = { version = "0.12", features = ["json"] }
+# Utilities
+num_cpus = "1.0"
+hex = "0.4"
+blake3 = "1.8.2"
+
+[build-dependencies]
+tonic-build = { workspace = true }
+tonic-prost-build = "0.14.2"
+
