@@ -109,3 +109,9 @@ gen-proto:
 clean:
     find . -type d -name __pycache__ -exec rm -rf {} +  2>/dev/null || true
     rm -rf .ruff_cache .pyright .ty_cache .mypy_cache .pytest_cache {{ proto_out_dir }}
+
+# ---- Build ------------------------------------------------------------------
+
+[group('build')]
+build:
+    uv build
