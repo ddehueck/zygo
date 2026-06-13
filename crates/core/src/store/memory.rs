@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
 
-use zygo_core::store::StorageProvider;
+use super::StorageProvider;
 
 #[derive(Debug, Clone, Default)]
 pub struct MemoryStore {
@@ -147,7 +147,7 @@ impl StorageProvider for MemoryStore {
 #[cfg(test)]
 mod tests {
     use super::MemoryStore;
-    use zygo_core::store::StorageProvider;
+    use crate::store::StorageProvider;
 
     #[tokio::test]
     async fn stores_and_fetches_values() {

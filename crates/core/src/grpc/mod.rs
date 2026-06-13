@@ -20,6 +20,7 @@ pub use service::OrchestratorService;
 
 use std::net::SocketAddr;
 
+use tokio::sync::oneshot;
 use tonic::transport::{Server, server::Router};
 
 use crate::store::StorageProvider;
@@ -54,12 +55,17 @@ impl<S: StorageProvider + 'static> OrchestratorService<S> {
         Ok(builder.add_service(OrchestratorServiceServer::new(self)))
     }
 
-    /// Run the gRPC server on `addr`, consuming the service.
-    ///
-    /// This is the primary entry point for embedders: construct the service
-    /// with a store via [`OrchestratorService::new`], then call `serve`.
-    pub async fn serve(self, addr: SocketAddr) -> Result<(), Box<dyn std::error::Error>> {
-        self.into_router()?.serve(addr).await?;
+    /// Run the gRPC server on `addr` until `shutdown_rx` receives a signal.
+    pub async fn serve_with_shutdown(
+        self,
+        addr: SocketAddr,
+        shutdown_rx: oneshot::Receiver<()>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        self.into_router()?
+            .serve_with_shutdown(addr, async move {
+                shutdown_rx.await.ok();
+            })
+            .await?;
         Ok(())
     }
 }

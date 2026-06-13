@@ -1,5 +1,5 @@
 [package]
-name = "zygo-cli"
+name = "zygo-desktop"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

@@ -8,7 +8,7 @@ use testing::generators::entrypoint::{
 };
 use testing::generators::world::{World, WorldGenerator};
 use testing::invariants;
-use testing::memory_store::MemoryStore;
+use zygo_core::store::MemoryStore;
 use tonic::Request;
 use tonic::transport::Channel;
 use tracing::{error, info, warn};

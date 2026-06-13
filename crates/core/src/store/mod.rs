@@ -1,6 +1,8 @@
 pub(crate) mod keyspace;
+mod memory;
 mod provider_interface;
 
+pub use memory::MemoryStore;
 pub use provider_interface::StorageProvider;
 
 use std::sync::Arc;
