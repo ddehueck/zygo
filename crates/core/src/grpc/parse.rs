@@ -3,41 +3,21 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tonic::Status;
 
 use crate::models::data_reference::DataReference;
-use crate::models::event::{InputSource, JobRunSource, Source};
+use crate::models::event::{JobRunSource, Source};
 use crate::models::{
-    ChannelItemInsertedData, ChannelName, ContentHash, DataReferenceInsertedData, DomainError,
-    Event, EventId, EventKind, JobEntrypoint, JobFailedData, JobId, JobName, JobRunId,
-    JobStartedData, JobSucceededData, RunId, WorkflowId, WorkflowName, WorkflowVersionId,
-    ChannelId,
+    ChannelId, ChannelItemInsertedData, ChannelName, ChannelSchema, ContentHash,
+    DataReferenceInsertedData, DomainError, Event, EventId, EventKind, JobFailedData, JobId,
+    JobName, JobRunId, JobSchema, JobStartedData, JobSucceededData, RunId, WorkflowId,
+    WorkflowName, WorkflowVersionId,
 };
 use crate::orchestrator_proto;
 
-#[derive(Debug, Clone)]
-pub struct RegisterWorkflowInput {
-    pub name: WorkflowName,
-    pub content_hash: ContentHash,
-    pub channels: Vec<ChannelSchemaInput>,
-    pub jobs: Vec<JobSchemaInput>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ChannelSchemaInput {
-    pub name: ChannelName,
-}
-
-#[derive(Debug, Clone)]
-pub struct JobSchemaInput {
-    pub name: JobName,
-    pub content_hash: ContentHash,
-    pub input_channel_name: ChannelName,
-    pub output_channel_names: Vec<ChannelName>,
-    pub entrypoint: JobEntrypoint,
-}
+pub type RegisterWorkflowInput = crate::models::RegisterWorkflowInput;
+pub type ChannelSchemaInput = ChannelSchema;
+pub type JobSchemaInput = JobSchema;
 
 /// Parse a proto DataReference into a domain DataReference.
-fn parse_data_reference(
-    proto: orchestrator_proto::DataReference,
-) -> Result<DataReference, Status> {
+fn parse_data_reference(proto: orchestrator_proto::DataReference) -> Result<DataReference, Status> {
     if proto.uri.trim().is_empty() {
         return Err(Status::invalid_argument("data_reference.uri is required"));
     }
@@ -55,23 +35,15 @@ fn parse_data_reference(
 /// Parse a proto Source oneof into a domain Source.
 fn parse_source(
     source: Option<orchestrator_proto::job_run_event::Source>,
-    workflow_run_id: RunId,
 ) -> Result<Source, Status> {
     match source {
-        Some(orchestrator_proto::job_run_event::Source::InputSource(_)) | None => {
-            Ok(Source::Input(InputSource { workflow_run_id }))
-        }
+        Some(orchestrator_proto::job_run_event::Source::InputSource(_)) | None => Ok(Source::Input),
         Some(orchestrator_proto::job_run_event::Source::JobRunSource(jr)) => {
             let job_id = JobId::try_from(jr.job_id)
                 .map_err(|e| Status::invalid_argument(format!("invalid source job_id: {e}")))?;
-            let job_run_id = JobRunId::try_from(jr.job_run_id).map_err(|e| {
-                Status::invalid_argument(format!("invalid source job_run_id: {e}"))
-            })?;
-            Ok(Source::JobRun(JobRunSource {
-                job_id,
-                job_run_id,
-                workflow_run_id,
-            }))
+            let job_run_id = JobRunId::try_from(jr.job_run_id)
+                .map_err(|e| Status::invalid_argument(format!("invalid source job_run_id: {e}")))?;
+            Ok(Source::JobRun(JobRunSource { job_id, job_run_id }))
         }
     }
 }
@@ -79,7 +51,7 @@ fn parse_source(
 fn job_run_ids_from_source(source: &Source) -> Result<(JobId, JobRunId), Status> {
     match source {
         Source::JobRun(job_run) => Ok((job_run.job_id.clone(), job_run.job_run_id.clone())),
-        Source::Input(_) => Err(Status::invalid_argument(
+        Source::Input => Err(Status::invalid_argument(
             "job lifecycle events require a JobRunSource",
         )),
     }
@@ -119,7 +91,7 @@ pub fn parse_job_run_event(
     let workflow_run_id = RunId::try_from(run_id.workflow_run_id)
         .map_err(|e| Status::invalid_argument(format!("invalid workflow_run_id: {e}")))?;
 
-    let source = parse_source(proto.source, workflow_run_id)?;
+    let source = parse_source(proto.source)?;
 
     let proto_event = proto
         .event
@@ -188,7 +160,9 @@ pub fn parse_job_run_event(
         timestamp,
         kind,
         source,
-        workflow_version_id: Some(workflow_version_id.clone()),
+        workflow_id: workflow_id.clone(),
+        workflow_run_id,
+        workflow_version_id: workflow_version_id.clone(),
     };
 
     Ok(ParsedJobRunEvent {
@@ -208,17 +182,17 @@ pub fn parse_register_workflow_request(
     let content_hash = ContentHash::try_from(request.content_hash)
         .map_err(|e: DomainError| Status::invalid_argument(e.to_string()))?;
 
-    let channels: Vec<ChannelSchemaInput> = request
+    let channels: Vec<ChannelSchema> = request
         .channels
         .into_iter()
         .map(|ch| {
             let channel_name = ChannelName::try_from(ch.name)
                 .map_err(|e: DomainError| Status::invalid_argument(e.to_string()))?;
-            Ok(ChannelSchemaInput { name: channel_name })
+            Ok(ChannelSchema { name: channel_name })
         })
         .collect::<Result<Vec<_>, Status>>()?;
 
-    let jobs: Vec<JobSchemaInput> = request
+    let jobs: Vec<JobSchema> = request
         .jobs
         .into_iter()
         .map(|job| {
@@ -246,7 +220,7 @@ pub fn parse_register_workflow_request(
                 .try_into()
                 .map_err(|e: DomainError| Status::invalid_argument(e.to_string()))?;
 
-            Ok(JobSchemaInput {
+            Ok(JobSchema {
                 name: job_name,
                 content_hash: job_content_hash,
                 input_channel_name,

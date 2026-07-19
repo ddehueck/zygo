@@ -7,7 +7,7 @@
 ///
 /// Designed to map naturally onto S3, RocksDB, Postgres, the local
 /// filesystem, or any other ordered key-value store.
-pub trait StorageProvider: Send + Sync {
+pub trait StorageProvider: Send + Sync + 'static {
     fn put(
         &self,
         key: &str,

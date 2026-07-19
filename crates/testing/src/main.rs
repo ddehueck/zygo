@@ -8,15 +8,17 @@ use testing::generators::entrypoint::{
 };
 use testing::generators::world::{World, WorldGenerator};
 use testing::invariants;
-use zygo_core::store::MemoryStore;
 use tonic::Request;
 use tonic::transport::Channel;
 use tracing::{error, info, warn};
-use zygo_core::engine::{Engine, RunScope, StepResult};
+use zygo_core::context::{RunContext, ServiceContext};
+use zygo_core::engine::{Engine, StepResult};
 use zygo_core::grpc::OrchestratorService;
 use zygo_core::orchestrator_proto::orchestrator_service_client::OrchestratorServiceClient;
+use zygo_core::store::MemoryStore;
 use zygo_core::store::{StorageProvider, Store};
-use zygo_core::stream::{Stream, StreamReader};
+use zygo_core::stream::StreamReader;
+use zygo_core::workers::WorkerPool;
 
 /// How long the engine may sit idle (no new stream items) before we give up
 /// waiting for jobs to report back. Without a cap a run whose jobs never respond
@@ -70,6 +72,7 @@ async fn run() {
     // Create a store and start the orchestrator gRPC service in the same mode
     // the world was generated for (all jobs are local or all remote).
     let store = Store::new(MemoryStore::new());
+    let service_context = ServiceContext::new(store.clone(), WorkerPool::new(10));
     let orchestrator_service = OrchestratorService::new(store.clone(), world.mode());
     let addr = DEFAULT_ORCHESTRATOR_ENDPOINT.parse().unwrap();
     let router = orchestrator_service
@@ -91,25 +94,24 @@ async fn run() {
 
     // Drive the generated world end to end: register it, feed its inputs, and
     // step the engine until it reaches a terminal status.
-    let (run_scope, hit_timeout) = execute_run(&mut client, &store, &mut world).await;
+    let (run_context, hit_timeout) = execute_run(&mut client, &service_context, &mut world).await;
 
     // Now imagine the client runs the exact same thing again: the identical
     // blueprint (same schema, jobs, and inputs) under a brand-new run id.
     // Registration is a pure function of the workflow, so re-registering mints
     // the same ids — only the run id differs, giving the re-run its own stream.
     let mut rerun_world = world.rerun();
-    let (rerun_scope, rerun_hit_timeout) = execute_run(&mut client, &store, &mut rerun_world).await;
+    let (rerun_context, rerun_hit_timeout) =
+        execute_run(&mut client, &service_context, &mut rerun_world).await;
 
     // Check invariants
-    let initial_stream = Stream::new(store.clone(), run_scope);
-    let initial_records = StreamReader::new(initial_stream).collect().await;
+    let initial_records = StreamReader::new(run_context).collect().await;
     if let Err(e) = initial_records {
         error!("Failed to collect initial records: {e}");
         return;
     }
 
-    let rerun_stream = Stream::new(store.clone(), rerun_scope);
-    let rerun_records = StreamReader::new(rerun_stream).collect().await;
+    let rerun_records = StreamReader::new(rerun_context).collect().await;
     if let Err(e) = rerun_records {
         error!("Failed to collect rerun records: {e}");
         return;
@@ -146,13 +148,13 @@ async fn run() {
 /// Register `world`, feed its inputs through the gRPC service, and drive a fresh
 /// engine until it reaches a terminal status.
 ///
-/// Returns the run scope the engine executed under and whether it gave up on the
+/// Returns the run context the engine executed under and whether it gave up on the
 /// [`IDLE_TIMEOUT`] instead of terminating cleanly.
 async fn execute_run(
     client: &mut OrchestratorServiceClient<Channel>,
-    store: &Store<MemoryStore>,
+    service_context: &ServiceContext<MemoryStore>,
     world: &mut World,
-) -> (RunScope, bool) {
+) -> (RunContext<MemoryStore>, bool) {
     // Register the world as a workflow through the gRPC service.
     let registration_response = client
         .register_workflow(Request::new(world.register_request()))
@@ -183,14 +185,14 @@ async fn execute_run(
     }
 
     // Step the engine until it's terminal, under the orchestrator-confirmed
-    // run scope.
-    let scope = world.run_scope();
-    let mut engine = Engine::new(scope.clone(), store.clone())
+    // run context.
+    let context = world.run_context(service_context);
+    let mut engine = Engine::new(context.clone())
         .await
         .expect("failed to create engine");
 
     let hit_timeout = drive_to_terminal(&mut engine).await;
-    (scope, hit_timeout)
+    (context, hit_timeout)
 }
 
 /// Step `engine` until it reports a terminal status, sleeping between idle polls.

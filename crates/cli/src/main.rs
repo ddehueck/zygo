@@ -137,8 +137,7 @@ fn stop_service(manager: &dyn ServiceManager, label: ServiceLabel) -> anyhow::Re
         .context("failed to stop service")?;
 
     let addr = orchestrator_addr()?;
-    wait_for_orchestrator_shutdown(addr)
-        .context("orchestrator gRPC server did not shut down")?;
+    wait_for_orchestrator_shutdown(addr).context("orchestrator gRPC server did not shut down")?;
 
     println!("Stopped {SERVICE_LABEL} — orchestrator gRPC server is no longer running");
     Ok(())

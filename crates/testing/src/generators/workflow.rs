@@ -29,8 +29,8 @@ use rand_chacha::ChaCha8Rng;
 use zygo_core::models::{ChannelName, ContentHash, JobName, OrchestratorMode, WorkflowName};
 use zygo_core::orchestrator_proto::{ChannelSchema, JobSchema, RegisterWorkflowRequest};
 
-use crate::generators::job::{JobBlueprint, JobContext, JobGenerator};
 use crate::generators::Generate;
+use crate::generators::job::{JobBlueprint, JobContext, JobGenerator};
 
 /// The logical name every generated workflow registers under.
 pub const WORKFLOW_NAME: &str = "world";
@@ -146,9 +146,7 @@ impl WorkflowGenerator {
         let channels = plan
             .channels
             .iter()
-            .map(|channel| {
-                ChannelName::try_from(channel.name.clone()).expect("valid channel name")
-            })
+            .map(|channel| ChannelName::try_from(channel.name.clone()).expect("valid channel name"))
             .collect();
 
         let jobs: Vec<JobBlueprint> = plan
@@ -242,7 +240,10 @@ impl WorkflowGenerator {
 /// A deterministic fingerprint of the workflow definition, derived from the
 /// (sorted) content hashes of its jobs.
 fn workflow_content_hash(jobs: &[JobBlueprint]) -> ContentHash {
-    let mut parts: Vec<String> = jobs.iter().map(|job| job.content_hash.to_string()).collect();
+    let mut parts: Vec<String> = jobs
+        .iter()
+        .map(|job| job.content_hash.to_string())
+        .collect();
     parts.sort();
     ContentHash::try_from(parts.join(":")).expect("valid content hash")
 }

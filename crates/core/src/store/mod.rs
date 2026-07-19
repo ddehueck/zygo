@@ -39,9 +39,9 @@ pub(crate) struct StoreWriteSet {
 }
 
 impl StoreWriteSet {
-    pub(crate) fn with_capacity(capacity: usize) -> Self {
+    pub(crate) fn new() -> Self {
         Self {
-            entries: Vec::with_capacity(capacity),
+            entries: Vec::new(),
         }
     }
 
@@ -57,6 +57,10 @@ impl StoreWriteSet {
 
     fn add_bytes(&mut self, key: String, bytes: Vec<u8>) {
         self.entries.push((key, bytes));
+    }
+
+    pub(crate) fn push(&mut self, key: &StoreKey, bytes: Vec<u8>) {
+        self.entries.push((key.as_string(), bytes));
     }
 
     pub(crate) fn extend(&mut self, other: StoreWriteSet) {
@@ -93,6 +97,10 @@ impl<S: StorageProvider> Store<S> {
 
     pub fn results_cache(&self) -> ResultsCache<'_, S> {
         ResultsCache { store: self }
+    }
+
+    pub async fn get(&self, key: &StoreKey) -> anyhow::Result<Option<Vec<u8>>> {
+        self.storage.get(key.as_str()).await
     }
 
     // ---------- generic JSON-over-KV helpers ----------
@@ -329,7 +337,7 @@ impl<S: StorageProvider> StreamItems<'_, S> {
                 &KeySpace::workflow(workflow_id.clone())
                     .version(version_id.clone())
                     .run(run_id.clone())
-                    .stream_item(&sequence_id.to_string()),
+                    .stream_item(sequence_id),
             )
             .await
     }
@@ -348,7 +356,7 @@ impl<S: StorageProvider> StreamItems<'_, S> {
         let key = KeySpace::workflow(workflow_id.clone())
             .version(version_id.clone())
             .run(run_id.clone())
-            .stream_item(&sequence_id.to_string());
+            .stream_item(sequence_id);
         self.store.put_json(&key.as_string(), record).await?;
         Ok(key)
     }
@@ -363,7 +371,7 @@ impl<S: StorageProvider> StreamItems<'_, S> {
         let key = KeySpace::workflow(workflow_id.clone())
             .version(version_id.clone())
             .run(run_id.clone())
-            .stream_item(&sequence_id.to_string());
+            .stream_item(sequence_id);
         self.store.delete_key(&key.as_string()).await
     }
 
@@ -375,18 +383,14 @@ impl<S: StorageProvider> StreamItems<'_, S> {
         after: Option<&SequenceId>,
         limit: u32,
     ) -> anyhow::Result<Vec<StreamRecord>> {
-        let run_scope = KeySpace::workflow(workflow_id.clone())
+        let run_keyspace = KeySpace::workflow(workflow_id.clone())
             .version(version_id.clone())
             .run(run_id.clone());
 
-        let after = after.map(|sequence_id| {
-            run_scope
-                .stream_item(&sequence_id.clone().to_string())
-                .as_string()
-        });
+        let after = after.map(|sequence_id| run_keyspace.stream_item(sequence_id).as_string());
 
         self.store
-            .list_json(&run_scope.stream_items_prefix(), after.as_deref(), limit)
+            .list_json(&run_keyspace.stream_items_prefix(), after.as_deref(), limit)
             .await
     }
 }

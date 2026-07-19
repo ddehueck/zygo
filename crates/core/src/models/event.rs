@@ -2,7 +2,7 @@ use std::time::SystemTime;
 
 use serde::{Deserialize, Serialize};
 
-use crate::models::EventId;
+use crate::models::{EventId, WorkflowId};
 
 use super::data_reference::DataReference;
 use super::ids::{ChannelId, JobId, JobRunId, RunId, WorkflowVersionId};
@@ -14,9 +14,9 @@ pub struct Event {
     pub timestamp: SystemTime,
     pub kind: EventKind,
     pub source: Source,
-    /// Denormalized from the run for convenience in DB/proto serialization.
-    /// May be `None` when constructing events in handlers (derived from the run).
-    pub workflow_version_id: Option<WorkflowVersionId>,
+    pub workflow_id: WorkflowId,
+    pub workflow_run_id: RunId,
+    pub workflow_version_id: WorkflowVersionId,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,28 +59,12 @@ pub struct ChannelItemInsertedData {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Source {
-    Input(InputSource),
+    Input,
     JobRun(JobRunSource),
-}
-
-impl Source {
-    /// Get the workflow run ID from any source variant.
-    pub fn workflow_run_id(&self) -> &RunId {
-        match self {
-            Source::Input(input) => &input.workflow_run_id,
-            Source::JobRun(job_run) => &job_run.workflow_run_id,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JobRunSource {
     pub job_id: JobId,
     pub job_run_id: JobRunId,
-    pub workflow_run_id: RunId,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct InputSource {
-    pub workflow_run_id: RunId,
 }

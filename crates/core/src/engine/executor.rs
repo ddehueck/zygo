@@ -1,15 +1,13 @@
 //! Executes command IR produced by the arbiter.
 
-use std::sync::Arc;
-
+use crate::context::ActorContext;
 use crate::models::{
-    CacheJobEventSourceCommand, CacheJobRunResultCommand, Command, Event, JobArgs,
+    CacheJobEventSourceCommand, CacheJobRunResultCommand, Command, Event, JobArgs, JobRunSource,
     ReplayJobCommand, ResultCacheItem, RunJobCommand, SetJobRunStatusCommand,
 };
-use crate::store::{StorageProvider, Store};
+use crate::store::StorageProvider;
 
-use super::runner::Runner;
-use super::state::{RunContext, RunState};
+use super::state::{ResultCache, RunState};
 
 pub struct ExecuteResult {
     pub next_state: RunState,
@@ -17,22 +15,18 @@ pub struct ExecuteResult {
 }
 
 pub struct Executor<S: StorageProvider> {
-    _store: Arc<Store<S>>,
-    runner: Runner<S>,
+    context: ActorContext<S>,
 }
 
 impl<S: StorageProvider> Executor<S> {
-    pub fn new(store: Arc<Store<S>>) -> Self {
-        Self {
-            _store: Arc::clone(&store),
-            runner: Runner::new(store),
-        }
+    pub fn new(context: ActorContext<S>) -> Self {
+        Self { context }
     }
 
     pub async fn execute(
         &self,
         command: Command,
-        context: &RunContext,
+        context: &ResultCache<S>,
         state: &RunState,
     ) -> Result<ExecuteResult, anyhow::Error> {
         match command {
@@ -51,13 +45,15 @@ impl<S: StorageProvider> Executor<S> {
     async fn run_job(
         &self,
         command: RunJobCommand,
-        context: &RunContext,
+        context: &ResultCache<S>,
         state: &RunState,
     ) -> Result<ExecuteResult, anyhow::Error> {
+        // TODO: We should be able to cut this down to job id and data reference id.
+        // Like the python client won't need more than that now that we are doing stdout ipc.
         let job_args = JobArgs {
-            run_id: context.scope.run_id.to_string(),
-            workflow_id: context.scope.workflow_id.to_string(),
-            workflow_version_id: context.scope.workflow_version_id.to_string(),
+            run_id: context.context.run_id.to_string(),
+            workflow_id: context.context.workflow_id.to_string(),
+            workflow_version_id: context.context.workflow_version_id.to_string(),
             job_id: command.job_id.to_string(),
             data_reference_uri: command.data_reference.uri.clone(),
             data_reference_etag: command.data_reference.etag.clone(),
@@ -69,7 +65,22 @@ impl<S: StorageProvider> Executor<S> {
             return Err(anyhow::anyhow!("job entrypoint not found"));
         };
 
-        self.runner.execute(job_args, job_entrypoint).await?;
+        let source = JobRunSource {
+            job_id: command.job_id,
+            job_run_id: command.job_run_id,
+        };
+
+        if let Err(e) = self.context.worker_pool.spawn_job(
+            self.context.clone(),
+            source,
+            job_args,
+            job_entrypoint,
+        ) {
+            // TODO: How to handle backpressure when we are out of workers?
+            // Maybe a JobEnqueuedEvent is emitted when handling the ChannelItemInserted event
+            // so we can simply just keep trying to process those events for some retry limit.
+            return Err(anyhow::anyhow!(e));
+        }
 
         Ok(ExecuteResult {
             next_state: state.clone(),
@@ -80,13 +91,14 @@ impl<S: StorageProvider> Executor<S> {
     async fn replay_job(
         &self,
         command: ReplayJobCommand,
-        context: &RunContext,
+        context: &ResultCache<S>,
         state: &RunState,
     ) -> Result<ExecuteResult, anyhow::Error> {
         // We replay a job by retrieving the events referenced in the result cache.
         // We then return the events to be appended to the stream as replay events.
         let original_events = self
-            ._store
+            .context
+            .store
             .results_cache()
             .get_events(&command.cache_item)
             .await?;
@@ -121,7 +133,7 @@ impl<S: StorageProvider> Executor<S> {
     async fn cache_job_run_result(
         &self,
         command: CacheJobRunResultCommand,
-        context: &RunContext,
+        context: &ResultCache<S>,
         state: &RunState,
     ) -> Result<ExecuteResult, anyhow::Error> {
         // A job run id is constructed from the data input and job content hash.
@@ -135,10 +147,11 @@ impl<S: StorageProvider> Executor<S> {
             event_keys: event_keys.clone(),
         };
 
-        self._store
+        self.context
+            .store
             .results_cache()
             .put(
-                &context.scope.workflow_id,
+                &context.context.workflow_id,
                 &command.job_run_id,
                 &result_cache_item,
             )

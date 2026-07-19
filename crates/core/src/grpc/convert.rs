@@ -1,16 +1,18 @@
-use crate::models::job_entrypoint::{JobEntrypoint, LocalEntrypoint, RemoteEntrypoint};
 use crate::models::DomainError;
+use crate::models::job_entrypoint::{JobEntrypoint, LocalEntrypoint, RemoteEntrypoint};
 use crate::orchestrator_proto;
 
 impl From<JobEntrypoint> for orchestrator_proto::job_schema::Entrypoint {
     fn from(entrypoint: JobEntrypoint) -> Self {
         match entrypoint {
-            JobEntrypoint::Local(local) => orchestrator_proto::job_schema::Entrypoint::LocalEntrypoint(
-                orchestrator_proto::LocalEntrypoint {
-                    cwd: local.cwd,
-                    exec: local.exec,
-                },
-            ),
+            JobEntrypoint::Local(local) => {
+                orchestrator_proto::job_schema::Entrypoint::LocalEntrypoint(
+                    orchestrator_proto::LocalEntrypoint {
+                        cwd: local.cwd,
+                        exec: local.exec,
+                    },
+                )
+            }
             JobEntrypoint::Remote(remote) => {
                 orchestrator_proto::job_schema::Entrypoint::RemoteEntrypoint(
                     orchestrator_proto::RemoteEntrypoint {

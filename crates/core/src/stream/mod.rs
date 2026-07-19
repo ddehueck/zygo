@@ -1,6 +1,6 @@
 mod reader;
-mod stream;
-mod types;
+mod sequencer;
+mod writer;
 
-pub use reader::{StreamIterator, StreamReader};
-pub use stream::Stream;
+pub use reader::{ReadResult, StreamIterator, StreamReader};
+pub use writer::{StreamAppendReservation, StreamWriter};

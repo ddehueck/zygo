@@ -5,78 +5,45 @@ use std::{collections::HashMap, time::SystemTime};
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    context::RunContext,
     models::{
-        Event, EventId, EventKind, JobRunId, JobRunStatus, ResultCacheItem, RunId, RunStatus,
-        SequenceId, Source, WorkflowId, WorkflowVersion, WorkflowVersionId, WorkflowVersionSchema,
+        Event, EventId, EventKind, JobRunId, JobRunStatus, ResultCacheItem, RunStatus, SequenceId,
+        Source, WorkflowVersionSchema,
     },
-    store::{StorageProvider, Store, keyspace::StoreKey},
+    store::{StorageProvider, keyspace::StoreKey},
 };
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct RunScope {
-    pub workflow_id: WorkflowId,
-    pub workflow_version_id: WorkflowVersionId,
-    pub run_id: RunId,
-}
-
-impl RunScope {
-    pub fn new(
-        workflow_id: WorkflowId,
-        workflow_version_id: WorkflowVersionId,
-        run_id: RunId,
-    ) -> Self {
-        Self {
-            workflow_id,
-            workflow_version_id,
-            run_id,
-        }
-    }
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct RunContext {
-    pub scope: RunScope,
+#[derive(Clone)]
+pub struct ResultCache<S: StorageProvider> {
+    pub context: RunContext<S>,
     pub schema: WorkflowVersionSchema,
 }
 
-impl RunContext {
-    pub fn new(scope: RunScope, schema: WorkflowVersionSchema) -> Self {
-        Self { scope, schema }
+impl<S: StorageProvider> ResultCache<S> {
+    pub fn new(context: RunContext<S>, schema: WorkflowVersionSchema) -> Self {
+        Self { context, schema }
     }
 
-    pub fn from_workflow_version(run_id: RunId, workflow_version: WorkflowVersion) -> Self {
-        let scope = RunScope {
-            workflow_id: workflow_version.workflow_id,
-            workflow_version_id: workflow_version.id,
-            run_id,
-        };
-
-        Self {
-            scope,
-            schema: workflow_version.schema,
-        }
-    }
-
-    pub async fn get_result_cache_item<S: StorageProvider>(
+    pub async fn get_item(
         &self,
-        store: &Store<S>,
         job_run_id: &JobRunId,
     ) -> Result<Option<ResultCacheItem>, anyhow::Error> {
-        store
+        self.context
+            .store
             .results_cache()
-            .get(&self.scope.workflow_id, job_run_id)
+            .get(&self.context.workflow_id, job_run_id)
             .await
     }
 
-    pub async fn put_result_cache_item<S: StorageProvider>(
+    pub async fn put(
         &self,
-        store: &Store<S>,
         job_run_id: &JobRunId,
         result_cache_item: &ResultCacheItem,
     ) -> Result<(), anyhow::Error> {
-        store
+        self.context
+            .store
             .results_cache()
-            .put(&self.scope.workflow_id, job_run_id, result_cache_item)
+            .put(&self.context.workflow_id, job_run_id, result_cache_item)
             .await
     }
 
@@ -87,7 +54,9 @@ impl RunContext {
             timestamp: SystemTime::now(),
             kind,
             source,
-            workflow_version_id: Some(self.scope.workflow_version_id.clone()),
+            workflow_version_id: self.context.workflow_version_id.clone(),
+            workflow_id: self.context.workflow_id.clone(),
+            workflow_run_id: self.context.run_id.clone(),
         }
     }
 }

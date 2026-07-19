@@ -3,8 +3,6 @@
 //! The arbiter inspects committed events and current run state, then emits
 //! command intent. It does not execute commands or mutate state directly.
 
-use std::sync::Arc;
-
 use crate::models::{
     CacheJobEventSourceCommand, CacheJobRunResultCommand, ChannelItemInsertedData, Command,
     DataReference, Event, EventKind, JobFailedData, JobId, JobRunId, JobRunSource, JobRunStatus,
@@ -14,14 +12,14 @@ use crate::models::{
 use crate::store::keyspace::StoreKey;
 use crate::store::{StorageProvider, Store};
 
-use super::state::RunContext;
+use super::state::ResultCache;
 
 pub struct Arbiter<S: StorageProvider> {
-    pub store: Arc<Store<S>>,
+    pub store: Store<S>,
 }
 
 impl<S: StorageProvider> Arbiter<S> {
-    pub fn new(store: Arc<Store<S>>) -> Self {
+    pub fn new(store: Store<S>) -> Self {
         Self { store }
     }
 
@@ -29,7 +27,7 @@ impl<S: StorageProvider> Arbiter<S> {
         &self,
         event_key: &StoreKey,
         event: &Event,
-        context: &RunContext,
+        context: &ResultCache<S>,
     ) -> Result<Vec<Command>, anyhow::Error> {
         let mut commands = Vec::new();
 
@@ -55,7 +53,7 @@ impl<S: StorageProvider> Arbiter<S> {
         let mut commands = Vec::new();
 
         match &event.source {
-            Source::Input(_) => {}
+            Source::Input => {}
             Source::JobRun(job_run) => {
                 let cmd = Command::CacheJobEventSource(CacheJobEventSourceCommand {
                     job_run_id: job_run.job_run_id.clone(),
@@ -71,7 +69,7 @@ impl<S: StorageProvider> Arbiter<S> {
     async fn handle_by_event_kind(
         &self,
         event: &Event,
-        context: &RunContext,
+        context: &ResultCache<S>,
     ) -> Result<Vec<Command>, anyhow::Error> {
         match &event.kind {
             EventKind::JobStarted(data) => self.handle_job_started(data),
@@ -91,7 +89,7 @@ impl<S: StorageProvider> Arbiter<S> {
     async fn handle_channel_item_inserted(
         &self,
         data: &ChannelItemInsertedData,
-        context: &RunContext,
+        context: &ResultCache<S>,
     ) -> Result<Vec<Command>, anyhow::Error> {
         // Find all jobs that have the given channel as an input.
         // Request each job to be run.
@@ -113,7 +111,7 @@ impl<S: StorageProvider> Arbiter<S> {
         &self,
         job_id: &JobId,
         data_reference: &DataReference,
-        context: &RunContext,
+        context: &ResultCache<S>,
     ) -> Result<Command, anyhow::Error> {
         // When a job should be run, we first check if the job is already in the result cache.
         // If it is, we replay the events of the latest succeeded run in sequence order.
@@ -130,15 +128,11 @@ impl<S: StorageProvider> Arbiter<S> {
             &data_reference.etag,
         ))?;
 
-        if let Some(cache_item) = context
-            .get_result_cache_item(&self.store, &job_run_id)
-            .await?
-        {
+        if let Some(cache_item) = context.get_item(&job_run_id).await? {
             return Ok(Command::ReplayJob(ReplayJobCommand {
                 source: Source::JobRun(JobRunSource {
                     job_id: job_id.clone(),
                     job_run_id: job_run_id.clone(),
-                    workflow_run_id: context.scope.run_id.clone(),
                 }),
                 cache_item,
             }));

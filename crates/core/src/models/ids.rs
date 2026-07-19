@@ -52,3 +52,26 @@ define_value!(JobName, "job_name");
 define_value!(ContentHash, "content_hash");
 
 define_value!(PythonFunctionName, "python_function_name");
+
+// TODO: This is a temp hack until we confront if we want names/ids for workflows or really just runs + tags.
+impl TryFrom<WorkflowName> for WorkflowId {
+    type Error = DomainError;
+
+    fn try_from(value: WorkflowName) -> Result<Self, Self::Error> {
+        Ok(Self(NonEmptyString::new(
+            value.to_string(),
+            WorkflowId::label(),
+        )?))
+    }
+}
+
+impl TryFrom<ChannelName> for ChannelId {
+    type Error = DomainError;
+
+    fn try_from(value: ChannelName) -> Result<Self, Self::Error> {
+        Ok(Self(NonEmptyString::new(
+            value.to_string(),
+            ChannelId::label(),
+        )?))
+    }
+}

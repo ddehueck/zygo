@@ -1,6 +1,5 @@
 use tonic::{Request, Response, Status};
 
-use crate::engine::RunScope;
 use crate::models::OrchestratorMode;
 use crate::orchestrator_proto::orchestrator_service_server::OrchestratorService as OrchestratorServiceTrait;
 use crate::orchestrator_proto::{
@@ -47,14 +46,9 @@ impl<S: StorageProvider + 'static> OrchestratorServiceTrait for OrchestratorServ
             .ok_or_else(|| Status::invalid_argument("event is required"))?;
 
         let parsed = parse_job_run_event(proto_event.clone())?;
-        let scope = RunScope::new(
-            parsed.workflow_id,
-            parsed.workflow_version_id,
-            parsed.event.source.workflow_run_id().clone(),
-        );
 
         Actions::new(self.store.clone())
-            .handle_event(scope, parsed.event)
+            .handle_event(parsed.event)
             .await
             .map_err(|e| Status::internal(format!("failed to handle event: {e}")))?;
 

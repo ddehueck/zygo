@@ -17,7 +17,14 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::models::ids::{RunId, WorkflowId, WorkflowVersionId};
+use crate::{
+    context::RunContext,
+    models::{
+        SequenceId,
+        ids::{RunId, WorkflowId, WorkflowVersionId},
+    },
+    store::StorageProvider,
+};
 
 const WORKFLOW_PREFIX: &str = "w";
 const VERSION_PREFIX: &str = "v";
@@ -152,7 +159,7 @@ impl RunKeySpace {
     }
 
     /// e.g. "s/wf_xyz/v_abc/r_xyz/00000000000000000001"
-    pub fn stream_item(&self, sequence_id: &str) -> StoreKey {
+    pub fn stream_item(&self, sequence_id: &SequenceId) -> StoreKey {
         StoreKey(format!("{}/{}/{}", STREAM_PREFIX, self.path(), sequence_id))
     }
 
@@ -172,5 +179,15 @@ impl RunKeySpace {
             ENGINE_SNAPSHOT_PREFIX,
             self.path()
         ))
+    }
+}
+
+impl<S: StorageProvider> From<RunContext<S>> for RunKeySpace {
+    fn from(context: RunContext<S>) -> Self {
+        Self {
+            workflow_id: context.workflow_id,
+            version_id: context.workflow_version_id,
+            run_id: context.run_id,
+        }
     }
 }

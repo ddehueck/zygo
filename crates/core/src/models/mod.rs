@@ -9,6 +9,7 @@ pub mod job_args;
 pub mod job_entrypoint;
 pub mod job_run;
 pub mod orchestrator_mode;
+pub mod registration;
 pub mod result_cache;
 pub mod run;
 pub mod sequence_id;
@@ -61,8 +62,8 @@ pub use commands::{
 pub use data_reference::DataReference;
 pub use edge::{Edge, EdgeKind};
 pub use event::{
-    ChannelItemInsertedData, DataReferenceInsertedData, Event, EventKind, InputSource,
-    JobFailedData, JobRunSource, JobStartedData, JobSucceededData, Source,
+    ChannelItemInsertedData, DataReferenceInsertedData, Event, EventKind, JobFailedData,
+    JobRunSource, JobStartedData, JobSucceededData, Source,
 };
 pub use ids::*;
 pub use job::{Job, job_run_id};
@@ -70,6 +71,9 @@ pub use job_args::JobArgs;
 pub use job_entrypoint::{JobEntrypoint, LocalEntrypoint, RemoteEntrypoint};
 pub use job_run::{JobRun, JobRunStatus};
 pub use orchestrator_mode::OrchestratorMode;
+pub use registration::{
+    ChannelSchema, JobSchema, RegisterWorkflowInput, RegisteredWorkflowSummary,
+};
 pub use result_cache::ResultCacheItem;
 pub use run::{Run, RunStatus};
 pub use sequence_id::SequenceId;

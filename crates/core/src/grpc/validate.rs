@@ -1,10 +1,9 @@
 use tonic::Status;
 
-use crate::models::{JobEntrypoint, OrchestratorMode};
-use super::parse::JobSchemaInput;
+use crate::models::{JobEntrypoint, JobSchema, OrchestratorMode};
 
 pub(super) fn validate_jobs_by_mode(
-    jobs: &[JobSchemaInput],
+    jobs: &[JobSchema],
     mode: &OrchestratorMode,
 ) -> Result<(), Status> {
     for job in jobs {

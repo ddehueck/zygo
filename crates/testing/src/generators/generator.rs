@@ -34,7 +34,7 @@
 //! let mut world = World::new(blueprint);
 //! let request = world.register_request();
 //! // ... send `request`, then `world.apply_registration(response)`, then feed
-//! // `world.input_event_requests()`, build `world.run_scope()`, step, assert.
+//! // `world.input_event_requests()`, build `world.run_context(...)`, step, assert.
 //! ```
 
 use rand::{RngExt, SeedableRng};

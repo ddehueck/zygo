@@ -11,7 +11,7 @@
 //! - [`World`] wraps a blueprint and *accumulates* the real ids the orchestrator
 //!   mints, as they come back in responses. Only the orchestrator can tell us
 //!   the true channel/job/workflow ids, so [`World`] refuses to hand out a
-//!   [`RunScope`] or input events until it has been told what registration
+//!   [`RunContext`] or input events until it has been told what registration
 //!   produced.
 //!
 //! The intended drive loop:
@@ -24,13 +24,14 @@
 //! // let response = client.register_workflow(_request).await?;
 //! // world.apply_registration(response);
 //! // for req in world.input_event_requests() { client.handle_event(req).await?; }
-//! // let engine = Engine::new(world.run_scope(), store).await?;
+//! // let engine = Engine::new(world.run_context(&service_context)).await?;
 //! ```
 
 use std::collections::HashMap;
 
 use rand_chacha::ChaCha8Rng;
-use zygo_core::engine::RunScope;
+use uuid::Uuid;
+use zygo_core::context::{RunContext, ServiceContext};
 use zygo_core::models::{
     ChannelId, ChannelName, DataReference, JobId, JobName, OrchestratorMode, RunId, WorkflowId,
     WorkflowVersionId,
@@ -39,7 +40,7 @@ use zygo_core::orchestrator_proto::{
     self, ChannelItemInsertedEvent, HandleEventRequest, JobRunEvent, RegisterWorkflowRequest,
     RegisterWorkflowResponse, RunId as ProtoRunId, job_run_event,
 };
-use uuid::Uuid;
+use zygo_core::store::StorageProvider;
 
 use crate::generators::event::EventGenerator;
 use crate::generators::workflow::{SOURCE_CHANNEL_NAME, WorkflowBlueprint, WorkflowGenerator};
@@ -94,7 +95,7 @@ struct Registration {
 ///
 /// Construct from a [`WorldBlueprint`], call [`World::register_request`] to get
 /// the registration request, then [`World::apply_registration`] with the
-/// response to unlock [`World::run_scope`] and [`World::input_event_requests`].
+/// response to unlock [`World::run_context`] and [`World::input_event_requests`].
 #[derive(Debug, Clone)]
 pub struct World {
     blueprint: WorldBlueprint,
@@ -124,7 +125,10 @@ impl World {
     /// [`apply_registration`](Self::apply_registration) again before using its
     /// real ids.
     pub fn rerun(&self) -> Self {
-        Self::new(self.blueprint.with_run_id(derive_rerun_run_id(&self.blueprint.run_id)))
+        Self::new(
+            self.blueprint
+                .with_run_id(derive_rerun_run_id(&self.blueprint.run_id)),
+        )
     }
 
     /// The orchestrator mode this world must be run under.
@@ -138,7 +142,7 @@ impl World {
     }
 
     /// Fold the ids the orchestrator minted at registration into this world,
-    /// unlocking [`run_scope`](Self::run_scope) and
+    /// unlocking [`run_context`](Self::run_context) and
     /// [`input_event_requests`](Self::input_event_requests).
     pub fn apply_registration(&mut self, response: RegisterWorkflowResponse) -> &mut Self {
         let channel_ids_by_name = response
@@ -178,9 +182,13 @@ impl World {
     ///
     /// Panics if [`apply_registration`](Self::apply_registration) has not been
     /// called.
-    pub fn run_scope(&self) -> RunScope {
+    pub fn run_context<S: StorageProvider>(
+        &self,
+        service_context: &ServiceContext<S>,
+    ) -> RunContext<S> {
         let registration = self.registration();
-        RunScope::new(
+        RunContext::new(
+            service_context,
             registration.workflow_id.clone(),
             registration.workflow_version_id.clone(),
             self.blueprint.run_id.clone(),
@@ -321,6 +329,8 @@ mod tests {
     use crate::generators::GenerateExt;
     use crate::generators::workflow::WORKFLOW_NAME;
     use std::collections::HashSet;
+    use zygo_core::store::{MemoryStore, Store};
+    use zygo_core::workers::WorkerPool;
 
     #[test]
     fn generation_is_deterministic_for_a_seed() {
@@ -355,7 +365,12 @@ mod tests {
         }
 
         assert!(!blueprint.inputs.is_empty());
-        assert!(blueprint.inputs.iter().all(|input| !input.uri.trim().is_empty()));
+        assert!(
+            blueprint
+                .inputs
+                .iter()
+                .all(|input| !input.uri.trim().is_empty())
+        );
     }
 
     #[test]
@@ -417,9 +432,11 @@ mod tests {
             job_ids_by_name,
         });
 
-        let scope = world.run_scope();
-        assert_eq!(scope.workflow_id.as_ref(), "wf-real");
-        assert_eq!(scope.workflow_version_id.as_ref(), "ver-real");
+        let service_context =
+            ServiceContext::new(Store::new(MemoryStore::new()), WorkerPool::new(1));
+        let context = world.run_context(&service_context);
+        assert_eq!(context.workflow_id.as_ref(), "wf-real");
+        assert_eq!(context.workflow_version_id.as_ref(), "ver-real");
 
         let requests = world.input_event_requests();
         assert!(!requests.is_empty());
@@ -428,7 +445,7 @@ mod tests {
             let run_id = event.run_id.as_ref().expect("run id present");
             assert_eq!(run_id.workflow_id, "wf-real");
             assert_eq!(run_id.workflow_version_id, "ver-real");
-            assert_eq!(run_id.workflow_run_id, scope.run_id.as_ref());
+            assert_eq!(run_id.workflow_run_id, context.run_id.as_ref());
 
             match event.event.as_ref().expect("event kind present") {
                 job_run_event::Event::ChannelItemInserted(inserted) => {
