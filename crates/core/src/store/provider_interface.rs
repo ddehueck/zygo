@@ -1,49 +1,28 @@
+use serde_json::Value;
+
 /// A storage-agnostic persistence interface.
 ///
-/// Implementors provide the primitives the engine needs to durably
-/// store and retrieve opaque byte records keyed by string. The engine
-/// builds higher-level concepts (typed collections, event streams) on
-/// top of these operations.
+/// Implementors provide the primitives the engine needs to durably store and
+/// retrieve JSON values keyed by strings.
 ///
-/// Designed to map naturally onto S3, RocksDB, Postgres, the local
-/// filesystem, or any other ordered key-value store.
-pub trait StorageProvider: Send + Sync + 'static {
-    fn put(
-        &self,
-        key: &str,
-        value: &[u8],
-    ) -> impl Future<Output = Result<(), anyhow::Error>> + Send;
-
+/// Designed to map naturally onto S3, RocksDB, Postgres, the local filesystem,
+/// or any other key-value backend.
+///
+/// Cloning a provider must create a cheap handle to the same underlying store.
+pub trait StorageProvider: Clone + Send + Sync + 'static {
     /// Put multiple key/value pairs in one operation.
     ///
-    /// Contract: this must commit **atomically** — either every entry is
-    /// visible together after success, or none are (same semantics as a DB
-    /// transaction or `WriteBatch::commit`).
-    fn put_many<'a>(
-        &'a self,
-        entries: &'a [(&'a str, &'a [u8])],
+    /// This must commit **atomically** so every entry is visible after
+    /// success or none are.
+    fn put(
+        &self,
+        entries: &[(&str, &Value)],
     ) -> impl Future<Output = Result<(), anyhow::Error>> + Send;
 
-    fn get(&self, key: &str)
-    -> impl Future<Output = Result<Option<Vec<u8>>, anyhow::Error>> + Send;
+    fn get(&self, key: &str) -> impl Future<Output = Result<Option<Value>, anyhow::Error>> + Send;
 
     fn get_many(
         &self,
         keys: &[&str],
-    ) -> impl Future<Output = Result<Vec<Option<Vec<u8>>>, anyhow::Error>> + Send;
-
-    /// Delete a single key. A no-op if the key does not exist.
-    fn delete(&self, key: &str) -> impl Future<Output = Result<(), anyhow::Error>> + Send;
-
-    /// Delete every key with the given prefix. Implementations SHOULD make
-    /// this efficient (e.g. RocksDB `delete_range`, S3 bulk delete,
-    /// `DELETE WHERE key LIKE 'prefix%'`), but may fall back to a scan.
-    fn delete_range(&self, prefix: &str) -> impl Future<Output = Result<(), anyhow::Error>> + Send;
-
-    fn list_range(
-        &self,
-        prefix: &str,
-        start_after: Option<&str>,
-        limit: usize,
-    ) -> impl Future<Output = Result<Vec<(String, Vec<u8>)>, anyhow::Error>> + Send;
+    ) -> impl Future<Output = Result<Vec<Option<Value>>, anyhow::Error>> + Send;
 }

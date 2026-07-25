@@ -1,4 +1,4 @@
-use crate::models::{RunStatus, SequenceId, StreamItem};
+use crate::models::{SequenceId, StreamItem, WorkflowRunStatus};
 
 use super::state::RunState;
 
@@ -6,7 +6,8 @@ use super::state::RunState;
 pub enum StepResult {
     Idle,
     Continue,
-    Terminal(RunStatus),
+    WorkerPoolCapacityRequired,
+    Terminal(WorkflowRunStatus),
 }
 
 pub struct StepOutcome {

@@ -1,19 +1,20 @@
 use crate::{
     actors::actor::{ActorHandle, ActorMessage},
     context::{RunContext, ServiceContext},
-    models::{Event, RunId, WorkflowId, WorkflowVersionId},
-    store::StorageProvider,
+    models::{
+        ChannelItemInsertedData, DataReference, Event, EventId, EventKind, Source, WorkflowRunId,
+        WorkflowSchema,
+    },
+    store::{StorageProvider, keyspace::KeySpace},
 };
-use std::collections::HashMap;
+use std::{collections::HashMap, time::SystemTime};
 use tokio::sync::Mutex;
 
 const DEFAULT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1);
 
-type RunKey = (WorkflowId, WorkflowVersionId, RunId);
-
 pub struct ActorPool<S: StorageProvider> {
     context: ServiceContext<S>,
-    registry: Mutex<HashMap<RunKey, ActorHandle>>,
+    registry: Mutex<HashMap<WorkflowRunId, ActorHandle>>,
 }
 
 impl<S: StorageProvider> ActorPool<S> {
@@ -24,57 +25,73 @@ impl<S: StorageProvider> ActorPool<S> {
         }
     }
 
-    /// Sends an event to the actor responsible for its run context.
-    ///
-    /// Creates and caches an actor for the event's run if one does not already exist,
-    /// then waits for the actor to acknowledge that the event was ingested.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the event cannot be confirmed to be persisted.
-    pub async fn send(&self, event: Event) -> Result<(), anyhow::Error> {
-        let run_context = RunContext::new(
-            &self.context,
-            event.workflow_id.clone(),
-            event.workflow_version_id.clone(),
-            event.workflow_run_id.clone(),
-        );
-        let handle = self.get_or_create_actor(run_context).await?;
-
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        let message = ActorMessage {
-            event,
-            reply_tx: tx,
-        };
-
-        handle
-            .tx
-            .send_timeout(message, DEFAULT_TIMEOUT)
-            .await
-            .map_err(|e| anyhow::anyhow!(e))?;
-
-        // TODO: is this the right error handling?
-        rx.await.map_err(|e| anyhow::anyhow!(e))??;
-        Ok(())
-    }
-
-    async fn get_or_create_actor(
+    ///! Idempotently initializes a workflow run with an actor.
+    pub async fn run_with_actor(
         &self,
-        run_context: RunContext<S>,
-    ) -> Result<ActorHandle, anyhow::Error> {
+        input: DataReference,
+        schema: WorkflowSchema,
+    ) -> Result<WorkflowRunId, anyhow::Error> {
         let mut registry = self.registry.lock().await;
-        let run_key = (
-            run_context.workflow_id.clone(),
-            run_context.workflow_version_id.clone(),
-            run_context.run_id.clone(),
-        );
+        let workflow_run_id = WorkflowRunId::new(&schema.content_hash, &input)?;
 
-        if let Some(actor_handle) = registry.get(&run_key) {
-            return Ok(actor_handle.clone());
+        if registry.contains_key(&workflow_run_id) {
+            return Ok(workflow_run_id);
         }
 
-        let actor_handle = ActorHandle::spawn(run_context).await?;
-        registry.insert(run_key, actor_handle.clone());
-        Ok(actor_handle)
+        let actor_handle = self.create_actor(&workflow_run_id, &schema).await?;
+        registry.insert(workflow_run_id.clone(), actor_handle.clone());
+        drop(registry); // Release lock after actor handle is inserted
+
+        let input_channel_inserted_event = Event {
+            id: EventId::new(),
+            is_replay: false,
+            timestamp: SystemTime::now(),
+            kind: EventKind::ChannelItemInserted(ChannelItemInsertedData {
+                channel_id: schema.input_channel_id,
+                data_reference: input,
+            }),
+            source: Source::Input,
+            run_id: workflow_run_id.clone(),
+        };
+
+        self.send_event(&actor_handle, input_channel_inserted_event)
+            .await?;
+
+        Ok(workflow_run_id)
+    }
+
+    async fn create_actor(
+        &self,
+        workflow_run_id: &WorkflowRunId,
+        schema: &WorkflowSchema,
+    ) -> Result<ActorHandle, anyhow::Error> {
+        let schema_key = KeySpace::run(workflow_run_id).schema();
+        let schema_value = serde_json::to_value(schema)?;
+        self.context
+            .store
+            .put(&[(schema_key, schema_value)])
+            .await?;
+
+        let run_context = RunContext::new(&self.context, workflow_run_id);
+        ActorHandle::spawn(&run_context).await
+    }
+
+    async fn send_event(
+        &self,
+        actor_handle: &ActorHandle,
+        event: Event,
+    ) -> Result<(), anyhow::Error> {
+        let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+        actor_handle
+            .tx
+            .send_timeout(ActorMessage { event, reply_tx }, DEFAULT_TIMEOUT)
+            .await
+            .map_err(|error| anyhow::anyhow!("failed to send event to workflow actor: {error}"))?;
+
+        reply_rx
+            .await
+            .map_err(|_| anyhow::anyhow!("workflow actor dropped the event response"))??;
+
+        Ok(())
     }
 }

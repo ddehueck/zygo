@@ -1,25 +1,17 @@
-use std::time::SystemTime;
-
 use serde::{Deserialize, Serialize};
 
-use super::ids::{RunId, WorkflowVersionId};
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum RunStatus {
+pub enum WorkflowRunStatus {
     Running,
     Succeeded,
     Failed,
 }
 
-impl RunStatus {
+impl WorkflowRunStatus {
     pub fn is_terminal(&self) -> bool {
-        matches!(self, RunStatus::Succeeded | RunStatus::Failed)
+        matches!(
+            self,
+            WorkflowRunStatus::Succeeded | WorkflowRunStatus::Failed
+        )
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Run {
-    pub id: RunId,
-    pub workflow_version_id: WorkflowVersionId,
-    pub created_at: SystemTime,
 }

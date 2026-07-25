@@ -3,4 +3,4 @@ mod sequencer;
 mod writer;
 
 pub use reader::{ReadResult, StreamIterator, StreamReader};
-pub use writer::{StreamAppendReservation, StreamWriter};
+pub use writer::StreamWriter;

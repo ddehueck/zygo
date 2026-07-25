@@ -7,20 +7,20 @@ use serde::{Deserialize, Serialize};
 use crate::{
     context::RunContext,
     models::{
-        Event, EventId, EventKind, JobRunId, JobRunStatus, ResultCacheItem, RunStatus, SequenceId,
-        Source, WorkflowVersionSchema,
+        Event, EventId, EventKind, JobRunId, JobRunStatus, ResultCacheItem, SequenceId, Source,
+        WorkflowRunStatus, WorkflowSchema,
     },
-    store::{StorageProvider, keyspace::StoreKey},
+    store::{StorageProvider, StoreKey, keyspace::KeySpace},
 };
 
 #[derive(Clone)]
 pub struct ResultCache<S: StorageProvider> {
     pub context: RunContext<S>,
-    pub schema: WorkflowVersionSchema,
+    pub schema: WorkflowSchema,
 }
 
 impl<S: StorageProvider> ResultCache<S> {
-    pub fn new(context: RunContext<S>, schema: WorkflowVersionSchema) -> Self {
+    pub fn new(context: RunContext<S>, schema: WorkflowSchema) -> Self {
         Self { context, schema }
     }
 
@@ -28,11 +28,18 @@ impl<S: StorageProvider> ResultCache<S> {
         &self,
         job_run_id: &JobRunId,
     ) -> Result<Option<ResultCacheItem>, anyhow::Error> {
+        let key = KeySpace::cache().result(job_run_id);
         self.context
             .store
-            .results_cache()
-            .get(&self.context.workflow_id, job_run_id)
-            .await
+            .get(&key)
+            .await?
+            .map(serde_json::from_value)
+            .transpose()
+            .map_err(|error| {
+                anyhow::anyhow!(
+                    "failed to deserialize result cache item for job run {job_run_id}: {error}"
+                )
+            })
     }
 
     pub async fn put(
@@ -40,23 +47,19 @@ impl<S: StorageProvider> ResultCache<S> {
         job_run_id: &JobRunId,
         result_cache_item: &ResultCacheItem,
     ) -> Result<(), anyhow::Error> {
-        self.context
-            .store
-            .results_cache()
-            .put(&self.context.workflow_id, job_run_id, result_cache_item)
-            .await
+        let key = KeySpace::cache().result(job_run_id);
+        let value = serde_json::to_value(result_cache_item)?;
+        self.context.store.put(&[(key, value)]).await
     }
 
     pub fn make_replay_event(&self, kind: EventKind, source: Source) -> Event {
         Event {
-            id: EventId::try_from(uuid::Uuid::now_v7().to_string()).unwrap(),
+            id: EventId::new(),
             is_replay: true,
             timestamp: SystemTime::now(),
             kind,
             source,
-            workflow_version_id: self.context.workflow_version_id.clone(),
-            workflow_id: self.context.workflow_id.clone(),
-            workflow_run_id: self.context.run_id.clone(),
+            run_id: self.context.run_id.clone(),
         }
     }
 }
@@ -80,6 +83,12 @@ pub struct EngineSnapshot {
     pub state: RunState,
 }
 
+impl Default for EngineSnapshot {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EngineSnapshot {
     pub fn new() -> Self {
         Self {
@@ -91,15 +100,21 @@ impl EngineSnapshot {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct RunState {
-    pub status: RunStatus,
+    pub status: WorkflowRunStatus,
     pub status_by_job_run_id: HashMap<JobRunId, JobRunStatus>,
-    pub event_keys_by_job_run_id: HashMap<JobRunId, Vec<String>>,
+    pub event_keys_by_job_run_id: HashMap<JobRunId, Vec<StoreKey>>,
+}
+
+impl Default for RunState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl RunState {
     pub fn new() -> Self {
         Self {
-            status: RunStatus::Running,
+            status: WorkflowRunStatus::Running,
             status_by_job_run_id: HashMap::new(),
             event_keys_by_job_run_id: HashMap::new(),
         }
@@ -107,7 +122,7 @@ impl RunState {
 
     pub fn from(
         status_by_job_run_id: HashMap<JobRunId, JobRunStatus>,
-        event_keys_by_job_run_id: HashMap<JobRunId, Vec<String>>,
+        event_keys_by_job_run_id: HashMap<JobRunId, Vec<StoreKey>>,
     ) -> Self {
         let status = compute_run_status(&status_by_job_run_id);
         Self {
@@ -122,8 +137,8 @@ impl RunState {
 
         new_event_keys_by_job_run_id
             .entry(job_run_id)
-            .or_insert(Vec::new())
-            .push(event_key.as_string());
+            .or_default()
+            .push(event_key);
 
         Self::from(
             self.status_by_job_run_id.clone(),
@@ -143,20 +158,24 @@ impl RunState {
     }
 }
 
-fn compute_run_status(status_by_job_run_id: &HashMap<JobRunId, JobRunStatus>) -> RunStatus {
+fn compute_run_status(status_by_job_run_id: &HashMap<JobRunId, JobRunStatus>) -> WorkflowRunStatus {
+    if status_by_job_run_id.is_empty() {
+        return WorkflowRunStatus::Running;
+    }
+
     if status_by_job_run_id
         .values()
         .any(|status| *status == JobRunStatus::Failed)
     {
-        return RunStatus::Failed;
+        return WorkflowRunStatus::Failed;
     }
 
     if status_by_job_run_id
         .values()
         .all(|status| *status == JobRunStatus::Succeeded)
     {
-        return RunStatus::Succeeded;
+        return WorkflowRunStatus::Succeeded;
     }
 
-    RunStatus::Running
+    WorkflowRunStatus::Running
 }

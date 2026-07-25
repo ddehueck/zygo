@@ -4,17 +4,9 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
-build = "build.rs"
 
 [dependencies]
-# gRPC/protobuf dependencies (needed for proto definitions and the gRPC server in core)
-tonic = { workspace = true }
-tonic-prost = "0.14.2"
-tonic-reflection = "0.14.0"
-prost = { workspace = true }
-prost-types = { workspace = true }
 tokio = { workspace = true, features = ["process", "io-util"] }
-tokio-util = { version = "0.7.17", features = ["rt"] }
 async-trait = "0.1"
 # Error handling
 anyhow = { workspace = true }
@@ -37,7 +29,3 @@ num_cpus = "1.0"
 hex = "0.4"
 blake3 = "1.8.2"
 thiserror = "2.0.18"
-
-[build-dependencies]
-tonic-build = { workspace = true }
-tonic-prost-build = "0.14.2"

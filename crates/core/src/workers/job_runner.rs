@@ -25,7 +25,9 @@ impl Runner {
                     .run()
                     .await
             }
-            JobEntrypoint::Remote(_) => panic!("remote job entrypoints are not implemented"),
+            JobEntrypoint::Remote(_) => Err(anyhow::anyhow!(
+                "remote job entrypoints are not implemented"
+            )),
         }
     }
 }

@@ -85,15 +85,12 @@ impl<S: StorageProvider> LocalJobRunner<S> {
 
     fn build_event(&self, kind: EventKind) -> Event {
         Event {
-            id: EventId::try_from(uuid::Uuid::now_v7().to_string())
-                .expect("generated UUID must be a valid event ID"),
+            id: EventId::new(),
             is_replay: false,
             timestamp: SystemTime::now(),
             kind,
             source: Source::JobRun(self.source.clone()),
-            workflow_id: self.context.workflow_id.clone(),
-            workflow_run_id: self.context.run_id.clone(),
-            workflow_version_id: self.context.workflow_version_id.clone(),
+            run_id: self.context.run_id.clone(),
         }
     }
 

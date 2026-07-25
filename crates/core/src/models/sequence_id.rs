@@ -2,10 +2,8 @@ use std::{fmt, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 
-///! A sequence id is a monotically increasing positive integer that is lexicographically sortable.
-///! - It is used as the primary key for a stream.
-///! - It is implemented as a fixed-width, zero-padded integer key
-
+/// A monotonically increasing stream key displayed as a fixed-width,
+/// zero-padded integer so its lexical and numeric ordering match.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct SequenceId(u64);

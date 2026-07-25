@@ -1,14 +1,14 @@
 pub mod actors;
 mod context;
 pub mod engine;
-pub mod grpc;
+mod error;
 pub mod models;
-pub mod service;
+mod reader;
+mod service;
 pub mod store;
 pub mod stream;
 pub mod workers;
 
-/// Generated protobuf types from `orchestrator.proto`.
-pub mod orchestrator_proto {
-    tonic::include_proto!("orchestrator.v1");
-}
+pub use error::{Error, Result};
+pub use reader::WorkflowRunReader;
+pub use service::{Zygo, ZygoConfig};

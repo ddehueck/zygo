@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::models::Source;
-use crate::store::keyspace::StoreKey;
+use crate::store::StoreKey;
 
 use super::ids::{JobId, JobRunId};
 use super::result_cache::ResultCacheItem;

@@ -1,26 +1,39 @@
 use std::sync::Arc;
 
-use tokio::sync::{Notify, Semaphore};
+use tokio::sync::{Notify, Semaphore, TryAcquireError};
 
 use crate::{
     context::ActorContext,
     models::{JobArgs, JobEntrypoint, JobRunSource},
     store::StorageProvider,
-    workers::job_runner::Runner,
+    workers::{
+        Error::{Closed, NoCapacity},
+        Result,
+        job_runner::Runner,
+    },
 };
 
 #[derive(Clone)]
 pub struct WorkerPool {
-    notifier: Arc<Notify>,
     semaphore: Arc<Semaphore>,
 }
 
 impl WorkerPool {
     pub fn new(config_max_workers: usize) -> Self {
         Self {
-            notifier: Arc::new(Notify::new()),
             semaphore: Arc::new(Semaphore::new(config_max_workers)),
         }
+    }
+
+    pub async fn wait_for_capacity(&self) -> Result<()> {
+        let permit = self
+            .semaphore
+            .clone()
+            .acquire_owned()
+            .await
+            .map_err(|_| Closed)?;
+        drop(permit);
+        Ok(())
     }
 
     pub fn spawn_job<S: StorageProvider>(
@@ -29,9 +42,12 @@ impl WorkerPool {
         source: JobRunSource,
         args: JobArgs,
         entrypoint: JobEntrypoint,
-    ) -> Result<(), tokio::sync::TryAcquireError> {
-        let permit = self.semaphore.clone().try_acquire_owned()?;
-        let notifier = self.notifier.clone();
+    ) -> Result<()> {
+        let permit = match self.semaphore.clone().try_acquire_owned() {
+            Ok(permit) => permit,
+            Err(TryAcquireError::NoPermits) => return Err(NoCapacity),
+            Err(TryAcquireError::Closed) => return Err(Closed),
+        };
 
         tokio::spawn(async move {
             if let Err(e) = Runner::new()
@@ -42,7 +58,6 @@ impl WorkerPool {
                 eprintln!("job failed: {e}");
             }
             drop(permit);
-            notifier.notify_one();
         });
 
         Ok(())

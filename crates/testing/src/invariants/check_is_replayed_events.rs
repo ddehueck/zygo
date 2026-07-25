@@ -21,7 +21,7 @@ impl Invariant for CheckIsReplayedEvents {
         let mut violations = Vec::new();
         for record in &self.records {
             if let StreamItem::Event(event) = &record.item {
-                if let Source::Input(_) = &event.source {
+                if let Source::Input = &event.source {
                     continue;
                 }
 

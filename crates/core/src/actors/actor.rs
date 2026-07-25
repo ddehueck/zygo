@@ -7,6 +7,7 @@ use anyhow::Result;
 use tokio::sync::Notify;
 
 const ACTOR_MESSAGE_CHANNEL_CAPACITY: usize = 500;
+const ACTOR_MESSAGE_BATCH_SIZE: usize = 100;
 
 pub type ActorTx = tokio::sync::mpsc::Sender<ActorMessage>;
 pub type ActorRx = tokio::sync::mpsc::Receiver<ActorMessage>;
@@ -19,7 +20,6 @@ pub struct ActorMessage {
 pub struct Actor<S: StorageProvider> {
     rx: ActorRx,
     event_notify: Notify,
-    resource_notify: Notify,
     context: ActorContext<S>,
 }
 
@@ -29,15 +29,14 @@ pub struct ActorHandle {
 }
 
 impl ActorHandle {
-    pub async fn spawn<S: StorageProvider>(run_context: RunContext<S>) -> Result<Self> {
+    pub async fn spawn<S: StorageProvider>(context: &RunContext<S>) -> Result<Self> {
         let (tx, rx) = tokio::sync::mpsc::channel::<ActorMessage>(ACTOR_MESSAGE_CHANNEL_CAPACITY);
-        let stream_writer = StreamWriter::init(&run_context).await?;
+        let stream_writer = StreamWriter::init(context).await?;
 
         let actor = Actor {
             rx,
             event_notify: Notify::new(),
-            resource_notify: Notify::new(), // TODO: Should this come from the worker pool?
-            context: ActorContext::from(&run_context, tx.clone(), stream_writer),
+            context: ActorContext::from(context, tx.clone(), stream_writer),
         };
 
         tokio::spawn(async move { actor.run().await });
@@ -51,46 +50,92 @@ impl<S: StorageProvider> Actor<S> {
             rx,
             event_notify,
             context,
-            ..
         } = self;
 
         tokio::select! {
             // Dropping the receiver future closes it when the engine reaches a terminal state.
             _ = Self::engine_loop(&context, &event_notify) => {}
-            _ = Self::event_rx_loop(rx, context.clone(), &event_notify) => {}
+            // TODO: Should we just pass the writer reference to the job runners?
+            _ = Self::event_rx_loop(rx, &context, &event_notify) => {}
         }
     }
 
     async fn engine_loop(context: &ActorContext<S>, event_notify: &Notify) {
-        // TODO: Better error handling?
-        let mut engine = Engine::<S>::new(context.clone()).await.unwrap();
+        let mut engine = match Engine::<S>::new(context.clone()).await {
+            Ok(engine) => engine,
+            Err(error) => {
+                eprintln!(
+                    "failed to initialize engine for run {}: {error}",
+                    context.run_id
+                );
+                return;
+            }
+        };
 
         loop {
-            match engine.step().await.expect("failed to step engine") {
-                StepResult::Idle => event_notify.notified().await,
-                StepResult::Continue => continue,
-                StepResult::Terminal(_) => break,
-                // StepResult::BlockedByWorkerPool => spawn::fn(on_notify => StepEngine)
+            match engine.step().await {
+                Ok(StepResult::Continue) => continue,
+                Ok(StepResult::Terminal(_)) => break,
+                Ok(StepResult::Idle) => event_notify.notified().await,
+                Ok(StepResult::WorkerPoolCapacityRequired) => {
+                    if let Err(error) = context.worker_pool.wait_for_capacity().await {
+                        eprintln!(
+                            "failed waiting for worker capacity for run {}: {error}",
+                            context.run_id
+                        );
+                        break;
+                    }
+                }
+                Err(error) => {
+                    eprintln!("failed to step engine for run {}: {error}", context.run_id);
+                    break;
+                }
             }
         }
     }
 
-    async fn event_rx_loop(mut rx: ActorRx, context: ActorContext<S>, event_notify: &Notify) {
-        let stream_writer = context.stream_writer;
+    async fn event_rx_loop(mut rx: ActorRx, context: &ActorContext<S>, event_notify: &Notify) {
+        let stream_writer = &context.stream_writer;
 
-        // TODO: Batch.
-        while let Some(message) = rx.recv().await {
-            let ActorMessage { event, reply_tx } = message;
+        let mut messages = Vec::with_capacity(ACTOR_MESSAGE_BATCH_SIZE);
 
-            // TODO: Send an error to the reply if needed but continue receiving messages.
-            if let Ok(reservation) = stream_writer.append(vec![StreamItem::Event(event)]).await {
-                reservation.commit().await.ok();
+        while rx.recv_many(&mut messages, ACTOR_MESSAGE_BATCH_SIZE).await > 0 {
+            let (events, reply_txs): (Vec<_>, Vec<_>) = messages
+                .drain(..)
+                .map(|message| (StreamItem::Event(message.event), message.reply_tx))
+                .unzip();
+
+            let result: Result<()> = async {
+                let write_set = stream_writer.append(events).await?;
+                write_set.commit(&context.store).await?;
+                Ok(())
+            }
+            .await;
+
+            if result.is_ok() {
+                event_notify.notify_one();
             }
 
-            event_notify.notify_one();
-            // TODO: Error handling here? Nothing we quite can do if the the client rx is dropped.
-            // We should debug log and continue. Client may send a retry but that should be idempotent.
-            reply_tx.send(Ok(())).ok();
+            let error = result.err().map(|error| format!("{error:#}"));
+            let mut dropped_replies = 0;
+
+            for reply_tx in reply_txs {
+                let result = match &error {
+                    Some(error) => Err(anyhow::anyhow!(error.clone())),
+                    None => Ok(()),
+                };
+
+                if reply_tx.send(result).is_err() {
+                    dropped_replies += 1;
+                }
+            }
+
+            if dropped_replies > 0 {
+                eprintln!(
+                    "{dropped_replies} event senders dropped their reply channel for run {}",
+                    context.run_id
+                );
+            }
         }
     }
 }

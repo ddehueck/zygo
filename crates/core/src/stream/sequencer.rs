@@ -1,11 +1,11 @@
 use anyhow::Result;
 use std::sync::Arc;
-use tokio::sync::{Mutex, MutexGuard};
+use tokio::sync::{Mutex, OwnedMutexGuard};
 
 use crate::context::RunContext;
 use crate::models::SequenceId;
-use crate::store::keyspace::{KeySpace, RunKeySpace};
-use crate::store::{StorageProvider, Store, StoreWriteSet};
+use crate::store::keyspace::{KeySpace, RunKeySpace, StoreKey};
+use crate::store::{StorageProvider, WriteSetReservation};
 
 #[derive(Clone)]
 pub struct StreamSequencer {
@@ -15,15 +15,13 @@ pub struct StreamSequencer {
 
 impl StreamSequencer {
     pub async fn load<S: StorageProvider>(context: RunContext<S>) -> Result<Self> {
-        let run_keyspace = KeySpace::workflow(context.workflow_id)
-            .version(context.workflow_version_id)
-            .run(context.run_id);
+        let run_keyspace = KeySpace::run(&context.run_id);
 
-        let tail_key = run_keyspace.stream_append_cursor();
-        let tail_bytes = context.store.get(&tail_key).await?;
+        let tail_key = run_keyspace.tail();
+        let tail_value = context.store.get(&tail_key).await?;
 
-        let tail = match tail_bytes {
-            Some(v) => serde_json::from_slice::<SequenceId>(&v)?,
+        let tail = match tail_value {
+            Some(value) => serde_json::from_value::<SequenceId>(value)?,
             None => SequenceId::new(0),
         };
 
@@ -38,10 +36,9 @@ impl StreamSequencer {
             return Err(anyhow::anyhow!("n must be greater than 0"));
         }
 
-        let mut tail = self.tail.lock().await;
+        let mut tail = Arc::clone(&self.tail).lock_owned().await;
 
         let start = *tail;
-        let start_copy = start.clone();
 
         let end_exclusive = start
             .get()
@@ -49,59 +46,52 @@ impl StreamSequencer {
             .map(SequenceId::new)
             .ok_or_else(|| anyhow::anyhow!("sequence overflow"))?;
 
-        let batch = (start.get()..end_exclusive.get())
-            .map(SequenceId::new)
-            .collect();
+        let sequence_range = start.get()..end_exclusive.get();
 
         *tail = end_exclusive;
 
-        let tail_key = self.keyspace.stream_append_cursor();
-        let tail_bytes = serde_json::to_vec(&end_exclusive)?;
-
-        let mut write_set = StoreWriteSet::new();
-        write_set.push(&tail_key, tail_bytes);
+        let tail_key = self.keyspace.tail();
+        let tail_value = serde_json::to_value(end_exclusive)?;
 
         Ok(SequenceReservation {
             committed: false,
             guard: tail,
-            rollback_value: start_copy,
-            values: batch,
-            writes: Some(write_set),
+            rollback_value: start,
+            sequence_range,
+            write: (tail_key, tail_value),
         })
     }
 }
 
 /// A reserved sequence batch that rolls back when dropped unless committed to the store.
-pub struct SequenceReservation<'a> {
+pub struct SequenceReservation {
     committed: bool,
-    guard: MutexGuard<'a, SequenceId>,
+    guard: OwnedMutexGuard<SequenceId>,
     rollback_value: SequenceId,
-    pub values: Vec<SequenceId>,
-    pub writes: Option<StoreWriteSet>,
+    sequence_range: std::ops::Range<u64>,
+    write: (StoreKey, serde_json::Value),
 }
 
-impl<'a> SequenceReservation<'a> {
-    pub async fn commit<S: StorageProvider>(mut self, store: Store<S>) -> Result<()> {
-        let writes = self
-            .writes
-            .take()
-            .expect("unexpected no write set at commit time");
-        store.commit_write_set(writes).await?;
+impl SequenceReservation {
+    pub fn sequence_numbers(&self) -> impl Iterator<Item = SequenceId> + '_ {
+        self.sequence_range.clone().map(SequenceId::new)
+    }
+}
+
+impl WriteSetReservation for SequenceReservation {
+    fn add_writes(&self, entries: &mut Vec<(StoreKey, serde_json::Value)>) {
+        entries.push(self.write.clone());
+    }
+
+    fn commit(&mut self) {
         self.committed = true;
-        Ok(())
-    }
-
-    pub fn writes(&mut self) -> &mut StoreWriteSet {
-        self.writes
-            .as_mut()
-            .expect("write set has already been consumed")
     }
 }
 
-impl<'a> Drop for SequenceReservation<'a> {
+impl Drop for SequenceReservation {
     fn drop(&mut self) {
         if !self.committed {
-            *self.guard = self.rollback_value.clone();
+            *self.guard = self.rollback_value;
         }
     }
 }

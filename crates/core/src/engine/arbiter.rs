@@ -5,41 +5,31 @@
 
 use crate::models::{
     CacheJobEventSourceCommand, CacheJobRunResultCommand, ChannelItemInsertedData, Command,
-    DataReference, Event, EventKind, JobFailedData, JobId, JobRunId, JobRunSource, JobRunStatus,
-    JobStartedData, JobSucceededData, ReplayJobCommand, RunJobCommand, SetJobRunStatusCommand,
-    Source, job_run_id,
+    DataReference, EdgeKind, Event, EventKind, JobFailedData, JobId, JobRunId, JobRunSource,
+    JobRunStatus, JobStartedData, JobSucceededData, ReplayJobCommand, RunJobCommand,
+    SetJobRunStatusCommand, Source, job_run_id,
 };
-use crate::store::keyspace::StoreKey;
-use crate::store::{StorageProvider, Store};
+use crate::store::{StorageProvider, StoreKey};
 
 use super::state::ResultCache;
 
-pub struct Arbiter<S: StorageProvider> {
-    pub store: Store<S>,
-}
+pub struct Arbiter;
 
-impl<S: StorageProvider> Arbiter<S> {
-    pub fn new(store: Store<S>) -> Self {
-        Self { store }
-    }
-
-    pub async fn arbitrate(
+impl Arbiter {
+    pub async fn arbitrate<S: StorageProvider>(
         &self,
         event_key: &StoreKey,
         event: &Event,
-        context: &ResultCache<S>,
+        cache: &ResultCache<S>,
     ) -> Result<Vec<Command>, anyhow::Error> {
         let mut commands = Vec::new();
 
         commands.extend(self.handle_by_event_source(event, event_key)?);
-        commands.extend(self.handle_by_event_kind(event, context).await?);
+        commands.extend(self.handle_by_event_kind(event, cache).await?);
 
         // Filter out commands that are not safe to issue during a replay.
         if event.is_replay {
-            commands = commands
-                .into_iter()
-                .filter(|cmd| cmd.is_replayable())
-                .collect();
+            commands.retain(Command::is_replayable);
         }
 
         Ok(commands)
@@ -66,7 +56,7 @@ impl<S: StorageProvider> Arbiter<S> {
         Ok(commands)
     }
 
-    async fn handle_by_event_kind(
+    async fn handle_by_event_kind<S: StorageProvider>(
         &self,
         event: &Event,
         context: &ResultCache<S>,
@@ -86,47 +76,47 @@ impl<S: StorageProvider> Arbiter<S> {
         Ok(Vec::new())
     }
 
-    async fn handle_channel_item_inserted(
+    async fn handle_channel_item_inserted<S: StorageProvider>(
         &self,
         data: &ChannelItemInsertedData,
         context: &ResultCache<S>,
     ) -> Result<Vec<Command>, anyhow::Error> {
         // Find all jobs that have the given channel as an input.
         // Request each job to be run.
-        let channel_id = &data.channel_id;
-        let jobs = context.schema.get_jobs_by_input_channel_id(channel_id);
+        let job_ids = context
+            .schema
+            .edges
+            .iter()
+            .filter(|edge| edge.channel_id == data.channel_id && edge.kind == EdgeKind::Input)
+            .map(|edge| edge.job_id.clone())
+            .collect::<Vec<_>>();
 
-        let mut commands: Vec<Command> = Vec::new();
-        for job in jobs {
-            let cmd = self
-                .resolve_job_request(&job.id, &data.data_reference, context)
+        let mut commands = Vec::new();
+        for job_id in job_ids {
+            let command = self
+                .resolve_job_request(&job_id, &data.data_reference, context)
                 .await?;
-            commands.push(cmd);
+            commands.push(command);
         }
 
         Ok(commands)
     }
 
-    async fn resolve_job_request(
+    async fn resolve_job_request<S: StorageProvider>(
         &self,
         job_id: &JobId,
         data_reference: &DataReference,
         context: &ResultCache<S>,
     ) -> Result<Command, anyhow::Error> {
-        // When a job should be run, we first check if the job is already in the result cache.
+        // When a job should be run, we first check if it is already in the result cache.
         // If it is, we replay the events of the latest succeeded run in sequence order.
         // Otherwise, we actually run the job.
-        assert!(
-            context.schema.get_job_by_id(job_id).is_some(),
-            "job {:?} referenced by JobRequested is not present in run schema",
-            job_id
-        );
+        let job = context.schema.get_job_by_id(job_id).ok_or_else(|| {
+            anyhow::anyhow!("job {job_id} referenced by an edge is not present in the run schema")
+        })?;
 
-        let job_run_id = JobRunId::try_from(job_run_id(
-            job_id,
-            &data_reference.uri,
-            &data_reference.etag,
-        ))?;
+        let job_run_id =
+            JobRunId::try_from(job_run_id(job, &data_reference.uri, &data_reference.etag))?;
 
         if let Some(cache_item) = context.get_item(&job_run_id).await? {
             return Ok(Command::ReplayJob(ReplayJobCommand {

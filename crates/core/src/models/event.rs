@@ -2,10 +2,10 @@ use std::time::SystemTime;
 
 use serde::{Deserialize, Serialize};
 
-use crate::models::{EventId, WorkflowId};
+use crate::models::{EventId, WorkflowRunId};
 
 use super::data_reference::DataReference;
-use super::ids::{ChannelId, JobId, JobRunId, RunId, WorkflowVersionId};
+use super::ids::{ChannelId, JobId, JobRunId};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Event {
@@ -14,9 +14,7 @@ pub struct Event {
     pub timestamp: SystemTime,
     pub kind: EventKind,
     pub source: Source,
-    pub workflow_id: WorkflowId,
-    pub workflow_run_id: RunId,
-    pub workflow_version_id: WorkflowVersionId,
+    pub run_id: WorkflowRunId,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
