@@ -1,8 +1,6 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::models::JobEntrypoint;
-
 use super::ids::{ContentHash, JobId};
 
 /// Namespace for generating deterministic job run IDs.
@@ -13,7 +11,6 @@ const JOB_RUN_NAMESPACE: Uuid = Uuid::from_u128(0x6ba7_b811_9dad_11d1_80b4_00c0_
 pub struct Job {
     pub id: JobId,
     pub content_hash: ContentHash,
-    pub entrypoint: JobEntrypoint,
 }
 
 /// A core assumption of the system is that a job is a pure function of its input data.

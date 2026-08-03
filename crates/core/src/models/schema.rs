@@ -6,6 +6,7 @@ use crate::models::{Channel, ChannelId, ContentHash, Edge, EdgeKind, Job, JobEnt
 pub struct WorkflowSchema {
     pub content_hash: ContentHash,
     pub input_channel_id: ChannelId,
+    pub entrypoint: JobEntrypoint, // Only one per workflow as we call the python module run with the job/ref as args
     pub jobs: Vec<Job>,
     pub channels: Vec<Channel>,
     pub edges: Vec<Edge>,

@@ -6,10 +6,9 @@ use anyhow::Context;
 use clap::{Parser, Subcommand};
 use service_manager::{
     RestartPolicy, ServiceInstallCtx, ServiceLabel, ServiceLevel, ServiceManager, ServiceStartCtx,
-    ServiceStatus, ServiceStatusCtx, ServiceStopCtx, ServiceUninstallCtx,
+    ServiceStatusCtx, ServiceStopCtx, ServiceUninstallCtx,
 };
 use tracing::info;
-use zygo_core::grpc::OrchestratorService;
 use zygo_core::models::OrchestratorMode;
 use zygo_core::store::{MemoryStore, Store};
 
@@ -42,33 +41,15 @@ enum Command {
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+    let label = service_label()?;
+    let manager = service_manager()?;
 
     match cli.command {
-        Command::Install => {
-            let label = service_label()?;
-            let manager = service_manager()?;
-            install(&*manager, label)
-        }
-        Command::Uninstall => {
-            let label = service_label()?;
-            let manager = service_manager()?;
-            uninstall(&*manager, label)
-        }
-        Command::Start => {
-            let label = service_label()?;
-            let manager = service_manager()?;
-            start_service(&*manager, label)
-        }
-        Command::Stop => {
-            let label = service_label()?;
-            let manager = service_manager()?;
-            stop_service(&*manager, label)
-        }
-        Command::Status => {
-            let label = service_label()?;
-            let manager = service_manager()?;
-            status(&*manager, label)
-        }
+        Command::Install => install(&*manager, label),
+        Command::Uninstall => uninstall(&*manager, label),
+        Command::Start => start_service(&*manager, label),
+        Command::Stop => stop_service(&*manager, label),
+        Command::Status => status(&*manager, label),
         Command::Run => run_orchestrator(),
     }
 }

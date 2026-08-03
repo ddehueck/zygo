@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, BinaryIO, Literal, TextIO, cast, overload, ove
 
 import fsspec  # type: ignore
 
-from zygo._internal.python.fsspec import FsspecUri
+from zygo._internal.fsspec import FsspecUri
 from zygo.store import Reference, StoreProtocol
 
 if TYPE_CHECKING:

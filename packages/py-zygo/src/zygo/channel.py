@@ -1,10 +1,10 @@
 from dataclasses import dataclass
 
-from zygo.types import ChannelName
+from zygo.types import ChannelId
 
 
 @dataclass(frozen=True)
 class Channel:
-    """A named channel for message passing between tasks."""
+    """A workflow channel identified by a user-defined ID."""
 
-    name: ChannelName
+    id: ChannelId

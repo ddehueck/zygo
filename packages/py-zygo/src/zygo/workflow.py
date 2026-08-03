@@ -7,37 +7,28 @@ from typing import (
 )
 
 from zygo._internal.meta.jobs import validate_job
-from zygo._internal.runtime import execute_job, start_workflow
-from zygo._internal.runtime.mode import (
-    RunJobMode,
-    StartMode,
-    parse_workflow_entrypoint_mode,
-)
-from zygo._internal.utils.caller import caller_module_path
 from zygo._internal.utils.hash import hash_to_str
-from zygo.backends.protocol import Backend
 from zygo.channel import Channel
 from zygo.jobs import JobRegistry
 from zygo.types import (
-    ChannelName,
-    Environment,
+    ChannelId,
+    JobId,
+    WorkflowId,
 )
-
-"""
-Workflow Python API
-Provides a Python API for defining and running workflows.
-"""
-
 
 F = TypeVar("F", bound=FunctionType)
 
 
 @final
 class Workflow:
-    def __init__(self, *, name: str) -> None:
-        self.name = name
+    """
+    The Zygo Python API for defining and running workflows.
+    """
+
+    def __init__(self, *, id: str) -> None:
+        self.id = WorkflowId(id)
         self.jobs = JobRegistry()
-        self.channels: dict[str, Channel] = {}
+        self.channels: dict[ChannelId, Channel] = {}
 
     @property
     def content_hash(self) -> str:
@@ -48,12 +39,10 @@ class Workflow:
     def job(self, func: F) -> F: ...
 
     @overload
-    def job(
-        self, func: None = None, *, env: Environment | None = None
-    ) -> Callable[[F], F]: ...
+    def job(self, func: None = None, *, id: str | None = None) -> Callable[[F], F]: ...
 
     def job(
-        self, func: F | None = None, *, env: Environment | None = None
+        self, func: F | None = None, *, id: str | None = None
     ) -> F | Callable[[F], F]:
         """
         Decorator to register a job function with the workflow.
@@ -61,7 +50,7 @@ class Workflow:
         Can be used with or without parameters:
         - @workflow.job
         - @workflow.job()
-        - @workflow.job(env=Environment(cpu=1, memory=1024, gpu="A100", gpu_count=1))
+        - @workflow.job(id="my_job")
 
         Args:
             func: The function to register (when used without parentheses)
@@ -70,7 +59,7 @@ class Workflow:
 
         def decorator(f: F) -> F:
             validate_job(f)
-            self.jobs.set(f, env=env)
+            self.jobs.set(f, id=JobId(id) if id else None)
             return f
 
         if func is None:
@@ -78,38 +67,12 @@ class Workflow:
 
         return decorator(func)
 
-    def channel(self, *, name: str) -> Channel:
-        """Creates a channel and registers it with the workflow"""
-        channel = Channel(name=ChannelName(name))
-        if name in self.channels:
-            raise ValueError(f"Channel {name} already exists")
-        self.channels[name] = channel
+    def channel(self, *, id: str) -> Channel:
+        """Create a channel and register it with the workflow."""
+        channel_id = ChannelId(id)
+        if channel_id in self.channels:
+            raise ValueError(f"Channel {id} already exists")
+
+        channel = Channel(id=channel_id)
+        self.channels[channel_id] = channel
         return channel
-
-    def run(self, *, channel: Channel, uri: str, backend: Backend) -> None:
-        """
-        Entrypoint for running a workflow script.
-        There are two modes:
-
-        1. StartMode.
-            - The workflow is deployed
-            - Input data is ingested
-            - The initial channel event is emitted to the orchestrator
-
-        2. RunJobMode. Only the targeted job function is executed.
-            - The targeted job function is executed with events emitted to the orchestrator.
-            - This is called by the orchestrator, through the backend's provided entrypoint.
-        """
-        match parse_workflow_entrypoint_mode():
-            case RunJobMode(run_job_args=run_job_args):
-                execute_job(workflow=self, run_job_args=run_job_args, backend=backend)
-
-            case StartMode():
-                module_path = caller_module_path(stack_offset=1)
-                start_workflow(
-                    workflow=self,
-                    channel=channel,
-                    uri=uri,
-                    backend=backend,
-                    module_path=module_path,
-                )

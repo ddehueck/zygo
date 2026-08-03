@@ -1,9 +1,6 @@
 # ---- Config -----------------------------------------------------------------
 
 src_dirs := "src tests examples"
-proto_dir := "../../core/crates/proto"
-proto_file := proto_dir / "orchestrator.proto"
-proto_out_dir := "src/zygo/_internal/grpc/proto"
 
 # ---- Meta -------------------------------------------------------------------
 
@@ -76,39 +73,13 @@ check:
 test:
     uv run pytest tests -v
 
-# ---- Codegen ----------------------------------------------------------------
-
-# Generate gRPC client code from proto files
-[group('codegen')]
-gen-proto:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    echo "Generating gRPC client code from {{ proto_file }}..."
-    mkdir -p {{ proto_out_dir }}
-    uv run -m grpc_tools.protoc \
-        --proto_path={{ proto_dir }} \
-        --python_out={{ proto_out_dir }} \
-        --grpc_python_out={{ proto_out_dir }} \
-        --pyi_out={{ proto_out_dir }} \
-        --mypy_grpc_out={{ proto_out_dir }} \
-        {{ proto_file }}
-    echo "Fixing imports in generated gRPC files..."
-    for grpc_file in {{ proto_out_dir }}/*_grpc.py {{ proto_out_dir }}/*_grpc.pyi; do
-        if [ -f "$grpc_file" ]; then
-            sed -i '' 's/^import \([a-z_]*_pb2\)\(.*\)$/from . import \1\2/' "$grpc_file" 2>/dev/null || \
-            sed -i 's/^import \([a-z_]*_pb2\)\(.*\)$/from . import \1\2/' "$grpc_file"
-        fi
-    done
-    echo "Generated files in {{ proto_out_dir }}"
-    touch {{ proto_out_dir }}/__init__.py
-
 # ---- Housekeeping -----------------------------------------------------------
 
-# Remove caches and generated proto files
+# Remove caches
 [group('housekeeping')]
 clean:
     find . -type d -name __pycache__ -exec rm -rf {} +  2>/dev/null || true
-    rm -rf .ruff_cache .pyright .ty_cache .mypy_cache .pytest_cache {{ proto_out_dir }}
+    rm -rf .ruff_cache .pyright .ty_cache .mypy_cache .pytest_cache
 
 # ---- Build ------------------------------------------------------------------
 

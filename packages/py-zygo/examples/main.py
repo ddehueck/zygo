@@ -1,4 +1,3 @@
-from pathlib import Path
 from typing import Annotated
 
 from zygo import (
@@ -10,16 +9,11 @@ from zygo import (
     Store,
     Workflow,
 )
-from zygo.backends.default import DefaultBackend
-from zygo.types import Environment
 
+workflow = Workflow(id="my_workflow")
 
-HERE = Path(__file__).resolve().parent
-
-workflow = Workflow(name="my_workflow")
-
-raw_values = workflow.channel(name="raw_values")
-squared_values = workflow.channel(name="squared_values")
+raw_values = workflow.channel(id="raw_values")
+squared_values = workflow.channel(id="squared_values")
 
 
 @workflow.job
@@ -53,13 +47,3 @@ def squared_values_to_final(
     received = store.get(squared_values)
     received = int.from_bytes(received)
     print(f"[squared_values_to_final] Squared received: {received}")  # noqa: T201
-
-
-if __name__ == "__main__":
-    print("Running workflow...")  # noqa: T201
-
-    workflow.run(
-        channel=raw_values,
-        uri=f"file://{HERE / 'input.txt'}",
-        backend=DefaultBackend(store_uri="./zygo"),
-    )
