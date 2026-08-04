@@ -1,6 +1,7 @@
 use crate::{
     actors::ActorPool,
     context::ServiceContext,
+    engine::EngineSnapshot,
     models::{DataReference, WorkflowRunId, WorkflowSchema},
     store::{StorageProvider, Store},
     workers::WorkerPool,
@@ -35,5 +36,12 @@ impl<S: StorageProvider> Zygo<S> {
         schema: WorkflowSchema,
     ) -> Result<WorkflowRunId, anyhow::Error> {
         self.actor_pool.run_with_actor(input, schema).await
+    }
+
+    pub async fn subscribe(
+        &self,
+        run_id: &WorkflowRunId,
+    ) -> Result<tokio::sync::watch::Receiver<EngineSnapshot>, anyhow::Error> {
+        self.actor_pool.subscribe(run_id).await
     }
 }

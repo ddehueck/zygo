@@ -35,8 +35,12 @@ def build_workflow_metadata(workflow: Workflow) -> WorkflowMetadata:
             for channel_id in definition["output_channel_ids"]
         )
 
+    if workflow.input_channel is None:
+        raise ValueError("Input channel not found")
+
     return WorkflowMetadata(
         id=workflow.id,
+        input_channel=workflow.input_channel.id,
         content_hash=workflow.content_hash,
         channels=[
             ChannelMetadata(id=channel.id) for channel in workflow.channels.values()

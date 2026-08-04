@@ -22,13 +22,22 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// Run a workflow given a target and fsspec URI
-    Run { target: String, fsspec_uri: String },
+    Run {
+        target: String,
+        fsspec_uri: String,
+        workers: Option<usize>,
+    },
 }
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Command::Run { target, fsspec_uri } => run_workflow(&target, &fsspec_uri),
+        Command::Run {
+            target,
+            fsspec_uri,
+            workers,
+        } => run_workflow(&target, &fsspec_uri, workers).await,
     }
 }

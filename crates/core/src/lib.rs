@@ -12,3 +12,4 @@ pub mod workers;
 pub use error::{Error, Result};
 pub use reader::WorkflowRunReader;
 pub use service::{Zygo, ZygoConfig};
+pub use store::MemoryStore;

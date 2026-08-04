@@ -29,6 +29,7 @@ class EdgeMetadata:
 class WorkflowMetadata:
     id: str
     content_hash: str
+    input_channel: str
     channels: list[ChannelMetadata]
     jobs: list[JobMetadata]
     edges: list[EdgeMetadata]

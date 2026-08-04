@@ -12,7 +12,7 @@ from zygo import (
 
 workflow = Workflow(id="my_workflow")
 
-raw_values = workflow.channel(id="raw_values")
+raw_values = workflow.channel(id="raw_values", is_input=True)
 squared_values = workflow.channel(id="squared_values")
 
 

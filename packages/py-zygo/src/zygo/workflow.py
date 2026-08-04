@@ -29,6 +29,7 @@ class Workflow:
         self.id = WorkflowId(id)
         self.jobs = JobRegistry()
         self.channels: dict[ChannelId, Channel] = {}
+        self.input_channel: Channel | None = None
 
     @property
     def content_hash(self) -> str:
@@ -67,12 +68,19 @@ class Workflow:
 
         return decorator(func)
 
-    def channel(self, *, id: str) -> Channel:
+    def channel(self, *, id: str, is_input: bool = False) -> Channel:
         """Create a channel and register it with the workflow."""
         channel_id = ChannelId(id)
         if channel_id in self.channels:
             raise ValueError(f"Channel {id} already exists")
 
         channel = Channel(id=channel_id)
+
         self.channels[channel_id] = channel
+
+        if is_input:
+            if self.input_channel is not None:
+                raise ValueError("Input channel already exists")
+            self.input_channel = channel
+
         return channel

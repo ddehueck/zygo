@@ -6,7 +6,6 @@ use crate::models::{Channel, ChannelId, ContentHash, Edge, EdgeKind, Job, JobEnt
 pub struct WorkflowSchema {
     pub content_hash: ContentHash,
     pub input_channel_id: ChannelId,
-    pub entrypoint: JobEntrypoint, // Only one per workflow as we call the python module run with the job/ref as args
     pub jobs: Vec<Job>,
     pub channels: Vec<Channel>,
     pub edges: Vec<Edge>,
@@ -35,11 +34,9 @@ impl WorkflowSchema {
     }
 
     pub fn get_job_entrypoint(&self, job_id: &JobId) -> Option<JobEntrypoint> {
-        // Fake one for now while we refactor entrpoints
-        None
-        // self.jobs
-        //     .iter()
-        //     .find(|j| &j.id == job_id)
-        //     .map(|j| j.entrypoint.clone())
+        self.jobs
+            .iter()
+            .find(|j| &j.id == job_id)
+            .map(|j| j.entrypoint.clone())
     }
 }

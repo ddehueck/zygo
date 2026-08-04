@@ -1,10 +1,11 @@
 use crate::context::{ActorContext, RunContext};
-use crate::engine::StepResult;
+use crate::engine::{EngineSnapshot, StepResult};
 use crate::models::StreamItem;
 use crate::stream::StreamWriter;
 use crate::{engine::Engine, models::Event, store::StorageProvider};
 use anyhow::Result;
 use tokio::sync::Notify;
+use tokio::sync::watch::Receiver;
 
 const ACTOR_MESSAGE_CHANNEL_CAPACITY: usize = 500;
 const ACTOR_MESSAGE_BATCH_SIZE: usize = 100;
@@ -21,26 +22,36 @@ pub struct Actor<S: StorageProvider> {
     rx: ActorRx,
     event_notify: Notify,
     context: ActorContext<S>,
+    state_rx: Receiver<EngineSnapshot>,
+    state_tx: tokio::sync::watch::Sender<EngineSnapshot>,
 }
 
 #[derive(Clone)]
 pub struct ActorHandle {
     pub tx: ActorTx,
+    pub state_rx: Receiver<EngineSnapshot>,
 }
 
 impl ActorHandle {
     pub async fn spawn<S: StorageProvider>(context: &RunContext<S>) -> Result<Self> {
         let (tx, rx) = tokio::sync::mpsc::channel::<ActorMessage>(ACTOR_MESSAGE_CHANNEL_CAPACITY);
+        let (state_tx, state_rx) = tokio::sync::watch::channel(EngineSnapshot::default());
         let stream_writer = StreamWriter::init(context).await?;
 
         let actor = Actor {
             rx,
             event_notify: Notify::new(),
             context: ActorContext::from(context, tx.clone(), stream_writer),
+            state_rx: state_rx.clone(),
+            state_tx,
         };
 
         tokio::spawn(async move { actor.run().await });
-        Ok(Self { tx })
+        Ok(Self { tx, state_rx })
+    }
+
+    pub async fn subscribe(&self) -> tokio::sync::watch::Receiver<EngineSnapshot> {
+        self.state_rx.clone()
     }
 }
 
@@ -50,17 +61,23 @@ impl<S: StorageProvider> Actor<S> {
             rx,
             event_notify,
             context,
+            state_rx,
+            state_tx,
         } = self;
 
         tokio::select! {
             // Dropping the receiver future closes it when the engine reaches a terminal state.
-            _ = Self::engine_loop(&context, &event_notify) => {}
+            _ = Self::engine_loop(&context, &event_notify, &state_tx) => {}
             // TODO: Should we just pass the writer reference to the job runners?
             _ = Self::event_rx_loop(rx, &context, &event_notify) => {}
         }
     }
 
-    async fn engine_loop(context: &ActorContext<S>, event_notify: &Notify) {
+    async fn engine_loop(
+        context: &ActorContext<S>,
+        event_notify: &Notify,
+        state_tx: &tokio::sync::watch::Sender<EngineSnapshot>,
+    ) {
         let mut engine = match Engine::<S>::new(context.clone()).await {
             Ok(engine) => engine,
             Err(error) => {
@@ -71,6 +88,9 @@ impl<S: StorageProvider> Actor<S> {
                 return;
             }
         };
+
+        // Connect the state watcher to the engine
+        engine.subscribe(state_tx).await;
 
         loop {
             match engine.step().await {

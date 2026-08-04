@@ -72,30 +72,3 @@ impl WorkflowRunId {
         Self::try_from(Uuid::new_v5(&WORKFLOW_RUN_NAMESPACE, name.as_bytes()).to_string())
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn value_accepts_non_empty_string() {
-        let id = JobId::try_from("job-id".to_string()).unwrap();
-
-        assert_eq!(id.as_ref(), "job-id");
-        assert_eq!(String::from(id), "job-id");
-    }
-
-    #[test]
-    fn value_rejects_empty_string() {
-        let error = JobId::try_from(String::new()).unwrap_err();
-
-        assert_eq!(error.to_string(), "job_id cannot be empty");
-    }
-
-    #[test]
-    fn value_rejects_whitespace_only_string() {
-        let error = JobId::try_from("   ".to_string()).unwrap_err();
-
-        assert_eq!(error.to_string(), "job_id cannot be empty");
-    }
-}

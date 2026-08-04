@@ -1,6 +1,7 @@
 use crate::{
     actors::actor::{ActorHandle, ActorMessage},
     context::{RunContext, ServiceContext},
+    engine::EngineSnapshot,
     models::{
         ChannelItemInsertedData, DataReference, Event, EventId, EventKind, Source, WorkflowRunId,
         WorkflowSchema,
@@ -58,6 +59,21 @@ impl<S: StorageProvider> ActorPool<S> {
             .await?;
 
         Ok(workflow_run_id)
+    }
+
+    pub async fn subscribe(
+        &self,
+        workflow_run_id: &WorkflowRunId,
+    ) -> Result<tokio::sync::watch::Receiver<EngineSnapshot>, anyhow::Error> {
+        let state_rx = {
+            let registry = self.registry.lock().await;
+            let handle = registry.get(workflow_run_id).ok_or_else(|| {
+                anyhow::anyhow!("No actor found for workflow run id: {}", workflow_run_id)
+            })?;
+            handle.state_rx.clone()
+        };
+
+        Ok(state_rx)
     }
 
     async fn create_actor(

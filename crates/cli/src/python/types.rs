@@ -33,6 +33,7 @@ pub struct EdgeMetadata {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkflowMetadata {
     pub id: String,
+    pub input_channel: String,
     pub content_hash: String,
     pub channels: Vec<ChannelMetadata>,
     pub jobs: Vec<JobMetadata>,

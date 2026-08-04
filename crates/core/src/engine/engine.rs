@@ -7,6 +7,7 @@ use crate::models::{StreamItem, StreamRecord, WorkflowSchema};
 use crate::store::keyspace::KeySpace;
 use crate::store::{StorageProvider, StoreKey};
 use crate::stream::StreamReader;
+use tokio::sync::watch;
 
 enum EvaluateOutcome {
     Completed(StepOutcome),
@@ -20,6 +21,7 @@ pub struct Engine<S: StorageProvider> {
     arbiter: Arbiter,
     executor: Executor<S>,
     stream_reader: StreamReader<S>,
+    state_tx: Option<watch::Sender<EngineSnapshot>>,
 }
 
 impl<S: StorageProvider> Engine<S> {
@@ -66,6 +68,7 @@ impl<S: StorageProvider> Engine<S> {
             arbiter: Arbiter,
             stream_reader,
             context,
+            state_tx: None,
         })
     }
 
@@ -97,9 +100,17 @@ impl<S: StorageProvider> Engine<S> {
         };
         let snapshot = self.commit(outcome, stream_read.next_cursor).await?;
 
-        self.snapshot = snapshot;
+        self.snapshot = snapshot.clone();
+
+        if let Some(tx) = &self.state_tx {
+            tx.send(snapshot.clone()).ok();
+        }
 
         Ok(StepResult::Continue)
+    }
+
+    pub async fn subscribe(&mut self, state_tx: &tokio::sync::watch::Sender<EngineSnapshot>) {
+        self.state_tx = Some(state_tx.clone());
     }
 
     async fn evaluate(
