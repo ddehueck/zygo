@@ -35,9 +35,11 @@ impl WorkflowSchema {
     }
 
     pub fn get_job_entrypoint(&self, job_id: &JobId) -> Option<JobEntrypoint> {
-        self.jobs
-            .iter()
-            .find(|j| &j.id == job_id)
-            .map(|j| j.entrypoint.clone())
+        // Fake one for now while we refactor entrpoints
+        None
+        // self.jobs
+        //     .iter()
+        //     .find(|j| &j.id == job_id)
+        //     .map(|j| j.entrypoint.clone())
     }
 }

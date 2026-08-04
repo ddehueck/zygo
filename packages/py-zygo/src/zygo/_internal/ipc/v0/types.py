@@ -39,6 +39,5 @@ class JobRunArgs:
     job_id: str
     data_reference_uri: str
     data_reference_etag: str
-
     workflow_run_id: str
     job_run_id: str

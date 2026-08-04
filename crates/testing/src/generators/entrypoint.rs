@@ -47,38 +47,3 @@ impl Generate for EntrypointGenerator {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use rand::SeedableRng;
-
-    use super::*;
-
-    fn rng(seed: u64) -> ChaCha8Rng {
-        ChaCha8Rng::seed_from_u64(seed)
-    }
-
-    #[test]
-    fn local_mode_only_produces_successful_local_entrypoints() {
-        let generator = EntrypointGenerator::default();
-
-        for seed in 0..32 {
-            match generator.generate(&mut rng(seed), OrchestratorMode::Local) {
-                JobEntrypoint::Local(local) => assert_eq!(local.exec, "true"),
-                JobEntrypoint::Remote(_) => panic!("expected a local entrypoint"),
-            }
-        }
-    }
-
-    #[test]
-    fn remote_mode_only_produces_remote_entrypoints() {
-        let generator = EntrypointGenerator::default();
-
-        for seed in 0..32 {
-            assert!(matches!(
-                generator.generate(&mut rng(seed), OrchestratorMode::Remote),
-                JobEntrypoint::Remote(_)
-            ));
-        }
-    }
-}

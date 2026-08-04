@@ -37,7 +37,7 @@ def run(
         container = RunContainer(
             context=run_context,
             # TODO: Where to pipe these options through
-            store_options=StoreOptions(root_uri=FsspecUri(uri="fs://./todoreplaceme")),
+            store_options=StoreOptions(root_uri=FsspecUri(uri="file://./todoreplaceme")),
         )
         callable_w_deps = build_injected_call(job_func, container=container)
         callable_w_deps()

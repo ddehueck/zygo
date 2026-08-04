@@ -8,23 +8,16 @@ license.workspace = true
 [dependencies]
 tokio = { workspace = true, features = ["process", "io-util"] }
 async-trait = "0.1"
-# Error handling
 anyhow = { workspace = true }
-# Serialization
 serde = { workspace = true }
 serde_json = { workspace = true }
-# UUID generation
 uuid = { workspace = true }
-# Database
 sqlx = { version = "0.8.6", features = ["runtime-tokio", "sqlite", "macros", "migrate", "chrono"] }
 chrono = { version = "0.4", features = ["serde"] }
-# Environment variables
 dotenvy = "0.15.7"
-# Directory management
 directories = "6.0.0"
 # HTTP client (for remote entrypoints)
 reqwest = { version = "0.12", features = ["json"] }
-# Utilities
 num_cpus = "1.0"
 hex = "0.4"
 blake3 = "1.8.2"
