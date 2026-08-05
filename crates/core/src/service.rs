@@ -4,11 +4,13 @@ use crate::{
     engine::EngineSnapshot,
     models::{DataReference, WorkflowRunId, WorkflowSchema},
     store::{StorageProvider, Store},
+    stream::StreamReader,
     workers::WorkerPool,
 };
 
 pub struct Zygo<S: StorageProvider> {
     actor_pool: ActorPool<S>,
+    store: Store<S>,
 }
 
 pub struct ZygoConfig {
@@ -24,10 +26,10 @@ impl ZygoConfig {
 
 impl<S: StorageProvider> Zygo<S> {
     pub fn new(store: Store<S>, config: ZygoConfig) -> Self {
-        let context = ServiceContext::new(store, WorkerPool::new(config.num_workers));
+        let context = ServiceContext::new(store.clone(), WorkerPool::new(config.num_workers));
         let actor_pool = ActorPool::new(context.clone());
 
-        Self { actor_pool }
+        Self { actor_pool, store }
     }
 
     pub async fn run(
@@ -43,5 +45,9 @@ impl<S: StorageProvider> Zygo<S> {
         run_id: &WorkflowRunId,
     ) -> Result<tokio::sync::watch::Receiver<EngineSnapshot>, anyhow::Error> {
         self.actor_pool.subscribe(run_id).await
+    }
+
+    pub fn stream(&self, run_id: &WorkflowRunId) -> StreamReader<S> {
+        StreamReader::new(self.store.clone(), run_id)
     }
 }

@@ -75,6 +75,12 @@ impl RunCursor {
             next_id: next_read_sequence_id,
         }
     }
+
+    pub fn default() -> Self {
+        Self {
+            next_id: SequenceId::new(0),
+        }
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]

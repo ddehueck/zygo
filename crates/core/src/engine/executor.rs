@@ -165,7 +165,7 @@ impl<S: StorageProvider> Executor<S> {
         state: &RunState,
     ) -> Result<ExecuteResult> {
         // A job run id is constructed from the data input and job content hash.
-        // This means that a job run id is unique for a given data input and a job fn.
+        // This means that a job run id is deterministic for a given data input and a job fn.
         // This allows us to cache the resulting events of a job run to be used if we need to run the job again.
         let Some(event_keys) = state.event_keys_by_job_run_id.get(&command.job_run_id) else {
             return Err(Error::other("event keys not found"));

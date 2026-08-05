@@ -15,3 +15,15 @@ impl WorkflowRunStatus {
         )
     }
 }
+
+impl std::fmt::Display for WorkflowRunStatus {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let status = match self {
+            Self::Running => "running",
+            Self::Succeeded => "succeeded",
+            Self::Failed => "failed",
+        };
+
+        formatter.write_str(status)
+    }
+}

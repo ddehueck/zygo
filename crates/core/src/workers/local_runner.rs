@@ -15,7 +15,7 @@ use crate::{
 };
 
 /// The local job runner runs the job on the same machine as the orchestrator service.
-/// It kicks the job off and monitors stdout/stderr for events to send the the workflow run actor.
+/// It kicks the job off and monitors stdout for events to send to the workflow run actor.
 pub struct LocalJobRunner<S: StorageProvider> {
     context: ActorContext<S>,
     source: JobRunSource,
@@ -43,16 +43,15 @@ impl<S: StorageProvider> LocalJobRunner<S> {
         let exec_cmd = self.entrypoint.exec.clone();
         let job_args_json = serde_json::to_string(&self.args)?;
 
-        let shell = if cfg!(windows) { "cmd" } else { "sh" };
-        let shell_flag = if cfg!(windows) { "/C" } else { "-c" };
-        let full_cmd = format!("{} --job-args '{}'", exec_cmd, job_args_json);
-
-        // Spawn new process for CPU bound tasks.
-        let mut child = Command::new(shell)
-            .arg(shell_flag)
-            .arg(&full_cmd)
+        // Keep ratatui as the sole terminal writer while the job runs.
+        // TODO: Bubble up errors in events.
+        let mut child = Command::new(exec_cmd)
+            .args(&self.entrypoint.args)
+            .arg("--job-args")
+            .arg(&job_args_json)
             .current_dir(&cwd)
             .stdout(Stdio::piped())
+            .stderr(Stdio::null())
             .spawn()?;
 
         self.send_job_started_event().await?;
@@ -65,14 +64,12 @@ impl<S: StorageProvider> LocalJobRunner<S> {
 
         // TODO: backpressure/error cases when reading a ton of stdout?
         while let Some(line) = lines.next_line().await? {
-            println!("[job] {line}");
             if let Some(message) = parse_line(&line)? {
                 self.send_event(self.build_event(message.into())).await?;
             }
         }
 
         let status = child.wait().await?;
-        println!("job exited with {status}");
 
         if status.success() {
             self.send_job_succeeded_event().await?;
