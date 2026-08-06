@@ -43,7 +43,7 @@ pub async fn run_workflow(
             "-m",
             ZYGO_PKG_INTERNAL_CLI_MODULE,
             "metadata",
-            target.clone(),
+            target,
         ])
         .output()?;
     anyhow::ensure!(

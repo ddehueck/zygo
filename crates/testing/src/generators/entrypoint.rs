@@ -39,6 +39,7 @@ impl Generate for EntrypointGenerator {
             OrchestratorMode::Local => JobEntrypoint::Local(LocalEntrypoint {
                 cwd: choose(rng, &self.working_dirs).clone(),
                 exec: choose(rng, &self.local_commands).clone(),
+                args: vec![],
             }),
             OrchestratorMode::Remote => JobEntrypoint::Remote(RemoteEntrypoint {
                 url: choose(rng, &self.remote_urls).clone(),

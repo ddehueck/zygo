@@ -22,7 +22,6 @@ pub struct Actor<S: StorageProvider> {
     rx: ActorRx,
     event_notify: Notify,
     context: ActorContext<S>,
-    state_rx: Receiver<EngineSnapshot>,
     state_tx: tokio::sync::watch::Sender<EngineSnapshot>,
 }
 
@@ -42,16 +41,11 @@ impl ActorHandle {
             rx,
             event_notify: Notify::new(),
             context: ActorContext::from(context, tx.clone(), stream_writer),
-            state_rx: state_rx.clone(),
             state_tx,
         };
 
         tokio::spawn(async move { actor.run().await });
         Ok(Self { tx, state_rx })
-    }
-
-    pub async fn subscribe(&self) -> tokio::sync::watch::Receiver<EngineSnapshot> {
-        self.state_rx.clone()
     }
 }
 
@@ -61,7 +55,6 @@ impl<S: StorageProvider> Actor<S> {
             rx,
             event_notify,
             context,
-            state_rx,
             state_tx,
         } = self;
 

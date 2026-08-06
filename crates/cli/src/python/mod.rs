@@ -7,4 +7,3 @@ mod types;
 pub use adapter::workflow_schema_from_metadata;
 pub use types::WorkflowMetadata;
 
-use types::JobRunArgs;

@@ -39,12 +39,3 @@ pub struct WorkflowMetadata {
     pub jobs: Vec<JobMetadata>,
     pub edges: Vec<EdgeMetadata>,
 }
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct JobRunArgs {
-    pub job_id: String,
-    pub data_reference_uri: String,
-    pub data_reference_etag: String,
-    pub workflow_run_id: String,
-    pub job_run_id: String,
-}

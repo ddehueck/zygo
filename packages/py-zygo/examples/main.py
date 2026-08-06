@@ -52,5 +52,6 @@ def squared_values_to_final(
     print(f"[squared_values_to_final] Received: data!")  # noqa: T201
     received = store.get(squared_values)
     received = int.from_bytes(received)
+
     time.sleep(random.randint(1, 15))
     print(f"[squared_values_to_final] Squared received: {received}")  # noqa: T201

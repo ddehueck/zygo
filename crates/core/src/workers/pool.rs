@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use tokio::sync::{Notify, Semaphore, TryAcquireError};
+use tokio::sync::{Semaphore, TryAcquireError};
 
 use crate::{
     context::ActorContext,
