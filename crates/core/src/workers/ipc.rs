@@ -4,6 +4,7 @@ use crate::models::{
     ChannelId, ChannelItemInsertedData, DataReference, DataReferenceInsertedData, EventKind,
 };
 
+//this belongs in an shared IPC versioned module.
 const STDOUT_IPC_PREFIX: &str = "ZYGO_IPC=";
 
 #[derive(Deserialize)]

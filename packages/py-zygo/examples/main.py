@@ -1,3 +1,5 @@
+import random
+import time
 from typing import Annotated
 
 from zygo import (
@@ -16,6 +18,7 @@ raw_values = workflow.channel(id="raw_values", is_input=True)
 squared_values = workflow.channel(id="squared_values")
 
 
+
 @workflow.job
 def square_values(
     input: Annotated[Reference, Input(raw_values)],
@@ -27,6 +30,8 @@ def square_values(
     print(f"[reads_to_qc_reports] GOING TO SQUARE: {received}")  # noqa: T201
 
     squared: int = received * received
+
+    time.sleep(random.randint(1, 15))
 
     publisher.publish(
         store.put(
@@ -44,6 +49,8 @@ def squared_values_to_final(
     squared_values: Annotated[Reference, Input(squared_values)],
     store: Annotated[Store, Depends(Store)],
 ) -> None:
+    print(f"[squared_values_to_final] Received: data!")  # noqa: T201
     received = store.get(squared_values)
     received = int.from_bytes(received)
+    time.sleep(random.randint(1, 15))
     print(f"[squared_values_to_final] Squared received: {received}")  # noqa: T201

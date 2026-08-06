@@ -24,10 +24,11 @@ init:
 
 # ---- Formatting & Linting ---------------------------------------------------
 
-# Format code with ruff
+# Format code and sort imports with ruff
 [group('lint')]
 fmt:
     uvx ruff format {{ src_dirs }}
+    uvx ruff check --select I --fix {{ src_dirs }}
 
 # Check formatting only
 [group('lint')]

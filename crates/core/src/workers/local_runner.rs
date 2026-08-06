@@ -1,4 +1,5 @@
 use anyhow::{Result, anyhow};
+use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, process::Stdio, time::SystemTime};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
@@ -13,6 +14,17 @@ use crate::{
     },
     store::StorageProvider,
 };
+
+/// This is really and IPC interface and should be in it's own module with a pattern to
+/// keep versions of the interface consistent.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JobRunArgs {
+    pub job_id: String,
+    pub data_reference_uri: String,
+    pub data_reference_etag: String,
+    pub workflow_run_id: String,
+    pub job_run_id: String,
+}
 
 /// The local job runner runs the job on the same machine as the orchestrator service.
 /// It kicks the job off and monitors stdout for events to send to the workflow run actor.
@@ -41,18 +53,28 @@ impl<S: StorageProvider> LocalJobRunner<S> {
     pub async fn run(&self) -> Result<()> {
         let cwd = PathBuf::from(&self.entrypoint.cwd);
         let exec_cmd = self.entrypoint.exec.clone();
-        let job_args_json = serde_json::to_string(&self.args)?;
+
+        let actual_args = JobRunArgs {
+            job_id: self.args.job_id.clone(),
+            data_reference_uri: self.args.data_reference_uri.clone(),
+            data_reference_etag: self.args.data_reference_etag.clone(),
+            workflow_run_id: self.context.run_id.to_string(),
+            job_run_id: self.source.job_run_id.to_string(),
+        };
+        let job_args_json = serde_json::to_string(&actual_args)?;
 
         // Keep ratatui as the sole terminal writer while the job runs.
         // TODO: Bubble up errors in events.
-        let mut child = Command::new(exec_cmd)
+        let mut command = Command::new(exec_cmd);
+        command
             .args(&self.entrypoint.args)
-            .arg("--job-args")
+            .arg("--args")
             .arg(&job_args_json)
             .current_dir(&cwd)
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()?;
+            .stderr(Stdio::inherit());
+
+        let mut child = command.spawn()?;
 
         self.send_job_started_event().await?;
 

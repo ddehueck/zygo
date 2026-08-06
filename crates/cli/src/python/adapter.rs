@@ -12,6 +12,7 @@ use crate::python::types::{EdgeKind, WorkflowMetadata};
 pub fn workflow_schema_from_metadata(
     metadata: WorkflowMetadata,
     base_entrypoint: LocalEntrypoint,
+    target: String,
 ) -> Result<WorkflowSchema, zygo_core::models::DomainError> {
     let content_hash = ContentHash::try_from(metadata.content_hash)?;
 
@@ -30,7 +31,11 @@ pub fn workflow_schema_from_metadata(
         .into_iter()
         .map(|job| {
             let job_id = job.id.clone();
-            let args = [base_entrypoint.args.clone(), vec!["run".into()]].concat();
+            let args = [
+                base_entrypoint.args.clone(),
+                vec!["run".into(), target.clone().into()],
+            ]
+            .concat();
 
             Ok(Job {
                 id: job_id.try_into()?,

@@ -39,7 +39,12 @@ pub async fn run_workflow(
 
     // 3. Use the zygo package to inspect the workflow to build the schema
     let metadata = Command::new(&python)
-        .args(["-m", ZYGO_PKG_INTERNAL_CLI_MODULE, "metadata", target])
+        .args([
+            "-m",
+            ZYGO_PKG_INTERNAL_CLI_MODULE,
+            "metadata",
+            target.clone(),
+        ])
         .output()?;
     anyhow::ensure!(
         metadata.status.success(),
@@ -58,7 +63,8 @@ pub async fn run_workflow(
         exec: python,
         args: vec!["-m".into(), ZYGO_PKG_INTERNAL_CLI_MODULE.into()],
     };
-    let schema = workflow_schema_from_metadata(metadata.clone(), base_entrypoint)?;
+    let schema =
+        workflow_schema_from_metadata(metadata.clone(), base_entrypoint, target.to_string())?;
     // println!("built workflow schema: {schema:?}");
 
     // 4. Create a zygo service and start the workflow
@@ -100,6 +106,21 @@ pub async fn run_workflow(
     refresh.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut has_snapshot = false;
     let mut is_terminal = false;
+
+    // // Intentionally block the TUI so job stdout remains visible while the run is active.
+    // loop {
+    //     let snapshot = rx.borrow_and_update().clone();
+    //     if snapshot.state.status.is_terminal() {
+    //         break;
+    //     }
+
+    //     rx.changed().await.map_err(|_| {
+    //         anyhow::anyhow!("workflow actor stopped before reaching a terminal state")
+    //     })?;
+    // }
+
+    // Let the existing TUI loop consume the terminal snapshot.
+    rx.mark_changed();
 
     loop {
         let snapshot_changed = tokio::select! {

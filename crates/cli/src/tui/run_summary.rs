@@ -1,3 +1,5 @@
+use std::time::{Duration, SystemTime};
+
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Layout, Rect},
@@ -8,7 +10,7 @@ use ratatui::{
 
 use crate::commands::{JobRunSummary, WorkflowRunSummary};
 
-use super::{format_local_datetime, format_time_ago};
+use super::format_duration;
 
 pub struct WorkflowRunView<'a> {
     summary: &'a WorkflowRunSummary,
@@ -69,18 +71,17 @@ impl Widget for WorkflowRunView<'_> {
             .block(block)
             .render(overview_area, buffer);
 
-        let header = Row::new(["Status", "Job", "Started At", "Ended At"])
+        let header = Row::new(["Status", "Job", "Duration"])
             .style(Style::default().add_modifier(Modifier::BOLD));
         let rows = self.summary.job_runs.iter().map(job_run_row);
         let widths = [
             Constraint::Length(10),
             Constraint::Fill(1),
-            Constraint::Length(20),
-            Constraint::Length(24),
+            Constraint::Length(14),
         ];
         let jobs_block = Block::default()
             .title(Line::from(Span::styled(
-                format!(" Job Runs ({}) ", self.summary.job_runs.len()),
+                format!(" Job Runs  ({}) ", self.summary.job_runs.len()),
                 Style::default()
                     .fg(Color::Cyan)
                     .add_modifier(Modifier::BOLD),
@@ -101,22 +102,22 @@ impl Widget for WorkflowRunView<'_> {
 fn job_run_row(job_run: &JobRunSummary) -> Row<'static> {
     let job_run_id = last_chars(&job_run.job_run_id, 5);
     let job = format!("{} ({job_run_id})", job_run.job_id);
-    let started_at = job_run
-        .started_at
-        .map(format_time_ago)
-        .unwrap_or_else(|| "—".to_owned());
-    let ended_at = job_run
-        .ended_at
-        .map(format_local_datetime)
-        .unwrap_or_else(|| "—".to_owned());
+    let duration = job_run_duration(job_run);
     let status = Cell::from(job_run.status.clone()).style(status_style(&job_run.status));
 
-    Row::new([
-        status,
-        Cell::from(job),
-        Cell::from(started_at),
-        Cell::from(ended_at),
-    ])
+    Row::new([status, Cell::from(job), Cell::from(duration)])
+}
+
+fn job_run_duration(job_run: &JobRunSummary) -> String {
+    let Some(started_at) = job_run.started_at else {
+        return "—".to_owned();
+    };
+    let ended_at = job_run.ended_at.unwrap_or_else(SystemTime::now);
+    let duration = ended_at
+        .duration_since(started_at)
+        .unwrap_or(Duration::ZERO);
+
+    format_duration(duration)
 }
 
 fn status_style(status: &str) -> Style {

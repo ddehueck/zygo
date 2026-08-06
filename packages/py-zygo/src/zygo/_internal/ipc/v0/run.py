@@ -2,13 +2,11 @@ from __future__ import annotations
 
 from zygo._internal.fsspec import FsspecUri
 from zygo._internal.ipc.importer import load_workflow
+from zygo._internal.ipc.v0.types import JobRunArgs
 from zygo._internal.meta.container import RunContainer
 from zygo._internal.meta.injection import build_injected_call
-
 from zygo.store import Reference, StoreOptions
 from zygo.types import JobId, JobRunContext, JobRunId, WorkflowRunId
-
-from zygo._internal.ipc.v0.types import JobRunArgs
 
 
 def run(
@@ -37,7 +35,9 @@ def run(
         container = RunContainer(
             context=run_context,
             # TODO: Where to pipe these options through
-            store_options=StoreOptions(root_uri=FsspecUri(uri="file://./todoreplaceme")),
+            store_options=StoreOptions(
+                root_uri=FsspecUri(uri="file://./todoreplaceme")
+            ),
         )
         callable_w_deps = build_injected_call(job_func, container=container)
         callable_w_deps()

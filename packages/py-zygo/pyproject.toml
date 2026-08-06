@@ -5,8 +5,7 @@ description = "A modern python workflow engine for bioinformatics"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "fsspec>=2026.1.0",
-    "s3fs>=2026.1.0",
+    "fsspec>=2026.7.0",
 ]
 
 

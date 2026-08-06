@@ -10,7 +10,6 @@ zygo-core = { path = "../core" }
 anyhow = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-chrono = "0.4"
 ratatui = { version = "0.29", default-features = false, features = ["crossterm"] }
 clap = { version = "4.5", features = ["derive"] }
 tokio = { workspace = true, features = ["signal"] }

@@ -4,8 +4,8 @@ use crate::engine::executor::ExecuteOutcome::{Completed, WorkerPoolCapacityRequi
 use crate::engine::{Error, Result};
 use crate::models::{
     CacheJobEventSourceCommand, CacheJobRunResultCommand, Command, Event, JobArgs, JobRunSource,
-    ReplayJobCommand, ResultCacheItem, RunJobCommand, SetJobRunStatusCommand, StreamItem,
-    StreamRecord,
+    JobRunStatus, ReplayJobCommand, ResultCacheItem, RunJobCommand, SetJobRunStatusCommand,
+    StreamItem, StreamRecord,
 };
 use crate::store::StorageProvider;
 use crate::workers::Error as WorkerError;
@@ -74,6 +74,7 @@ impl<S: StorageProvider> Executor<S> {
             return Err(Error::other("job entrypoint not found"));
         };
 
+        let job_run_id = command.job_run_id.clone();
         let source = JobRunSource {
             job_id: command.job_id,
             job_run_id: command.job_run_id,
@@ -85,8 +86,12 @@ impl<S: StorageProvider> Executor<S> {
             job_args,
             job_entrypoint,
         ) {
+            // TODO: Queued job event/status?
             Ok(_) => Ok(Completed(ExecuteResult {
-                next_state: state.clone(),
+                // Record the dispatched job before its asynchronous JobStarted event arrives.
+                // Otherwise, a previously succeeded job can make the workflow look terminal
+                // during the gap between spawning this worker and receiving that event.
+                next_state: state.set_job_status(job_run_id, JobRunStatus::Running),
                 next_events: vec![],
             })),
             Err(WorkerError::NoCapacity) => Ok(WorkerPoolCapacityRequired),

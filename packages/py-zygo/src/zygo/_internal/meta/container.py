@@ -2,6 +2,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, assert_never, override
 
+from zygo._internal.ipc.v0.types import (
+    ChannelItemInserted,
+    DataReference,
+    write_stdout_ipc_message,
+)
 from zygo._internal.meta.dependencies import (
     DependsMarker,
     InputMarker,
@@ -70,8 +75,9 @@ class PublisherImpl(Publisher):
 
     @override
     def publish(self, data: Reference) -> None:
-        del data
-        raise RuntimeError(
-            f"Publishing to channel {self._channel_id} is unavailable until a runtime "
-            + "transport is configured"
+        data_ref = DataReference.from_reference(data)
+        message = ChannelItemInserted(
+            channel_id=self._channel_id,
+            data_reference=data_ref,
         )
+        write_stdout_ipc_message(message)
