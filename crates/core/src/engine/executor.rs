@@ -2,8 +2,9 @@
 use crate::context::ActorContext;
 use crate::engine::executor::ExecuteOutcome::{Completed, WorkerPoolCapacityRequired};
 use crate::engine::{Error, Result};
+use crate::ipc::v0::RunCommandArgs;
 use crate::models::{
-    CacheJobEventSourceCommand, CacheJobRunResultCommand, Command, Event, JobArgs, JobRunSource,
+    CacheJobEventSourceCommand, CacheJobRunResultCommand, Command, Event, JobRunSource,
     JobRunStatus, ReplayJobCommand, ResultCacheItem, RunJobCommand, SetJobRunStatusCommand,
     StreamItem, StreamRecord,
 };
@@ -64,10 +65,12 @@ impl<S: StorageProvider> Executor<S> {
         context: &ResultCache<S>,
         state: &RunState,
     ) -> Result<ExecuteOutcome> {
-        let job_args = JobArgs {
+        let job_args = RunCommandArgs {
             job_id: command.job_id.to_string(),
             data_reference_uri: command.data_reference.uri.clone(),
             data_reference_etag: command.data_reference.etag.clone(),
+            workflow_run_id: self.context.run_id.to_string(),
+            job_run_id: command.job_run_id.to_string(),
         };
 
         let Some(job_entrypoint) = context.schema.get_job_entrypoint(&command.job_id) else {

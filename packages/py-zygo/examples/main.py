@@ -18,7 +18,6 @@ raw_values = workflow.channel(id="raw_values", is_input=True)
 squared_values = workflow.channel(id="squared_values")
 
 
-
 @workflow.job
 def square_values(
     input: Annotated[Reference, Input(raw_values)],

@@ -1,6 +1,7 @@
+use zygo_core::ipc;
 use zygo_core::models::{
     Channel, ChannelId, ContentHash, Edge, EdgeKind as CoreEdgeKind, Job, JobEntrypoint,
-    LocalEntrypoint, WorkflowSchema,
+    WorkflowSchema,
 };
 
 use crate::python::types::{EdgeKind, WorkflowMetadata};
@@ -11,8 +12,9 @@ use crate::python::types::{EdgeKind, WorkflowMetadata};
 /// the second tuple element rather than being invented by this adapter.
 pub fn workflow_schema_from_metadata(
     metadata: WorkflowMetadata,
-    base_entrypoint: LocalEntrypoint,
-    target: String,
+    cwd: &str,
+    target: &str,
+    python: &str,
 ) -> Result<WorkflowSchema, zygo_core::models::DomainError> {
     let content_hash = ContentHash::try_from(metadata.content_hash)?;
 
@@ -30,21 +32,12 @@ pub fn workflow_schema_from_metadata(
         .jobs
         .into_iter()
         .map(|job| {
-            let job_id = job.id.clone();
-            let args = [
-                base_entrypoint.args.clone(),
-                vec!["run".into(), target.clone().into()],
-            ]
-            .concat();
+            let python_cli = ipc::v0::PythonCli::new(python.into(), cwd.into(), target.into());
 
             Ok(Job {
-                id: job_id.try_into()?,
+                id: job.id.try_into()?,
                 content_hash: job.content_hash.try_into()?,
-                entrypoint: JobEntrypoint::Local(LocalEntrypoint {
-                    cwd: base_entrypoint.cwd.clone(),
-                    exec: base_entrypoint.exec.clone(),
-                    args,
-                }),
+                entrypoint: JobEntrypoint::Python(python_cli),
             })
         })
         .collect::<Result<Vec<_>, zygo_core::models::DomainError>>()?;

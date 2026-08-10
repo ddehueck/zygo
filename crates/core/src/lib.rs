@@ -1,10 +1,13 @@
-pub mod actors;
 mod context;
-pub mod engine;
 mod error;
-pub mod models;
 mod reader;
 mod service;
+
+// TODO: Do these all need to be pub?
+pub mod actors;
+pub mod engine;
+pub mod ipc;
+pub mod models;
 pub mod store;
 pub mod stream;
 pub mod workers;

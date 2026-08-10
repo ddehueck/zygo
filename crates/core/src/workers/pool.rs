@@ -4,7 +4,8 @@ use tokio::sync::{Semaphore, TryAcquireError};
 
 use crate::{
     context::ActorContext,
-    models::{JobArgs, JobEntrypoint, JobRunSource},
+    ipc::v0::RunCommandArgs,
+    models::{JobEntrypoint, JobRunSource},
     store::StorageProvider,
     workers::{
         Error::{Closed, NoCapacity},
@@ -40,7 +41,7 @@ impl WorkerPool {
         &self,
         context: ActorContext<S>,
         source: JobRunSource,
-        args: JobArgs,
+        args: RunCommandArgs,
         entrypoint: JobEntrypoint,
     ) -> Result<()> {
         let permit = match self.semaphore.clone().try_acquire_owned() {
@@ -51,7 +52,7 @@ impl WorkerPool {
 
         tokio::spawn(async move {
             if let Err(e) = Runner::new()
-                .run_job(context, source, args, entrypoint)
+                .run_job(context, source, entrypoint, args)
                 .await
             {
                 // TODO: Better error handling here

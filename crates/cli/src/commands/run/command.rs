@@ -4,7 +4,7 @@ use ratatui::{Terminal, TerminalOptions, Viewport, backend::CrosstermBackend, wi
 use zygo_core::{
     MemoryStore, Zygo, ZygoConfig,
     engine::RunCursor,
-    models::{DataReference, LocalEntrypoint, StreamItem},
+    models::{DataReference, StreamItem},
     store::Store,
 };
 
@@ -30,6 +30,7 @@ pub async fn run_workflow(
         "Could not find a python executable"
     );
     let python = String::from_utf8_lossy(&python.stdout).trim().to_owned();
+    let cwd = std::env::current_dir()?.to_string_lossy().into_owned();
     // println!("{python}");
 
     // 2. Ensure that the zygo package is in the executable's environment
@@ -39,12 +40,7 @@ pub async fn run_workflow(
 
     // 3. Use the zygo package to inspect the workflow to build the schema
     let metadata = Command::new(&python)
-        .args([
-            "-m",
-            ZYGO_PKG_INTERNAL_CLI_MODULE,
-            "metadata",
-            target,
-        ])
+        .args(["-m", ZYGO_PKG_INTERNAL_CLI_MODULE, "metadata", target])
         .output()?;
     anyhow::ensure!(
         metadata.status.success(),
@@ -58,13 +54,8 @@ pub async fn run_workflow(
     let metadata: WorkflowMetadata = serde_json::from_str(&metadata)?;
     // println!("parsed metadata: {metadata:?}");
 
-    let base_entrypoint = LocalEntrypoint {
-        cwd: std::env::current_dir()?.to_string_lossy().into_owned(),
-        exec: python,
-        args: vec!["-m".into(), ZYGO_PKG_INTERNAL_CLI_MODULE.into()],
-    };
     let schema =
-        workflow_schema_from_metadata(metadata.clone(), base_entrypoint, target.to_string())?;
+        workflow_schema_from_metadata(metadata.clone(), cwd.as_ref(), target, python.as_ref())?;
     // println!("built workflow schema: {schema:?}");
 
     // 4. Create a zygo service and start the workflow

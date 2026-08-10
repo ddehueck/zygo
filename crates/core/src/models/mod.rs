@@ -5,7 +5,6 @@ pub mod edge;
 pub mod event;
 pub mod ids;
 pub mod job;
-pub mod job_args;
 pub mod job_entrypoint;
 pub mod job_run;
 pub mod mode;
@@ -63,8 +62,7 @@ pub use event::{
 };
 pub use ids::*;
 pub use job::{Job, job_run_id};
-pub use job_args::JobArgs;
-pub use job_entrypoint::{JobEntrypoint, LocalEntrypoint, RemoteEntrypoint};
+pub use job_entrypoint::JobEntrypoint;
 pub use job_run::{JobRun, JobRunStatus};
 pub use mode::OrchestratorMode;
 pub use result_cache::ResultCacheItem;

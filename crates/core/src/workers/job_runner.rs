@@ -1,6 +1,7 @@
 use crate::{
     context::ActorContext,
-    models::{JobArgs, JobEntrypoint, JobRunSource},
+    ipc::v0::RunCommandArgs,
+    models::{JobEntrypoint, JobRunSource},
     store::StorageProvider,
     workers::local_runner::LocalJobRunner,
 };
@@ -16,18 +17,11 @@ impl Runner {
         &self,
         context: ActorContext<S>,
         source: JobRunSource,
-        args: JobArgs,
         entrypoint: JobEntrypoint,
+        args: RunCommandArgs,
     ) -> Result<(), anyhow::Error> {
-        match entrypoint {
-            JobEntrypoint::Local(entrypoint) => {
-                LocalJobRunner::new(context, source, args, entrypoint)
-                    .run()
-                    .await
-            }
-            JobEntrypoint::Remote(_) => Err(anyhow::anyhow!(
-                "remote job entrypoints are not implemented"
-            )),
-        }
+        LocalJobRunner::new(context, source, entrypoint, args)
+            .run()
+            .await
     }
 }
