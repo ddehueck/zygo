@@ -6,7 +6,7 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
-tokio = { workspace = true, features = ["process", "io-util"] }
+tokio = { workspace = true, features = ["fs", "process", "io-util", "time"] }
 async-trait = "0.1"
 anyhow = { workspace = true }
 serde = { workspace = true }
@@ -16,6 +16,7 @@ sqlx = { version = "0.8.6", features = ["runtime-tokio", "sqlite", "macros", "mi
 chrono = { version = "0.4", features = ["serde"] }
 dotenvy = "0.15.7"
 directories = "6.0.0"
+os_pipe = "1.2.3"
 # HTTP client (for remote entrypoints)
 reqwest = { version = "0.12", features = ["json"] }
 num_cpus = "1.0"

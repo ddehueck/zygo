@@ -30,7 +30,11 @@ def square_values(
 
     squared: int = received * received
 
-    time.sleep(random.randint(1, 15))
+    rand_wait = random.randint(1, 15)
+    for i in range(rand_wait):
+        print(f"[square_values] Waiting: {i + 1}/{rand_wait}")  # noqa: T201
+        time.sleep(1)
+
 
     publisher.publish(
         store.put(
@@ -52,5 +56,12 @@ def squared_values_to_final(
     received = store.get(squared_values)
     received = int.from_bytes(received)
 
-    time.sleep(random.randint(1, 15))
+
+
+    rand_wait = random.randint(1, 15)
+    for i in range(rand_wait):
+        print(f"[square_values] Waiting: {i + 1}/{rand_wait}")  # noqa: T201
+        time.sleep(1)
+
+
     print(f"[squared_values_to_final] Squared received: {received}")  # noqa: T201

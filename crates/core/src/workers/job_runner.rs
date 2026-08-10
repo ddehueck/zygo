@@ -3,7 +3,7 @@ use crate::{
     ipc::v0::RunCommandArgs,
     models::{JobEntrypoint, JobRunSource},
     store::StorageProvider,
-    workers::local_runner::LocalJobRunner,
+    workers::LocalJobRunner,
 };
 
 pub struct Runner;

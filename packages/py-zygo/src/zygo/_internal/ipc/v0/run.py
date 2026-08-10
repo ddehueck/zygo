@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from zygo._internal.fsspec import FsspecUri
 from zygo._internal.ipc.importer import load_workflow
-from zygo._internal.ipc.v0.types import JobRunArgs
 from zygo._internal.meta.container import RunContainer
 from zygo._internal.meta.injection import build_injected_call
 from zygo.store import Reference, StoreOptions
 from zygo.types import JobId, JobRunContext, JobRunId, WorkflowRunId
+
+if TYPE_CHECKING:
+    from zygo._internal.ipc.v0.types import JobRunArgs
 
 
 def run(

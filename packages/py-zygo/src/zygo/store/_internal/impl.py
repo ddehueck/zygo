@@ -98,9 +98,7 @@ class StoreImpl(StoreProtocol):
 
     def _uri_for_key(self, key: str, scope: Scope) -> str:
         key = _normalize_key(key)
-        print(f"key: {key}")  # noqa: T201
         prefix = self._prefix(scope)
-        print(f"prefix: {prefix}")  # noqa: T201
         return posixpath.join(prefix, key)
 
     @override
@@ -113,7 +111,6 @@ class StoreImpl(StoreProtocol):
         content_type: str | None = None,
     ) -> Reference:
         uri = self._uri_for_key(key, scope)
-        print(f"uri: {uri}")  # noqa: T201
 
         # Ensure parent directories for local-ish FS that require it
         parent = posixpath.dirname(uri)

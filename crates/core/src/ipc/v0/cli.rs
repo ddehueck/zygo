@@ -31,14 +31,19 @@ impl PythonCli {
 
     pub fn run_entrypoint(&self, args: RunCommandArgs) -> Command {
         let mut command = Command::new(self.python_exec.clone());
-        command.current_dir(&self.cwd).args(vec![
-            "-m".into(),
-            ZYGO_PKG_INTERNAL_CLI_MODULE.into(),
-            "run".into(),
-            self.target.clone(),
-            "--args".into(),
-            serde_json::to_string(&args).expect("failed to serialze RunCommandArgs"),
-        ]);
+        // Keep logs and stdout IPC flowing through the shared pipe promptly.
+        // Python otherwise block-buffers output when stdout is not a terminal.
+        command
+            .env("PYTHONUNBUFFERED", "1")
+            .current_dir(&self.cwd)
+            .args(vec![
+                "-m".into(),
+                ZYGO_PKG_INTERNAL_CLI_MODULE.into(),
+                "run".into(),
+                self.target.clone(),
+                "--args".into(),
+                serde_json::to_string(&args).expect("failed to serialze RunCommandArgs"),
+            ]);
         command
     }
 
