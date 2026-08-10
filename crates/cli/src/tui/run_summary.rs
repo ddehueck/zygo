@@ -148,7 +148,7 @@ impl<'a> JobLogView<'a> {
 impl Widget for JobLogView<'_> {
     fn render(self, area: Rect, buffer: &mut Buffer) {
         let mode = if self.is_running {
-            "Watching logs • refreshes every 200 ms"
+            "Watching logs"
         } else {
             "Logs"
         };

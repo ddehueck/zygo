@@ -32,7 +32,7 @@ def square_values(
 
     rand_wait = random.randint(1, 15)
     for i in range(rand_wait):
-        print(f"[square_values] Waiting: {i + 1}/{rand_wait}")  # noqa: T201
+        print(f"[square_values] HOLA SOFIA Waiting: {i + 1}/{rand_wait}")  # noqa: T201
         time.sleep(1)
 
 
@@ -60,7 +60,7 @@ def squared_values_to_final(
 
     rand_wait = random.randint(1, 15)
     for i in range(rand_wait):
-        print(f"[square_values] Waiting: {i + 1}/{rand_wait}")  # noqa: T201
+        print(f"[square_values] Que Tal pendejos 🫶 Waiting: {i + 1}/{rand_wait}")  # noqa: T201
         time.sleep(1)
 
 
