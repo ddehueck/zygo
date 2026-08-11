@@ -1,6 +1,6 @@
 {
   "title": "Python Library",
-  "description": "Use Zygo from your Python applications.",
+  "description": "Building workflows in Python.",
   "root": true,
   "pages": ["index"]
 }

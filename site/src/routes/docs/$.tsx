@@ -86,13 +86,13 @@ function Page() {
       tabs={[
         {
           title: 'Python Library',
-          description: 'Use Zygo from your Python applications.',
+          description: 'Build workflows in Python.',
           url: '/docs/python',
           icon: <PackageOpen className="size-4" />,
         },
         {
           title: 'CLI Tool',
-          description: 'Use Zygo from your terminal.',
+          description: 'Manage workflows in the terminal.',
           url: '/docs/cli',
           icon: <SquareTerminal className="size-4" />,
         },
