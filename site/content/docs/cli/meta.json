@@ -1,0 +1,6 @@
+{
+  "title": "CLI Tool",
+  "description": "Use Zygo from your terminal.",
+  "root": true,
+  "pages": ["index"]
+}

@@ -1,0 +1,6 @@
+{
+  "title": "Python Library",
+  "description": "Use Zygo from your Python applications.",
+  "root": true,
+  "pages": ["index"]
+}
