@@ -1,11 +1,12 @@
 [package]
-name = "zygo-desktop"
+name = "desktop"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 
 [dependencies]
-zygo-core = { path = "../core" }
-anyhow = { workspace = true }
+gpui = { package = "gpui-ce", version = "0.3.3" }
 
+[dev-dependencies]
+gpui = { package = "gpui-ce", version = "0.3.3", features = ["test-support"] }
