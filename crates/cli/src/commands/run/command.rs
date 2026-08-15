@@ -13,14 +13,14 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
+use local::LocalZygoService;
 use ratatui::{
     Terminal, TerminalOptions, Viewport, backend::CrosstermBackend, widgets::TableState,
 };
 use zygo_core::{
-    MemoryStore, Zygo, ZygoConfig,
+    ZygoConfig,
     engine::RunCursor,
-    models::{DataReference, JobRunId, StreamItem},
-    store::Store,
+    models::{DataReference, EventId, JobRunId, StreamItem},
     workers::WorkerLogReader,
 };
 
@@ -226,18 +226,17 @@ pub async fn run_workflow(
     // 4. Create a zygo service and start the workflow
     let num_workers = workers.unwrap_or(1); // TODO: Use CPU core count
     let config = ZygoConfig::new(num_workers);
-    let store = Store::new(MemoryStore::new()); // TODO: This is a lil funky wording
-
-    let service = Zygo::new(store, config);
+    let service = LocalZygoService::new(config).await?;
 
     let data_ref = DataReference {
         uri: fsspec_uri.to_string(),
-        etag: "42".into(),
+        etag: EventId::new().to_string(),
         content_type: None,
         size_bytes: None,
     };
 
-    let run_id = service.run(data_ref, schema).await?;
+    let tags = [("workflow", metadata.id.as_str())];
+    let run_id = service.run(data_ref, schema, &tags).await?;
     // println!("run_id: {run_id:?}");
 
     // 5. Watch the engine state in an interactive fullscreen terminal view.
@@ -253,8 +252,8 @@ pub async fn run_workflow(
     // Clients read the workflow run state by subscribing to a watch channel
     // that notifies when the engine has made a meaningful update and then
     // reading the stream directly.
-    let mut rx = service.subscribe(&run_id).await?;
-    let stream = service.stream(&run_id);
+    let mut rx = service.base.subscribe(&run_id).await?;
+    let stream = service.base.stream(&run_id);
     let mut cursor = RunCursor::default();
 
     let mut summary = WorkflowRunSummary::new(metadata.id.clone());

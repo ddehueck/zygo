@@ -1,7 +1,10 @@
 use gpui::{
-    App, Application, Bounds, Context, MouseButton, MouseDownEvent, Render, Window, WindowBounds,
-    WindowOptions, div, prelude::*, px, rgb, size,
+    App, Application, Bounds, Context, Render, TitlebarOptions, Window, WindowBounds,
+    WindowOptions, div, point, prelude::*, px, size,
 };
+
+mod theme;
+mod ui;
 
 struct ZygoDesktop {
     runs_started: usize,
@@ -9,6 +12,7 @@ struct ZygoDesktop {
 
 impl Render for ZygoDesktop {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let colors = cx.global::<theme::Theme>().colors;
         let run_label = match self.runs_started {
             0 => "No local runs started".to_owned(),
             1 => "1 local run started".to_owned(),
@@ -20,34 +24,19 @@ impl Render for ZygoDesktop {
             .flex()
             .flex_col()
             .size_full()
-            .bg(rgb(0x0b1020))
-            .text_color(rgb(0xe7eaf0))
-            .p_8()
-            .gap_8()
+            .bg(colors.surface_base)
+            .text_color(colors.text_primary)
+            .child(ui::Titlebar)
             .child(
                 div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .child(
-                        div()
-                            .text_2xl()
-                            .font_weight(gpui::FontWeight::BOLD)
-                            .child("ZYGO"),
-                    )
-                    .child(
-                        div()
-                            .text_sm()
-                            .text_color(rgb(0x8b95aa))
-                            .child("Workflow runtime · Desktop preview"),
-                    ),
-            )
-            .child(
-                div()
-                    .flex()
                     .flex_1()
+                    .min_h_0()
+                    .overflow_hidden()
+                    .flex()
                     .items_center()
                     .justify_center()
+                    .p_8()
+                    .gap_8()
                     .child(
                         div()
                             .flex()
@@ -57,8 +46,8 @@ impl Render for ZygoDesktop {
                             .gap_5()
                             .rounded_xl()
                             .border_1()
-                            .border_color(rgb(0x27324a))
-                            .bg(rgb(0x121a2d))
+                            .border_color(colors.border)
+                            .bg(colors.surface_base)
                             .shadow_xl()
                             .child(
                                 div()
@@ -68,39 +57,24 @@ impl Render for ZygoDesktop {
                             )
                             .child(
                                 div()
-                                    .text_color(rgb(0xaab2c3))
+                                    .text_color(colors.text_secondary)
                                     .line_height(gpui::relative(1.5))
                                     .child(
                                         "Compose, inspect, and run dependable data workflows from one focused workspace.",
                                     ),
                             )
                             .child(
-                                div()
-                                    .id("start-run")
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .px_5()
-                                    .py_3()
-                                    .rounded_lg()
-                                    .bg(rgb(0x6d5dfc))
-                                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                                    .cursor_pointer()
-                                    .hover(|style| style.bg(rgb(0x7d70ff)))
-                                    .active(|style| style.bg(rgb(0x5949e8)))
-                                    .on_mouse_down(
-                                        MouseButton::Left,
-                                        cx.listener(|view, _: &MouseDownEvent, _, cx| {
-                                            view.runs_started += 1;
-                                            cx.notify();
-                                        }),
-                                    )
-                                    .child("Start a local run"),
+                                ui::Button::new("start-run", "Start a local run").on_click(
+                                    cx.listener(|view, _, _, cx| {
+                                        view.runs_started += 1;
+                                        cx.notify();
+                                    }),
+                                ),
                             )
                             .child(
                                 div()
                                     .text_sm()
-                                    .text_color(rgb(0x7f8aa3))
+                                    .text_color(colors.text_tertiary)
                                     .child(run_label),
                             ),
                     ),
@@ -110,11 +84,18 @@ impl Render for ZygoDesktop {
 
 fn main() {
     Application::new().run(|cx: &mut App| {
+        cx.set_global(theme::Theme::dark());
+
         let bounds = Bounds::centered(None, size(px(960.0), px(640.0)), cx);
 
         cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
+                titlebar: Some(TitlebarOptions {
+                    title: None,
+                    appears_transparent: true,
+                    traffic_light_position: Some(point(px(14.0), px(10.0))),
+                }),
                 ..Default::default()
             },
             |_, cx| cx.new(|_| ZygoDesktop { runs_started: 0 }),
