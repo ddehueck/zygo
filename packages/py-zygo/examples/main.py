@@ -17,10 +17,12 @@ workflow = Workflow(id="my_workflow")
 raw_values = workflow.channel(id="raw_values", is_input=True)
 squared_values = workflow.channel(id="squared_values")
 
+workflow.job()
+
 
 @workflow.job
 def square_values(
-    input: Annotated[Reference, Input(raw_values)],
+    input: Input(raw_values),
     publisher: Annotated[Publisher, Output(squared_values)],
     store: Annotated[Store, Depends(Store)],
 ) -> None:
@@ -32,7 +34,7 @@ def square_values(
 
     rand_wait = random.randint(1, 15)
     for i in range(rand_wait):
-        print(f"[square_values] HOLA SOFIA Waiting: {i + 1}/{rand_wait}")  # noqa: T201
+        print(f"[square_values] Waiting: {i + 1}/{rand_wait}")  # noqa: T201
         time.sleep(1)
 
 
@@ -56,11 +58,9 @@ def squared_values_to_final(
     received = store.get(squared_values)
     received = int.from_bytes(received)
 
-
-
     rand_wait = random.randint(1, 15)
     for i in range(rand_wait):
-        print(f"[square_values] Que Tal pendejos 🫶 Waiting: {i + 1}/{rand_wait}")  # noqa: T201
+        print(f"[square_values] Que Tal Waiting: {i + 1}/{rand_wait}")  # noqa: T201
         time.sleep( 1)
 
 

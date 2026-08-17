@@ -5,13 +5,20 @@ CREATE TABLE IF NOT EXISTS workflow_runs (
 );
 
 CREATE TABLE IF NOT EXISTS tags (
-    workflow_run_id TEXT NOT NULL,
-    key TEXT NOT NULL,
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    UNIQUE (name)
+);
+
+CREATE TABLE IF NOT EXISTS tag_associations (
+    id INTEGER PRIMARY KEY,
+    tag_id INTEGER NOT NULL,
     value TEXT NOT NULL,
+    workflow_run_id TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (workflow_run_id, key, value),
+    FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE,
     FOREIGN KEY (workflow_run_id) REFERENCES workflow_runs(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS tags_key_value_workflow_run_id
-ON tags (key, value, workflow_run_id);
+CREATE INDEX IF NOT EXISTS tag_associations_workflow_run_id
+ON tag_associations (workflow_run_id, tag_id);

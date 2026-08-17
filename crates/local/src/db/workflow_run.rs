@@ -12,9 +12,23 @@ const INSERT_WORKFLOW_RUN_SQL: &str = "
 ";
 
 const INSERT_TAG_SQL: &str = "
-    INSERT INTO tags (workflow_run_id, key, value)
-    VALUES (?1, ?2, ?3)
-    ON CONFLICT(workflow_run_id, key, value) DO NOTHING
+    INSERT INTO tags (name)
+    VALUES (?1)
+    ON CONFLICT(name) DO NOTHING
+";
+
+const INSERT_TAG_ASSOCIATION_SQL: &str = "
+    INSERT INTO tag_associations (tag_id, value, workflow_run_id)
+    SELECT tags.id, ?2, ?3
+    FROM tags
+    WHERE tags.name = ?1
+        AND NOT EXISTS (
+            SELECT 1
+            FROM tag_associations
+            WHERE tag_associations.tag_id = tags.id
+                AND tag_associations.value = ?2
+                AND tag_associations.workflow_run_id = ?3
+        )
 ";
 
 pub struct WorkflowRunRepository {
@@ -41,7 +55,9 @@ impl WorkflowRunRepository {
             .await?;
 
         for &(key, value) in tags {
-            tx.execute(INSERT_TAG_SQL, [id, key, value]).await?;
+            tx.execute(INSERT_TAG_SQL, [key]).await?;
+            tx.execute(INSERT_TAG_ASSOCIATION_SQL, [key, value, id])
+                .await?;
         }
 
         tx.commit().await
@@ -86,8 +102,10 @@ impl WorkflowRunRepository {
                 "
                     SELECT workflow_runs.id, workflow_runs.content_hash, workflow_runs.created_at
                     FROM tags
-                    INNER JOIN workflow_runs ON workflow_runs.id = tags.workflow_run_id
-                    WHERE tags.key = ?1 AND tags.value = ?2
+                    INNER JOIN tag_associations ON tag_associations.tag_id = tags.id
+                    INNER JOIN workflow_runs
+                        ON workflow_runs.id = tag_associations.workflow_run_id
+                    WHERE tags.name = ?1 AND tag_associations.value = ?2
                     ORDER BY workflow_runs.created_at ASC, workflow_runs.rowid ASC
                 ",
                 [key, value],
@@ -102,10 +120,15 @@ impl WorkflowRunRepository {
         let mut rows = connection
             .query(
                 "
-                    SELECT workflow_run_id, key, value, created_at
-                    FROM tags
-                    WHERE workflow_run_id = ?1
-                    ORDER BY key ASC, value ASC
+                    SELECT
+                        tag_associations.workflow_run_id AS workflow_run_id,
+                        tags.name AS key,
+                        tag_associations.value AS value,
+                        tag_associations.created_at AS created_at
+                    FROM tag_associations
+                    INNER JOIN tags ON tags.id = tag_associations.tag_id
+                    WHERE tag_associations.workflow_run_id = ?1
+                    ORDER BY tags.name ASC, tag_associations.value ASC
                 ",
                 [workflow_run_id],
             )
