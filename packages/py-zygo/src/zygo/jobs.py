@@ -1,8 +1,10 @@
 from collections.abc import Iterator
 from dataclasses import dataclass
 from types import FunctionType
+from typing import Any
 
 from zygo._internal.fn_hash import local_source_dependency_hash
+from zygo.channel import Channel
 from zygo.types import JobHash, JobId
 
 
@@ -11,6 +13,8 @@ class JobEntry:
     id: JobId
     hash: JobHash
     job_fn: FunctionType
+    input_channel: Channel[Any]  # pyright: ignore[reportExplicitAny]
+    output_channel: Channel[Any]  # pyright: ignore[reportExplicitAny]
 
 
 class DuplicateJobError(Exception):
@@ -22,57 +26,51 @@ class DuplicateJobError(Exception):
 class JobRegistry:
     def __init__(self) -> None:
         super().__init__()
-        self._jobs_by_id: dict[JobId, FunctionType] = {}
-        self._jobs_by_hash: dict[JobHash, FunctionType] = {}
+        self._jobs_by_id: dict[JobId, JobEntry] = {}
 
-    def get_by_id(self, id: JobId) -> FunctionType | None:
+    def get_by_id(self, id: JobId) -> JobEntry | None:
         if id not in self._jobs_by_id:
             return None
         return self._jobs_by_id[id]
 
-    def get_by_hash(self, hash: JobHash) -> FunctionType | None:
-        if hash not in self._jobs_by_hash:
-            return None
-        return self._jobs_by_hash[hash]
-
-    def set(self, job: FunctionType, id: JobId | None = None) -> JobHash:
+    def set(
+        self,
+        *,
+        job: FunctionType,
+        input_channel: Channel[Any],  # pyright: ignore[reportExplicitAny]
+        output_channel: Channel[Any],  # pyright: ignore[reportExplicitAny]
+    ) -> JobEntry:
         """
         Register a job with the given name.
 
         Raises:
-            DuplicateJobError: If a job with the same name or hash already exists.
+            DuplicateJobError: If a job with the same id already exists.
         """
+        job_id = self._name_as_id(job)
+
+        if job_id in self:
+            raise DuplicateJobError(f"A job with id '{job_id}' already exists")
+
         job_hash = local_source_dependency_hash(job).hash_str
+        entry = JobEntry(
+            id=job_id,
+            hash=JobHash(job_hash),
+            job_fn=job,
+            input_channel=input_channel,
+            output_channel=output_channel,
+        )
 
-        if JobHash(job_hash) in self:
-            raise DuplicateJobError(f"A job with hash '{job_hash}' already exists")
+        self._jobs_by_id[job_id] = entry
 
-        # Register the job
-        job_id = id if id else self._name_as_id(job)
-        self._jobs_by_id[job_id] = job
-        self._jobs_by_hash[JobHash(job_hash)] = job
-        return JobHash(job_hash)
+        return entry
 
-    def entries(self) -> list[JobEntry]:
-        entries: list[JobEntry] = []
-        for id, func in self._jobs_by_id.items():
-            hash = None
-            for h, f in self._jobs_by_hash.items():
-                if f is func:
-                    hash = h
-                    break
-            if hash is not None:
-                entries.append(JobEntry(id, hash, func))
-        return entries
-
-    def __contains__(self, key: JobId | JobHash) -> bool:
-        """Check if a job exists by name or hash."""
-        return key in self._jobs_by_id or key in self._jobs_by_hash
+    def __contains__(self, key: JobId) -> bool:
+        return key in self._jobs_by_id
 
     def __len__(self) -> int:
         return len(self._jobs_by_id)
 
-    def __iter__(self) -> Iterator[FunctionType]:
+    def __iter__(self) -> Iterator[JobEntry]:
         return iter(self._jobs_by_id.values())
 
     @staticmethod

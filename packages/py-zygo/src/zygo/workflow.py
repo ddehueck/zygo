@@ -1,22 +1,53 @@
 from collections.abc import Callable
-from types import FunctionType
 from typing import (
+    TYPE_CHECKING,
+    Protocol,
     TypeVar,
+    cast,
     final,
     overload,
 )
 
+if TYPE_CHECKING:
+    from types import FunctionType
+
 from zygo._internal.meta.jobs import validate_job
 from zygo._internal.utils.hash import hash_to_str
 from zygo.channel import Channel
+from zygo.context import JobContext
 from zygo.jobs import JobRegistry
-from zygo.types import (
-    ChannelId,
-    JobId,
-    WorkflowId,
-)
+from zygo.types import WorkflowId
 
-F = TypeVar("F", bound=FunctionType)
+T_workflow_in = TypeVar("T_workflow_in")
+T_workflow_out = TypeVar("T_workflow_out")
+
+T_job_in = TypeVar("T_job_in")
+T_job_out = TypeVar("T_job_out")
+T_job_in_contra = TypeVar("T_job_in_contra", contravariant=True)
+T_job_out_co = TypeVar("T_job_out_co", covariant=True)
+
+
+class _JobWithContext(Protocol[T_job_in_contra, T_job_out_co]):
+    def __call__(
+        self,
+        value: T_job_in_contra,
+        *,
+        ctx: JobContext,
+    ) -> T_job_out_co: ...
+
+
+class _JobDecorator(Protocol[T_job_in, T_job_out]):
+    @overload
+    def __call__(
+        self,
+        fn: _JobWithContext[T_job_in, T_job_out | None],
+    ) -> _JobWithContext[T_job_in, T_job_out | None]: ...
+
+    @overload
+    def __call__(
+        self,
+        fn: Callable[[T_job_in], T_job_out | None],
+    ) -> Callable[[T_job_in], T_job_out | None]: ...
 
 
 @final
@@ -25,62 +56,65 @@ class Workflow:
     The Zygo Python API for defining and running workflows.
     """
 
-    def __init__(self, *, id: str) -> None:
+    def __init__(
+        self,
+        *,
+        id: str,
+        input: Channel[T_workflow_in],
+        output: Channel[T_workflow_out],
+    ) -> None:
         self.id = WorkflowId(id)
+        self.input_channel = input
+        self.output_channel = output
         self.jobs = JobRegistry()
-        self.channels: dict[ChannelId, Channel] = {}
-        self.input_channel: Channel | None = None
 
     @property
     def content_hash(self) -> str:
-        job_hashes = [bytes(j.hash, "utf-8") for j in self.jobs.entries()]
+        job_hashes = [bytes(entry.hash, "utf-8") for entry in self.jobs]
         return hash_to_str(job_hashes)
 
-    @overload
-    def job(self, func: F) -> F: ...
-
-    @overload
-    def job(self, func: None = None, *, id: str | None = None) -> Callable[[F], F]: ...
-
     def job(
-        self, func: F | None = None, *, id: str | None = None
-    ) -> F | Callable[[F], F]:
+        self,
+        *,
+        input: Channel[T_job_in],
+        output: Channel[T_job_out],
+    ) -> _JobDecorator[T_job_in, T_job_out]:
         """
         Decorator to register a job function with the workflow.
 
-        Can be used with or without parameters:
-        - @workflow.job
-        - @workflow.job()
-        - @workflow.job(id="my_job")
+        A job must have an input and output channel and a unique ID (derived from the function name).
+
+        The function's input type must match the type of the input channel.
+        The function's return type must be the output channel type or that type unioned with `None`.
+
+        Example:
+            @workflow.job(input=channel, output=channel)
+            def my_job(value: int, *, ctx: JobContext) -> int:
+                return value * 2
 
         Args:
-            func: The function to register (when used without parentheses)
-            env: Optional environment configuration for the job
+            input: The input channel for the job
+            output: The output channel for the job
         """
 
-        def decorator(f: F) -> F:
-            validate_job(f)
-            self.jobs.set(f, id=JobId(id) if id else None)
-            return f
+        def decorator(
+            fn: Callable[[T_job_in], T_job_out | None]
+            | _JobWithContext[T_job_in, T_job_out | None],
+        ) -> (
+            Callable[[T_job_in], T_job_out | None]
+            | _JobWithContext[T_job_in, T_job_out | None]
+        ):
+            job_fn = cast("FunctionType", fn)
+            validate_job(
+                job_fn,
+                input_channel_type=input.value_type,
+                output_channel_type=output.value_type,
+            )
+            self.jobs.set(
+                job=job_fn,
+                input_channel=input,
+                output_channel=output,
+            )
+            return job_fn
 
-        if func is None:
-            return decorator
-
-        return decorator(func)
-
-    def channel(self, *, id: str, is_input: bool = False) -> Channel:
-        """Create a channel and register it with the workflow."""
-        channel_id = ChannelId(id)
-        if channel_id in self.channels:
-            raise ValueError(f"Channel {id} already exists")
-
-        channel = Channel(id=channel_id)
-
-        self.channels[channel_id] = channel
-
-        if is_input:
-            if self.input_channel is not None:
-                raise ValueError("Input channel already exists")
-            self.input_channel = channel
-
-        return channel
+        return cast("_JobDecorator[T_job_in, T_job_out]", decorator)

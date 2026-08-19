@@ -1,5 +1,5 @@
 # pyright: reportAny=false, reportExplicitAny=false
-# ruff: noqa: ANN401
+# ruff: file-ignore[any-type]
 
 import importlib
 from types import ModuleType

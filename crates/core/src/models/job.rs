@@ -3,7 +3,7 @@ use uuid::Uuid;
 
 use crate::models::JobEntrypoint;
 
-use super::ids::{ContentHash, JobId};
+use super::ids::{ChannelId, ContentHash, JobId};
 
 /// Namespace for generating deterministic job run IDs.
 /// The same job definition and data reference always yield the same job run ID.
@@ -12,6 +12,8 @@ const JOB_RUN_NAMESPACE: Uuid = Uuid::from_u128(0x6ba7_b811_9dad_11d1_80b4_00c0_
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Job {
     pub id: JobId,
+    pub input_channel_id: ChannelId,
+    pub output_channel_id: ChannelId,
     pub content_hash: ContentHash,
     pub entrypoint: JobEntrypoint,
 }

@@ -10,8 +10,6 @@ use serde::{Deserialize, Serialize};
 // TODO: How to best serialize a python module CLI interface?
 pub const STDOUT_IPC_PREFIX: &str = "ZYGO_IPC=";
 pub const ZYGO_PKG_INTERNAL_CLI_MODULE: &str = "zygo._internal.ipc.v0"; // TODO: Better name? Maybe CLI target?
-pub const RUN_CMD: &str = "run";
-pub const METADATA_CMD: &str = "metadata";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

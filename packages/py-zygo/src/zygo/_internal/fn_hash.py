@@ -5,7 +5,7 @@ import contextlib
 from dataclasses import dataclass
 import inspect
 from pathlib import Path
-import pickle  # noqa: S403
+import pickle  # ruff: ignore[suspicious-pickle-import]
 import sys
 import textwrap
 from types import FunctionType, ModuleType
@@ -23,7 +23,7 @@ class DepGraphResult:
 def _norm(p: Path) -> Path:
     try:
         return p.resolve()
-    except Exception:  # noqa: BLE001
+    except Exception:  # ruff: ignore[blind-except]
         return Path(str(p)).absolute()
 
 
@@ -56,7 +56,7 @@ def _is_under(path: Path, root: Path) -> bool:
     try:
         path.relative_to(root)
         return True
-    except Exception:  # noqa: BLE001
+    except Exception:  # ruff: ignore[blind-except]
         return False
 
 
@@ -174,7 +174,7 @@ def _hash_value(value: object) -> bytes | None:
         # Pickle should be stable for these simple types
         pickled = pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL)
         return hash_bytes(pickled)
-    except Exception:  # noqa: BLE001
+    except Exception:  # ruff: ignore[blind-except]
         return None
 
 
@@ -307,7 +307,7 @@ class _DepCollector:
 
         try:
             func_ast = _get_function_ast(obj)
-        except Exception:  # noqa: BLE001
+        except Exception:  # ruff: ignore[blind-except]
             return
 
         for name in sorted(_extract_used_names(func_ast)):

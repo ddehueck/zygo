@@ -1,7 +1,7 @@
 [project]
-name = "py-zygo"  # TODO: Try to get zygo on pypi
+name = "py-zygo"
 version = "0.1.0"
-description = "A modern workflow manager for scientific development tasks"
+description = "Modern workflows for data heavy transformation and analysis"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -67,10 +67,10 @@ select = [
 ]
 
 ignore = [
-    "E501",    # Line too long (formatter handles this)
-    "S603",    # subprocess without shell=True (too strict)
-    "S607",    # Starting a process with a partial path (too strict)
-    "PLC2701", # We intentionally import the _internal package for internal use only
+    "line-too-long",    # Line too long (formatter handles this)
+    "subprocess-without-shell-equals-true",    # subprocess without shell=True (too strict)
+    "start-process-with-partial-path",    # Starting a process with a partial path (too strict)
+    "import-private-name", # We intentionally import the _internal package for internal use only
 ]
 
 [tool.ruff.lint.flake8-bugbear]
@@ -86,11 +86,11 @@ max-nested-blocks = 3  # Maximum nested block depth (PLR1702)
 # Per-file ignores
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = [
-    "F401",    # Allow unused imports in __init__.py
+    "unused-import",    # Allow unused imports in __init__.py
 ]
 "tests/**/*.py" = [
-    "S101",    # Allow assert in tests
-    "PLR2004", # Allow magic values in tests
+    "assert",    # Allow assert in tests
+    "magic-value-comparison", # Allow magic values in tests
     "ANN",     # Don't require annotations in tests
     "FBT",     # Allow boolean args in tests
 ]

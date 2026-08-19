@@ -5,9 +5,9 @@
 
 use crate::models::{
     CacheJobEventSourceCommand, CacheJobRunResultCommand, ChannelItemInsertedData, Command,
-    DataReference, EdgeKind, Event, EventKind, JobFailedData, JobId, JobRunId, JobRunSource,
-    JobRunStatus, JobStartedData, JobSucceededData, ReplayJobCommand, RunJobCommand,
-    SetJobRunStatusCommand, Source, job_run_id,
+    DataReference, Event, EventKind, JobFailedData, JobId, JobRunId, JobRunSource, JobRunStatus,
+    JobStartedData, JobSucceededData, ReplayJobCommand, RunJobCommand, SetJobRunStatusCommand,
+    Source, job_run_id,
 };
 use crate::store::{StorageProvider, StoreKey};
 
@@ -83,18 +83,14 @@ impl Arbiter {
     ) -> Result<Vec<Command>, anyhow::Error> {
         // Find all jobs that have the given channel as an input.
         // Request each job to be run.
-        let job_ids = context
+        let jobs = context
             .schema
-            .edges
-            .iter()
-            .filter(|edge| edge.channel_id == data.channel_id && edge.kind == EdgeKind::Input)
-            .map(|edge| edge.job_id.clone())
-            .collect::<Vec<_>>();
+            .get_jobs_by_input_channel_id(&data.channel_id);
 
         let mut commands = Vec::new();
-        for job_id in job_ids {
+        for job in jobs {
             let command = self
-                .resolve_job_request(&job_id, &data.data_reference, context)
+                .resolve_job_request(&job.id, &data.data_reference, context)
                 .await?;
             commands.push(command);
         }

@@ -1,31 +1,21 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::{Channel, ChannelId, ContentHash, Edge, EdgeKind, Job, JobEntrypoint, JobId};
+use crate::models::{ChannelId, ContentHash, Job, JobEntrypoint, JobId};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkflowSchema {
     pub content_hash: ContentHash,
     pub input_channel_id: ChannelId,
+    pub output_channel_id: ChannelId,
     pub jobs: Vec<Job>,
-    pub channels: Vec<Channel>,
-    pub edges: Vec<Edge>,
 }
 
 impl WorkflowSchema {
     pub fn get_jobs_by_input_channel_id(&self, channel_id: &ChannelId) -> Vec<Job> {
-        self.edges
+        self.jobs
             .iter()
-            .filter(|edge| edge.kind == EdgeKind::Input && edge.channel_id == *channel_id)
-            .filter_map(|edge| self.jobs.iter().find(|job| job.id == edge.job_id))
+            .filter(|job| &job.input_channel_id == channel_id)
             .cloned()
-            .collect()
-    }
-
-    pub fn get_channels_for_job(&self, job_id: &JobId) -> Vec<&Channel> {
-        self.edges
-            .iter()
-            .filter(|edge| &edge.job_id == job_id)
-            .filter_map(|edge| self.channels.iter().find(|c| c.id == edge.channel_id))
             .collect()
     }
 

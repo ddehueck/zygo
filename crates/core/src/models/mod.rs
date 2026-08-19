@@ -1,7 +1,6 @@
 pub mod channel;
 pub mod commands;
 pub mod data_reference;
-pub mod edge;
 pub mod event;
 pub mod ids;
 pub mod job;
@@ -55,7 +54,6 @@ pub use commands::{
     SetJobRunStatusCommand,
 };
 pub use data_reference::DataReference;
-pub use edge::{Edge, EdgeKind};
 pub use event::{
     ChannelItemInsertedData, DataReferenceInsertedData, Event, EventKind, JobFailedData,
     JobRunSource, JobStartedData, JobSucceededData, Source,
