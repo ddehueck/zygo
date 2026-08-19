@@ -1,67 +1,40 @@
 import random
 import time
-from typing import Annotated
 
-from zygo import (
-    Depends,
-    Input,
-    Output,
-    Publisher,
-    Reference,
-    Store,
-    Workflow,
-)
+from zygo import Channel, Workflow
+from zygo.codecs import Integer, String
 
-workflow = Workflow(id="my_workflow")
+raw = Channel(id="raw", codec=Integer())
+squared = Channel(id="squared", codec=Integer())
+output = Channel(id="output", codec=String())
 
-raw_values = workflow.channel(id="raw_values", is_input=True)
-squared_values = workflow.channel(id="squared_values")
-
-workflow.job()
+workflow = Workflow(id="my_workflow", input=raw, output=output)
 
 
-@workflow.job
-def square_values(
-    input: Annotated[Reference, Input(raw_values)],
-    publisher: Annotated[Publisher, Output(squared_values)],
-    store: Annotated[Store, Depends(Store)],
-) -> None:
-    received = store.get(input)
-    received = int(received)
-    print(f"[reads_to_qc_reports] GOING TO SQUARE: {received}")  # noqa: T201
-
-    squared: int = received * received
+@workflow.job(input=raw, output=squared)
+def square_values(input: int) -> int:
+    print(f"[reads_to_qc_reports] GOING TO SQUARE: {input}")  # noqa: T201
 
     rand_wait = random.randint(1, 15)
     for i in range(rand_wait):
         print(f"[square_values] Waiting: {i + 1}/{rand_wait}")  # noqa: T201
         time.sleep(1)
 
-
-    publisher.publish(
-        store.put(
-            key="squared.txt",
-            data=squared.to_bytes(8, byteorder="big"),
-            scope="job",
-            content_type="text/plain",
-        )
-    )
-    print("Squared value published")  # noqa: T201
+    return input * input
 
 
-@workflow.job
-def squared_values_to_final(
-    squared_values: Annotated[Reference, Input(squared_values)],
-    store: Annotated[Store, Depends(Store)],
-) -> None:
-    print(f"[squared_values_to_final] Received: data!")  # noqa: T201
-    received = store.get(squared_values)
-    received = int.from_bytes(received)
+@workflow.job(input=squared, output=output)
+def last_step(squared_value: int) -> str | None:
+    print(f"[last_step] Received: {squared_value}")  # noqa: T201
 
     rand_wait = random.randint(1, 15)
     for i in range(rand_wait):
-        print(f"[square_values] Que Tal Waiting: {i + 1}/{rand_wait}")  # noqa: T201
-        time.sleep( 1)
+        print(f"[last_step] Waiting: {i + 1}/{rand_wait}")  # noqa: T201
+        time.sleep(1)
 
+    if rand_wait % 2 == 0:
+        print(f"[last_step] Even wait received: {squared_value}. Skipping...")  # noqa: T201
+        return None
 
-    print(f"[squared_values_to_final] Squared received: {received}")  # noqa: T201
+    print(f"[last_step] Squared received: {squared_value}")  # noqa: T201
+    return f"result={squared_value}"

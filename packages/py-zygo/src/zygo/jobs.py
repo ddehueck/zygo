@@ -35,7 +35,7 @@ class JobRegistry:
             return None
         return self._jobs_by_hash[hash]
 
-    def set(self, job: FunctionType, id: JobId | None = None) -> JobHash:
+    def set(self, job: FunctionType) -> JobHash:
         """
         Register a job with the given name.
 
@@ -48,7 +48,7 @@ class JobRegistry:
             raise DuplicateJobError(f"A job with hash '{job_hash}' already exists")
 
         # Register the job
-        job_id = id if id else self._name_as_id(job)
+        job_id = self._name_as_id(job)
         self._jobs_by_id[job_id] = job
         self._jobs_by_hash[JobHash(job_hash)] = job
         return JobHash(job_hash)
