@@ -12,49 +12,31 @@ Zygo consists of three components:
 ## Example
 
 ```python
-from zygo import Workflow, Store, Channel, From, To
-
-workflow = Workflow(name="my_workflow")
-
-reads       = workflow.channel(name="reads")
-qc_reports  = workflow.channel(name="qc_reports")
-final_files = workflow.channel(name="final")
+from my_src import QcReport, QcReportCodec
+from zygo import Channel, Workflow
+from zygo.codecs import Bytes, String
+from zygo.context import JobContext
 
 
-@workflow.job
-def reads_to_qc_reports(
-	reads_ref: Annotated[Reference, Input(reads)]
-  	qc_report_publisher: Annotated[Publisher, Output(qc_reports)],
-  	store: Annotated[Store, Depends(Store)],
-):
-	reads = store.get(reads_ref)
-	qc_reports = do_qc(reads)
-	qc_report_publisher.publish(qc_reports)
-	
-@workflow.job
-def qc_reports_to_final(
-	qc_reports_ref: Annotated[Reference, Input(qc_reports)],
-	final_files_publisher: Annotated[Publisher, Output(final_files)],
-	store: Annotated[Store, Depends(Store)],
-):
-	qc_reports = store.get(qc_reports_ref)
-	final_files = do_something(qc_reports)
-	final_files_publisher.publish(result)
+reads = Channel(id="reads", codec=Bytes)
+qc_reports = Channel(id="qc_reports", codec=QcReportCodec)
+final_files = Channel(id="final_files", codec=String)
 
-@workflow.job
-def final(
-	final_file_ref: Annotated[Reference, Input(final_files)],
-	store: Annotated[Store, Depends(Store)],
-):
-	print(f"Final file: {store.get(final_file_ref)}")
+workflow = Workflow(
+    id="my_workflow",
+    input=reads,
+    output=final_files,
+)
 
-if __name__ == "__main__":
-  workflow.run(
-		channel=reads,
-		uri="file://data.csv",
-		backend=LocalBackend(store_uri="./my_data"),
-	)
 
+@workflow.job(input=reads, output=qc_reports)
+def reads_to_qc_reports(reads_value: bytes, *, ctx: JobContext) -> QcReport:
+    return do_qc(reads_value)
+
+
+@workflow.job(input=qc_reports, output=final_files)
+def qc_reports_to_final(qc_report: QcReport) -> str:
+    return do_something(qc_report)
 ```
 
 Zygo allows for workflow composition by default. Intermediate channels can be used to create new workflows by branching off of existing ones.
@@ -63,13 +45,13 @@ Zygo allows for workflow composition by default. Intermediate channels can be us
 ___
 
 - **Jobs** are the fundamental building blocks of a workflow. They are functions that are executed by the workflow engine.
-- **Channels** are the pipes that connect jobs. They are used to pass data references between jobs.
+- **Channels** are typed connections between jobs. Each channel codec encodes values for storage and decodes them before job execution.
 - **Workflows** are the composition of jobs and channels into a useful application.
-- **The Store** is the key-value interface where data is accessed and published.
+- **The Store** is a key-value interface available through `JobContext` for job-specific artifacts and data.
 - **The Backend** says where the workflow should run and where the data should live.
 
 ### Jobs
 ___
-Jobs are functions that are executed by the workflow engine. They are decorated with the `@workflow.job` decorator. They can listen to only one channel but publish to many channels.
+Jobs are unary functions executed by the workflow engine. Each job consumes one decoded value from its input channel and returns a value for its output channel. Jobs may optionally declare a keyword-only `ctx: JobContext` parameter.
 
 They are considered pure functions meaning that given the same input, the output will be the same. This allows Zygo to easily cache results and re-use them while other parts of the workflow are being developed. If this is not possible for your use case, you set cache=False on the job decorator.
