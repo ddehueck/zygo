@@ -22,7 +22,7 @@ workflow.job()
 
 @workflow.job
 def square_values(
-    input: Input(raw_values),
+    input: Annotated[Reference, Input(raw_values)],
     publisher: Annotated[Publisher, Output(squared_values)],
     store: Annotated[Store, Depends(Store)],
 ) -> None:

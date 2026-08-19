@@ -57,6 +57,8 @@ if __name__ == "__main__":
 
 ```
 
+Zygo allows for workflow composition by default. Intermediate channels can be used to create new workflows by branching off of existing ones.
+
 ### Core Concepts
 ___
 
@@ -71,4 +73,3 @@ ___
 Jobs are functions that are executed by the workflow engine. They are decorated with the `@workflow.job` decorator. They can listen to only one channel but publish to many channels.
 
 They are considered pure functions meaning that given the same input, the output will be the same. This allows Zygo to easily cache results and re-use them while other parts of the workflow are being developed. If this is not possible for your use case, you set cache=False on the job decorator.
-
