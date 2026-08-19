@@ -20,8 +20,8 @@ def build_workflow_metadata(workflow: Workflow) -> WorkflowMetadata:
             JobMetadata(
                 id=job.id,
                 content_hash=job.hash,
-                input_channel_id=job.input_channel_id,
-                output_channel_id=job.output_channel_id,
+                input_channel_id=job.input_channel.id,
+                output_channel_id=job.output_channel.id,
             )
             for job in workflow.jobs
         ],

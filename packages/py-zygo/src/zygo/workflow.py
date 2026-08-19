@@ -112,8 +112,8 @@ class Workflow:
             )
             self.jobs.set(
                 job=job_fn,
-                input_channel_id=input.id,
-                output_channel_id=output.id,
+                input_channel=input,
+                output_channel=output,
             )
             return job_fn
 

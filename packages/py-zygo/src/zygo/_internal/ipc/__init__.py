@@ -22,3 +22,7 @@ python -m zygo._internal.ipc.v0 run examples.main:workflow \
   --args '{...}'
 `
 """
+
+from zygo._internal.ipc.importer import load_workflow
+
+__all__ = ["load_workflow"]

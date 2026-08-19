@@ -19,14 +19,6 @@ impl WorkflowSchema {
             .collect()
     }
 
-    pub fn get_channels_for_job(&self, job_id: &JobId) -> Vec<&ChannelId> {
-        self.jobs
-            .iter()
-            .find(|job| &job.id == job_id)
-            .map(|job| vec![&job.input_channel_id, &job.output_channel_id])
-            .unwrap_or_default()
-    }
-
     pub fn get_job_by_id(&self, job_id: &JobId) -> Option<&Job> {
         self.jobs.iter().find(|j| &j.id == job_id)
     }

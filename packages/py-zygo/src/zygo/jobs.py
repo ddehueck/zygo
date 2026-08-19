@@ -1,9 +1,11 @@
 from collections.abc import Iterator
 from dataclasses import dataclass
 from types import FunctionType
+from typing import Any
 
 from zygo._internal.fn_hash import local_source_dependency_hash
-from zygo.types import ChannelId, JobHash, JobId
+from zygo.channel import Channel
+from zygo.types import JobHash, JobId
 
 
 @dataclass(frozen=True)
@@ -11,8 +13,8 @@ class JobEntry:
     id: JobId
     hash: JobHash
     job_fn: FunctionType
-    input_channel_id: ChannelId
-    output_channel_id: ChannelId
+    input_channel: Channel[Any]  # pyright: ignore[reportExplicitAny]
+    output_channel: Channel[Any]  # pyright: ignore[reportExplicitAny]
 
 
 class DuplicateJobError(Exception):
@@ -35,8 +37,8 @@ class JobRegistry:
         self,
         *,
         job: FunctionType,
-        input_channel_id: ChannelId,
-        output_channel_id: ChannelId,
+        input_channel: Channel[Any],  # pyright: ignore[reportExplicitAny]
+        output_channel: Channel[Any],  # pyright: ignore[reportExplicitAny]
     ) -> JobEntry:
         """
         Register a job with the given name.
@@ -54,8 +56,8 @@ class JobRegistry:
             id=job_id,
             hash=JobHash(job_hash),
             job_fn=job,
-            input_channel_id=input_channel_id,
-            output_channel_id=output_channel_id,
+            input_channel=input_channel,
+            output_channel=output_channel,
         )
 
         self._jobs_by_id[job_id] = entry
