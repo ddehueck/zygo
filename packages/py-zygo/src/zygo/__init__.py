@@ -4,10 +4,10 @@ from zygo.store import Reference
 from zygo.workflow import Workflow
 
 __all__ = [
+    "Channel",
     "Depends",
     "Publisher",
     "Reference",
     "Store",
     "Workflow",
-    "Channel",
 ]

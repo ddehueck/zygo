@@ -17,6 +17,17 @@ JobHash = NewType("JobHash", str)
 
 
 @dataclass(frozen=True)
+class RunJobArgs:
+    """Arguments injected by the orchestrator when running a job."""
+
+    run_id: WorkflowRunId
+    job_id: JobId
+    data_reference_uri: str
+    data_reference_etag: str
+    job_run_id: str
+
+
+@dataclass(frozen=True)
 class JobRunContext:
     """Context for a running workflow job."""
 

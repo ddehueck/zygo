@@ -32,8 +32,8 @@ def run(
     )
 
     try:
-        job_func = workflow.jobs.get_by_id(JobId(args.job_id))
-        if job_func is None:
+        job_entry = workflow.jobs.get_by_id(JobId(args.job_id))
+        if job_entry is None:
             raise ValueError(f"Could not find job {args.job_id}")
 
         container = RunContainer(
@@ -43,7 +43,7 @@ def run(
                 root_uri=FsspecUri(uri="file://./todoreplaceme")
             ),
         )
-        callable_w_deps = build_injected_call(job_func, container=container)
+        callable_w_deps = build_injected_call(job_entry.job_fn, container=container)
         callable_w_deps()
     except Exception as e:
         raise RuntimeError(f"Failed to run job {args.job_id}: {e}") from e

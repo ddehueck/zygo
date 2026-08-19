@@ -70,7 +70,7 @@ class Workflow:
 
     @property
     def content_hash(self) -> str:
-        job_hashes = [bytes(j.hash, "utf-8") for j in self.jobs.entries()]
+        job_hashes = [bytes(entry.hash, "utf-8") for entry in self.jobs]
         return hash_to_str(job_hashes)
 
     def job(
@@ -107,10 +107,14 @@ class Workflow:
             job_fn = cast("FunctionType", fn)
             validate_job(
                 job_fn,
-                input_type=input.value_type,
-                output_type=output.value_type,
+                input_channel_type=input.value_type,
+                output_channel_type=output.value_type,
             )
-            self.jobs.set(job_fn)
+            self.jobs.set(
+                job=job_fn,
+                input_channel_id=input.id,
+                output_channel_id=output.id,
+            )
             return job_fn
 
         return cast("_JobDecorator[T_job_in, T_job_out]", decorator)

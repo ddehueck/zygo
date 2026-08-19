@@ -68,13 +68,13 @@ class OutputMarker:
 Dependendable = DependsMarker | InputMarker | OutputMarker
 
 
-def Depends(dependency: DependencyToken) -> DependsMarker:  # noqa: N802
+def Depends(dependency: DependencyToken) -> DependsMarker:  # ruff: ignore[invalid-function-name]
     return DependsMarker(dependency)
 
 
-def Input(channel: Channel) -> InputMarker:  # noqa: N802
+def Input(channel: Channel) -> InputMarker:  # ruff: ignore[invalid-function-name]
     return InputMarker(channel)
 
 
-def Output(channel: Channel) -> OutputMarker:  # noqa: N802
+def Output(channel: Channel) -> OutputMarker:  # ruff: ignore[invalid-function-name]
     return OutputMarker(channel)

@@ -13,11 +13,11 @@ workflow = Workflow(id="my_workflow", input=raw, output=output)
 
 @workflow.job(input=raw, output=squared)
 def square_values(input: int) -> int:
-    print(f"[reads_to_qc_reports] GOING TO SQUARE: {input}")  # noqa: T201
+    print(f"[reads_to_qc_reports] GOING TO SQUARE: {input}")  # ruff: ignore[print]
 
     rand_wait = random.randint(1, 15)
     for i in range(rand_wait):
-        print(f"[square_values] Waiting: {i + 1}/{rand_wait}")  # noqa: T201
+        print(f"[square_values] Waiting: {i + 1}/{rand_wait}")  # ruff: ignore[print]
         time.sleep(1)
 
     return input * input
@@ -25,16 +25,16 @@ def square_values(input: int) -> int:
 
 @workflow.job(input=squared, output=output)
 def last_step(squared_value: int) -> str | None:
-    print(f"[last_step] Received: {squared_value}")  # noqa: T201
+    print(f"[last_step] Received: {squared_value}")  # ruff: ignore[print]
 
     rand_wait = random.randint(1, 15)
     for i in range(rand_wait):
-        print(f"[last_step] Waiting: {i + 1}/{rand_wait}")  # noqa: T201
+        print(f"[last_step] Waiting: {i + 1}/{rand_wait}")  # ruff: ignore[print]
         time.sleep(1)
 
     if rand_wait % 2 == 0:
-        print(f"[last_step] Even wait received: {squared_value}. Skipping...")  # noqa: T201
+        print(f"[last_step] Even wait received: {squared_value}. Skipping...")  # ruff: ignore[print]
         return None
 
-    print(f"[last_step] Squared received: {squared_value}")  # noqa: T201
+    print(f"[last_step] Squared received: {squared_value}")  # ruff: ignore[print]
     return f"result={squared_value}"

@@ -72,7 +72,7 @@ def test_closure_same_value_same_hash() -> None:
 
 def test_global_value_affects_hash() -> None:
     """Global values referenced by the function are included in the hash."""
-    MULTIPLIER = 5  # noqa: N806
+    MULTIPLIER = 5  # ruff: ignore[non-lowercase-variable-in-function]
 
     def compute(x: int) -> int:
         return x * MULTIPLIER
