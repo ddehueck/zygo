@@ -65,8 +65,6 @@ pub struct RunCommandArgs {
 pub struct DataReference {
     pub uri: String,
     pub etag: String,
-    pub content_type: Option<String>,
-    pub size_bytes: Option<u64>,
 }
 
 #[derive(Deserialize)]

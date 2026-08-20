@@ -46,8 +46,6 @@ impl Generate for EventGenerator {
                 DataReference {
                     uri: format!("dst://input/{index}"),
                     etag: format!("dst-etag-{etag_nonce:016x}"),
-                    content_type: Some("application/octet-stream".to_owned()),
-                    size_bytes: Some(rng.random_range(0..=4096u64)),
                 }
             })
             .collect()

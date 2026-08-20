@@ -231,8 +231,6 @@ pub async fn run_workflow(
     let data_ref = DataReference {
         uri: fsspec_uri.to_string(),
         etag: EventId::new().to_string(),
-        content_type: None,
-        size_bytes: None,
     };
 
     let tags = [("workflow", metadata.id.as_str())];

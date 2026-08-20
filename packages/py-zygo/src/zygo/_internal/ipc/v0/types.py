@@ -24,8 +24,6 @@ class DataReference:
 
     uri: str
     etag: str
-    content_type: str | None = None
-    size_bytes: int | None = None
 
     @classmethod
     def from_reference(cls, reference: Reference) -> DataReference:
@@ -33,8 +31,6 @@ class DataReference:
         return cls(
             uri=str(reference.uri),
             etag=reference.etag,
-            content_type=reference.content_type,
-            size_bytes=reference.size,
         )
 
 

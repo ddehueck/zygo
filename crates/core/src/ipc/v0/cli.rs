@@ -77,8 +77,6 @@ impl From<DataReference> for models::DataReference {
         Self {
             uri: data_reference.uri,
             etag: data_reference.etag,
-            content_type: data_reference.content_type,
-            size_bytes: data_reference.size_bytes,
         }
     }
 }
