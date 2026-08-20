@@ -23,18 +23,14 @@ class DataReference:
     """The data-reference shape consumed by the Rust IPC parser."""
 
     uri: str
-    etag: str
-    content_type: str | None = None
-    size_bytes: int | None = None
+    version: str
 
     @classmethod
     def from_reference(cls, reference: Reference) -> DataReference:
         """Convert a store reference to the cross-language IPC representation."""
         return cls(
             uri=str(reference.uri),
-            etag=reference.etag,
-            content_type=reference.content_type,
-            size_bytes=reference.size,
+            version=reference.etag,
         )
 
 
@@ -55,7 +51,15 @@ class ChannelItemInserted:
     data_reference: DataReference
 
 
-type StdoutIPCMessage = DataReferenceCreated | ChannelItemInserted
+@dataclass(frozen=True)
+class TagInserted:
+    type: Literal["tag_inserted"] = field(default="tag_inserted", init=False)
+    name: str
+    value: str
+    data_reference: DataReference | None = None
+
+
+type StdoutIPCMessage = DataReferenceCreated | ChannelItemInserted | TagInserted
 
 
 def _serialize_stdout_ipc_message(message: StdoutIPCMessage) -> str:
@@ -102,6 +106,6 @@ class WorkflowMetadata:
 class JobRunArgs:
     job_id: str
     data_reference_uri: str
-    data_reference_etag: str
+    data_reference_version: str
     workflow_run_id: str
     job_run_id: str

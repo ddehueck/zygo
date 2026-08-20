@@ -70,7 +70,9 @@ impl WorkflowRunSummary {
                 "failed",
                 timestamp,
             ),
-            EventKind::DataReferenceInserted(_) | EventKind::ChannelItemInserted(_) => {}
+            EventKind::DataReferenceInserted(_)
+            | EventKind::ChannelItemInserted(_)
+            | EventKind::TagInserted(_) => {}
         }
     }
 

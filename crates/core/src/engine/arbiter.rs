@@ -66,6 +66,7 @@ impl Arbiter {
             EventKind::JobSucceeded(data) => self.handle_job_succeeded(data),
             EventKind::JobFailed(data) => self.handle_job_failed(data),
             EventKind::DataReferenceInserted(_) => self.noop(),
+            EventKind::TagInserted(_) => self.noop(),
             EventKind::ChannelItemInserted(data) => {
                 self.handle_channel_item_inserted(data, context).await
             }
@@ -111,8 +112,11 @@ impl Arbiter {
             anyhow::anyhow!("job {job_id} referenced by an edge is not present in the run schema")
         })?;
 
-        let job_run_id =
-            JobRunId::try_from(job_run_id(job, &data_reference.uri, &data_reference.etag))?;
+        let job_run_id = JobRunId::try_from(job_run_id(
+            job,
+            &data_reference.uri,
+            &data_reference.version,
+        ))?;
 
         if let Some(cache_item) = context.get_item(&job_run_id).await? {
             return Ok(Command::ReplayJob(ReplayJobCommand {

@@ -1,10 +1,10 @@
 use anyhow::{Result, bail};
-use local::LocalZygoService;
+use local::ZygoLocalService;
 use zygo_core::ZygoConfig;
 
 pub async fn list_workflow_runs(filter: Option<&str>) -> Result<()> {
     let filter = filter.map(parse_filter).transpose()?;
-    let service = LocalZygoService::new(ZygoConfig::new(1)).await?;
+    let service = ZygoLocalService::new(ZygoConfig::new(1)).await?;
 
     for workflow_run in service.list_workflow_runs(filter).await? {
         println!("{}", workflow_run.id);

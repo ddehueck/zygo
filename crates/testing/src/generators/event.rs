@@ -1,9 +1,9 @@
 //! Generation of external stimuli: the [`DataReference`]s that get fed into a
 //! run's source channel to kick it off.
 //!
-//! Varying the number of inputs and their etags explores different fan-in and
+//! Varying the number of inputs and their versions explores different fan-in and
 //! idempotency paths (the job-run id is derived from the data reference's
-//! uri + etag, so distinct etags produce distinct job runs).
+//! uri + version, so distinct versions produce distinct job runs).
 
 use rand::RngExt;
 use rand_chacha::ChaCha8Rng;
@@ -40,14 +40,12 @@ impl Generate for EventGenerator {
 
         (0..count)
             .map(|index| {
-                // A random etag per input keeps the derived job-run ids distinct
+                // A random version per input keeps the derived job-run ids distinct
                 // while remaining reproducible from the seed.
-                let etag_nonce = rng.random::<u64>();
+                let version_nonce = rng.random::<u64>();
                 DataReference {
                     uri: format!("dst://input/{index}"),
-                    etag: format!("dst-etag-{etag_nonce:016x}"),
-                    content_type: Some("application/octet-stream".to_owned()),
-                    size_bytes: Some(rng.random_range(0..=4096u64)),
+                    version: format!("dst-version-{version_nonce:016x}"),
                 }
             })
             .collect()

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import override
 
+from zygo._internal.ipc.v0.types import TagInserted, write_stdout_ipc_message
 from zygo.context import JobContext, TagsProtocol
 from zygo.store._internal.impl import StoreImpl
 
@@ -13,12 +14,7 @@ class JobContextImpl(JobContext):
         self.tags = TagsImpl()
 
 
-# NB: This is just a dummy implementation of TagsProtocol for testing purposes.
 class TagsImpl(TagsProtocol):
-    def __init__(self) -> None:
-        super().__init__()
-        self._tags: dict[str, str] = {}
-
     @override
     def add(self, name: str, value: str) -> None:
-        raise NotImplementedError
+        write_stdout_ipc_message(TagInserted(name=name, value=value))

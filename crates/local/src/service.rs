@@ -11,7 +11,7 @@ use zygo_core::{
 };
 
 use crate::{
-    database_path,
+    LocalStreamProcessor, database_path,
     db::{KvRepository, WorkflowRun, WorkflowRunRepository, migrate},
 };
 
@@ -34,12 +34,12 @@ impl StorageProvider for KvRepository {
     }
 }
 
-pub struct LocalZygoService {
+pub struct ZygoLocalService {
     pub base: Zygo<KvRepository>,
     workflow_run_repository: WorkflowRunRepository,
 }
 
-impl LocalZygoService {
+impl ZygoLocalService {
     pub async fn new(config: ZygoConfig) -> Result<Self> {
         let path = database_path()?.to_string_lossy().into_owned();
         let database = Builder::new_local(&path).build().await?;
@@ -68,6 +68,8 @@ impl LocalZygoService {
         let run_id = self.base.run(input, schema).await?;
         let id = run_id.to_string();
 
+        // todo: the workflow tag should be derived from the schema - otherwise all tags will be
+        // recoverable from the event stream/store except this one?
         self.workflow_run_repository
             .insert(&id, &content_hash, tags)
             .await?;
@@ -75,6 +77,15 @@ impl LocalZygoService {
         Ok(run_id)
     }
 
+    pub fn stream_processor(&self, run_id: &WorkflowRunId) -> LocalStreamProcessor {
+        LocalStreamProcessor::new(
+            self.base.stream(run_id),
+            self.workflow_run_repository.clone(),
+            run_id.clone(),
+        )
+    }
+
+    // todo: don't love that this is here. There's a repository/deps refactor brewing.
     pub async fn list_workflow_runs(
         &self,
         filter: Option<(&str, &str)>,

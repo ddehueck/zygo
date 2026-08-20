@@ -56,7 +56,7 @@ pub use commands::{
 pub use data_reference::DataReference;
 pub use event::{
     ChannelItemInsertedData, DataReferenceInsertedData, Event, EventKind, JobFailedData,
-    JobRunSource, JobStartedData, JobSucceededData, Source,
+    JobRunSource, JobStartedData, JobSucceededData, Source, TagInsertedData,
 };
 pub use ids::*;
 pub use job::{Job, job_run_id};

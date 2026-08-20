@@ -13,7 +13,7 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use local::LocalZygoService;
+use local::ZygoLocalService;
 use ratatui::{
     Terminal, TerminalOptions, Viewport, backend::CrosstermBackend, widgets::TableState,
 };
@@ -226,13 +226,11 @@ pub async fn run_workflow(
     // 4. Create a zygo service and start the workflow
     let num_workers = workers.unwrap_or(1); // TODO: Use CPU core count
     let config = ZygoConfig::new(num_workers);
-    let service = LocalZygoService::new(config).await?;
+    let service = ZygoLocalService::new(config).await?;
 
     let data_ref = DataReference {
         uri: fsspec_uri.to_string(),
-        etag: EventId::new().to_string(),
-        content_type: None,
-        size_bytes: None,
+        version: EventId::new().to_string(),
     };
 
     let tags = [("workflow", metadata.id.as_str())];
@@ -251,9 +249,9 @@ pub async fn run_workflow(
 
     // Clients read the workflow run state by subscribing to a watch channel
     // that notifies when the engine has made a meaningful update and then
-    // reading the stream directly.
+    // advancing the local stream processor.
     let mut rx = service.base.subscribe(&run_id).await?;
-    let stream = service.base.stream(&run_id);
+    let stream_processor = service.stream_processor(&run_id);
     let mut cursor = RunCursor::default();
 
     let mut summary = WorkflowRunSummary::new(metadata.id.clone());
@@ -303,7 +301,7 @@ pub async fn run_workflow(
                 let snapshot = rx.borrow_and_update().clone();
 
                 loop {
-                    let read = stream.next(cursor).await?;
+                    let read = stream_processor.process_next(cursor).await?;
                     cursor = read.next_cursor;
 
                     let Some(record) = read.record else {
