@@ -3,6 +3,7 @@ import time
 
 from zygo import Channel, Workflow
 from zygo.codecs import Integer, String
+from zygo.context import JobContext
 
 raw = Channel(id="raw", codec=Integer())
 squared = Channel(id="squared", codec=Integer())
@@ -12,10 +13,17 @@ workflow = Workflow(id="my_workflow", input=raw, output=output)
 
 
 @workflow.job(input=raw, output=squared)
-def square_values(input: int) -> int:
+def square_values(input: int, *, ctx: JobContext) -> int:
+    tags, store = ctx.tags, ctx.store
+
     print(f"[reads_to_qc_reports] GOING TO SQUARE: {input}")  # ruff: ignore[print]
 
     rand_wait = random.randint(1, 15)
+    if rand_wait % 2 == 0:
+        tags.add("even_wait", "even")
+    else:
+        tags.add("even_wait", "odd")
+
     for i in range(rand_wait):
         print(f"[square_values] Waiting: {i + 1}/{rand_wait}")  # ruff: ignore[print]
         time.sleep(1)

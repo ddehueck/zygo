@@ -31,6 +31,7 @@ class _JobWithContext(Protocol[T_job_in_contra, T_job_out_co]):
     def __call__(
         self,
         value: T_job_in_contra,
+        /,
         *,
         ctx: JobContext,
     ) -> T_job_out_co: ...
