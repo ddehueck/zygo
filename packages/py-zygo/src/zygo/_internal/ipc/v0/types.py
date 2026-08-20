@@ -23,14 +23,14 @@ class DataReference:
     """The data-reference shape consumed by the Rust IPC parser."""
 
     uri: str
-    etag: str
+    version: str
 
     @classmethod
     def from_reference(cls, reference: Reference) -> DataReference:
         """Convert a store reference to the cross-language IPC representation."""
         return cls(
             uri=str(reference.uri),
-            etag=reference.etag,
+            version=reference.etag,
         )
 
 
@@ -98,6 +98,6 @@ class WorkflowMetadata:
 class JobRunArgs:
     job_id: str
     data_reference_uri: str
-    data_reference_etag: str
+    data_reference_version: str
     workflow_run_id: str
     job_run_id: str

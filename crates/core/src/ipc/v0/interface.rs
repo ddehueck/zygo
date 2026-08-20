@@ -55,7 +55,7 @@ pub struct WorkflowMetadata {
 pub struct RunCommandArgs {
     pub job_id: String,
     pub data_reference_uri: String,
-    pub data_reference_etag: String,
+    pub data_reference_version: String,
     pub workflow_run_id: String,
     pub job_run_id: String,
 }
@@ -64,7 +64,7 @@ pub struct RunCommandArgs {
 #[serde(rename_all = "snake_case")]
 pub struct DataReference {
     pub uri: String,
-    pub etag: String,
+    pub version: String,
 }
 
 #[derive(Deserialize)]

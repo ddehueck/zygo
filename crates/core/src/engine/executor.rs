@@ -68,7 +68,7 @@ impl<S: StorageProvider> Executor<S> {
         let job_args = RunCommandArgs {
             job_id: command.job_id.to_string(),
             data_reference_uri: command.data_reference.uri.clone(),
-            data_reference_etag: command.data_reference.etag.clone(),
+            data_reference_version: command.data_reference.version.clone(),
             workflow_run_id: self.context.run_id.to_string(),
             job_run_id: command.job_run_id.to_string(),
         };

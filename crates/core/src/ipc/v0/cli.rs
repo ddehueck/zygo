@@ -76,7 +76,7 @@ impl From<DataReference> for models::DataReference {
     fn from(data_reference: DataReference) -> Self {
         Self {
             uri: data_reference.uri,
-            etag: data_reference.etag,
+            version: data_reference.version,
         }
     }
 }

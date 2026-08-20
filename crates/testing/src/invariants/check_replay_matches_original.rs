@@ -75,6 +75,7 @@ fn event_kind_name(kind: &EventKind) -> &'static str {
         EventKind::JobStarted(_) => "JobStarted",
         EventKind::JobSucceeded(_) => "JobSucceeded",
         EventKind::JobFailed(_) => "JobFailed",
+        EventKind::TagInserted(_) => "TagInserted",
     }
 }
 

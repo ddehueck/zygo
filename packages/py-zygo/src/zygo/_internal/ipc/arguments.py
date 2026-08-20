@@ -42,7 +42,7 @@ def _parse_run_job_args(*, job_args_raw: str, job_id: JobId) -> RunJobArgs:
         run_id=WorkflowRunId(_require_string_field(data, "run_id")),
         job_id=job_id,
         data_reference_uri=_require_string_field(data, "data_reference_uri"),
-        data_reference_etag=_require_string_field(data, "data_reference_etag"),
+        data_reference_version=_require_string_field(data, "data_reference_version"),
         job_run_id=_require_string_field(data, "job_run_id"),
     )
 

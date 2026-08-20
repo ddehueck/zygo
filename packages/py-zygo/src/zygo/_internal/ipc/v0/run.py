@@ -35,7 +35,7 @@ def run(
             key=args.data_reference_uri,
             scope="job",
             uri=FsspecUri(args.data_reference_uri),
-            etag=args.data_reference_etag,
+            etag=args.data_reference_version,
         ),
     )
 

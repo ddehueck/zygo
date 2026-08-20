@@ -66,7 +66,7 @@ impl WorkflowRunId {
         let name = format!(
             "{}\0{}\0{}",
             workflow_schema_content_hash.as_ref(),
-            data_reference.etag,
+            data_reference.version,
             data_reference.uri
         );
         Self::try_from(Uuid::new_v5(&WORKFLOW_RUN_NAMESPACE, name.as_bytes()).to_string())

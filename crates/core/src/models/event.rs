@@ -24,6 +24,7 @@ pub enum EventKind {
     JobStarted(JobStartedData),
     JobSucceeded(JobSucceededData),
     JobFailed(JobFailedData),
+    TagInserted(TagInsertedData),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -47,6 +48,13 @@ pub struct JobFailedData {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DataReferenceInsertedData {
     pub data_reference: DataReference,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TagInsertedData {
+    pub name: String,
+    pub value: String,
+    pub data_reference: Option<DataReference>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
