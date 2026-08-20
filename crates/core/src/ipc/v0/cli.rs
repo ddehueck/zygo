@@ -9,7 +9,9 @@ use crate::{
             ZYGO_PKG_INTERNAL_CLI_MODULE,
         },
     },
-    models::{self, ChannelItemInsertedData, DataReferenceInsertedData, EventKind},
+    models::{
+        self, ChannelItemInsertedData, DataReferenceInsertedData, EventKind, TagInsertedData,
+    },
 };
 
 /// This struct serves as the interface for interacting with the v0 python cli
@@ -98,6 +100,16 @@ impl TryFrom<StdoutIPCMessage> for EventKind {
                 // TODO: This should be just a from?
                 channel_id: models::ChannelId::try_from(channel_id)?,
                 data_reference: models::DataReference::from(data_reference),
+            }),
+            StdoutIPCMessage::TagInserted {
+                name,
+                value,
+                data_reference,
+            } => Self::TagInserted(TagInsertedData {
+                name,
+                value,
+                // todo: this conversion is funky
+                data_reference: data_reference.map(models::DataReference::from),
             }),
         })
     }

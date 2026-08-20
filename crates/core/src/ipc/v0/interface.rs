@@ -77,4 +77,9 @@ pub enum StdoutIPCMessage {
         channel_id: String,
         data_reference: DataReference,
     },
+    TagInserted {
+        name: String,
+        value: String,
+        data_reference: Option<DataReference>,
+    },
 }

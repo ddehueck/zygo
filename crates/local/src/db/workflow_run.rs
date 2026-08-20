@@ -31,6 +31,7 @@ const INSERT_TAG_ASSOCIATION_SQL: &str = "
         )
 ";
 
+#[derive(Clone)]
 pub struct WorkflowRunRepository {
     connection: Arc<Mutex<Connection>>,
 }
@@ -59,6 +60,24 @@ impl WorkflowRunRepository {
             tx.execute(INSERT_TAG_ASSOCIATION_SQL, [key, value, id])
                 .await?;
         }
+
+        tx.commit().await
+    }
+
+    pub async fn insert_tag(
+        &self,
+        workflow_run_id: &str,
+        key: &str,
+        value: &str,
+    ) -> turso::Result<()> {
+        let mut connection = self.connection.lock().await;
+        let tx = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .await?;
+
+        tx.execute(INSERT_TAG_SQL, [key]).await?;
+        tx.execute(INSERT_TAG_ASSOCIATION_SQL, [key, value, workflow_run_id])
+            .await?;
 
         tx.commit().await
     }

@@ -51,7 +51,15 @@ class ChannelItemInserted:
     data_reference: DataReference
 
 
-type StdoutIPCMessage = DataReferenceCreated | ChannelItemInserted
+@dataclass(frozen=True)
+class TagInserted:
+    type: Literal["tag_inserted"] = field(default="tag_inserted", init=False)
+    name: str
+    value: str
+    data_reference: DataReference | None = None
+
+
+type StdoutIPCMessage = DataReferenceCreated | ChannelItemInserted | TagInserted
 
 
 def _serialize_stdout_ipc_message(message: StdoutIPCMessage) -> str:
