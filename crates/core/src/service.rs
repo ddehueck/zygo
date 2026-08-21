@@ -34,10 +34,11 @@ impl<S: StorageProvider> Zygo<S> {
 
     pub async fn run(
         &self,
+        id: WorkflowRunId,
         input: DataReference,
         schema: WorkflowSchema,
-    ) -> Result<WorkflowRunId, anyhow::Error> {
-        self.actor_pool.run_with_actor(input, schema).await
+    ) -> Result<(), anyhow::Error> {
+        self.actor_pool.run_with_actor(id, input, schema).await
     }
 
     pub async fn subscribe(

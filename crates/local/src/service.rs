@@ -17,6 +17,8 @@ use crate::{
     stream_processor::LocalStreamProcessor,
 };
 
+const WORKFLOW_ID_TAG_NAME: &str = "sys.workflow";
+
 impl StorageProvider for KvRepository {
     async fn put(&self, entries: &[(&str, &Value)]) -> Result<()> {
         self.upsert_many(entries).await?;
@@ -64,24 +66,28 @@ impl ZygoLocalService {
         })
     }
 
-    pub async fn run(
-        &self,
-        input: DataReference,
-        schema: WorkflowSchema,
-        tags: &[(&str, &str)],
-    ) -> Result<WorkflowRunId> {
-        let content_hash = schema.content_hash.as_ref().to_owned();
-        let run_id = self.base.run(input, schema).await?;
-        let id = run_id.to_string();
+    pub async fn run(&self, input: DataReference, schema: WorkflowSchema) -> Result<WorkflowRunId> {
+        let workflow_id = schema.id.to_string();
+        let content_hash = schema.content_hash.to_string();
 
-        // todo: the workflow tag should be derived from the schema - otherwise all tags will be
-        // recoverable from the event stream/store except this one?
+        let workflow_run_id = WorkflowRunId::new(&schema.content_hash, &input)?;
+        // saves a record of the run before actually running it
+        // we save the workflow id as a tag so we can filter runs by workflow
         self.repos
             .workflow_runs
-            .insert(&id, &content_hash, tags)
+            .insert(
+                &workflow_run_id.to_string(),
+                &workflow_id,
+                &content_hash,
+                &[(WORKFLOW_ID_TAG_NAME, workflow_id.as_str())],
+            )
             .await?;
 
-        Ok(run_id)
+        self.base
+            .run(workflow_run_id.clone(), input, schema)
+            .await?;
+
+        Ok(workflow_run_id)
     }
 
     pub fn stream_processor(&self, run_id: &WorkflowRunId) -> LocalStreamProcessor {

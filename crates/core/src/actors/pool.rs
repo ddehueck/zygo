@@ -29,18 +29,18 @@ impl<S: StorageProvider> ActorPool<S> {
     ///! Idempotently initializes a workflow run with an actor.
     pub async fn run_with_actor(
         &self,
+        id: WorkflowRunId,
         input: DataReference,
         schema: WorkflowSchema,
-    ) -> Result<WorkflowRunId, anyhow::Error> {
+    ) -> Result<(), anyhow::Error> {
         let mut registry = self.registry.lock().await;
-        let workflow_run_id = WorkflowRunId::new(&schema.content_hash, &input)?;
 
-        if registry.contains_key(&workflow_run_id) {
-            return Ok(workflow_run_id);
+        if registry.contains_key(&id) {
+            return Ok(());
         }
 
-        let actor_handle = self.create_actor(&workflow_run_id, &schema).await?;
-        registry.insert(workflow_run_id.clone(), actor_handle.clone());
+        let actor_handle = self.create_actor(&id, &schema).await?;
+        registry.insert(id.clone(), actor_handle.clone());
         drop(registry); // Release lock after actor handle is inserted
 
         let input_channel_inserted_event = Event {
@@ -52,13 +52,13 @@ impl<S: StorageProvider> ActorPool<S> {
                 data_reference: input,
             }),
             source: Source::Input,
-            run_id: workflow_run_id.clone(),
+            run_id: id.clone(),
         };
 
         self.send_event(&actor_handle, input_channel_inserted_event)
             .await?;
 
-        Ok(workflow_run_id)
+        Ok(())
     }
 
     pub async fn subscribe(

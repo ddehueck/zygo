@@ -6,6 +6,7 @@ use super::error::{Error, Result};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorkflowRun {
     pub id: String,
+    pub workflow_id: String,
     pub content_hash: String,
     pub created_at: String,
 }
@@ -14,6 +15,7 @@ impl WorkflowRun {
     pub fn from_row(row: &Row, rows: &Rows) -> Result<Self> {
         Ok(Self {
             id: row.get(rows.column_index("id")?)?,
+            workflow_id: row.get(rows.column_index("workflow_id")?)?,
             content_hash: row.get(rows.column_index("content_hash")?)?,
             created_at: row.get(rows.column_index("created_at")?)?,
         })

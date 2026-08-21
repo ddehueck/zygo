@@ -1,3 +1,5 @@
+# Shared UI Components
+
 This directory contains shared UI components for the entire desktop application.
 
 These should be the primitive components/building blocks that feature specific components are built on top of.

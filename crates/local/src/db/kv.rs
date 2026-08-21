@@ -20,13 +20,12 @@ impl KvRepository {
     }
 
     pub async fn upsert(&self, entry: &Kv) -> Result<()> {
-        let key = entry.key.clone();
         let value = serde_json::to_string(&entry.value)?;
         let mut connection = self.database.connection.lock().await;
         let tx = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .await?;
-        tx.execute(UPSERT_SQL, [key.as_str(), value.as_str()])
+        tx.execute(UPSERT_SQL, [entry.key.as_str(), value.as_str()])
             .await?;
         tx.commit().await?;
         Ok(())
@@ -35,7 +34,7 @@ impl KvRepository {
     pub async fn upsert_many(&self, entries: &[(&str, &Value)]) -> Result<()> {
         let entries = entries
             .iter()
-            .map(|(key, value)| Ok(((*key).to_owned(), serde_json::to_string(value)?)))
+            .map(|(key, value)| Ok((*key, serde_json::to_string(value)?)))
             .collect::<Result<Vec<_>>>()?;
         let mut connection = self.database.connection.lock().await;
         let tx = connection
@@ -43,8 +42,7 @@ impl KvRepository {
             .await?;
 
         for (key, value) in &entries {
-            tx.execute(UPSERT_SQL, [key.as_str(), value.as_str()])
-                .await?;
+            tx.execute(UPSERT_SQL, [*key, value.as_str()]).await?;
         }
 
         tx.commit().await?;
@@ -52,12 +50,11 @@ impl KvRepository {
     }
 
     pub async fn get_by_key(&self, key: &str) -> Result<Option<Kv>> {
-        let key = key.to_owned();
         let connection = self.database.connection.lock().await;
         let mut rows = connection
             .query(
                 "SELECT key, value, created_at, updated_at FROM kv WHERE key = ?1",
-                [key.as_str()],
+                [key],
             )
             .await?;
 
@@ -91,13 +88,11 @@ impl KvRepository {
     }
 
     pub async fn delete(&self, key: &str) -> Result<()> {
-        let key = key.to_owned();
         let mut connection = self.database.connection.lock().await;
         let tx = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .await?;
-        tx.execute("DELETE FROM kv WHERE key = ?1", [key.as_str()])
-            .await?;
+        tx.execute("DELETE FROM kv WHERE key = ?1", [key]).await?;
         tx.commit().await?;
         Ok(())
     }
