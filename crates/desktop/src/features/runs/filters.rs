@@ -1,4 +1,4 @@
-use local::db::Tag;
+use local::Tag;
 
 /// A single tag constraint. When `value` is `None`, any value for the tag key
 /// satisfies the constraint.

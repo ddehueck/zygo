@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{io, path::PathBuf, sync::Arc};
 
 use anyhow::Result;
 use serde_json::Value;
@@ -11,8 +11,10 @@ use zygo_core::{
 };
 
 use crate::{
-    LocalStreamProcessor, database_path,
     db::{KvRepository, WorkflowRun, WorkflowRunRepository, migrate},
+    paths,
+    repos::Repos,
+    stream_processor::LocalStreamProcessor,
 };
 
 impl StorageProvider for KvRepository {
@@ -36,25 +38,33 @@ impl StorageProvider for KvRepository {
 
 pub struct ZygoLocalService {
     pub base: Zygo<KvRepository>,
-    workflow_run_repository: WorkflowRunRepository,
+    pub repos: Repos,
 }
 
 impl ZygoLocalService {
+    pub fn database_path() -> io::Result<PathBuf> {
+        paths::database_path()
+    }
+
+    pub fn delete_database() -> io::Result<bool> {
+        paths::delete_database()
+    }
+
     pub async fn new(config: ZygoConfig) -> Result<Self> {
-        let path = database_path()?.to_string_lossy().into_owned();
+        let path = Self::database_path()?.to_string_lossy().into_owned();
         let database = Builder::new_local(&path).build().await?;
         let mut connection = database.connect()?;
 
         migrate(&mut connection).await?;
 
         let connection = Arc::new(Mutex::new(connection));
-        let workflow_run_repository = WorkflowRunRepository::new(connection.clone());
-        let repository = KvRepository::new(connection);
-        let store = zygo_core::store::Store::new(repository);
+        let workflow_runs = WorkflowRunRepository::new(connection.clone());
+        let kv = KvRepository::new(connection);
+        let store = zygo_core::store::Store::new(kv.clone());
 
         Ok(Self {
             base: Zygo::new(store, config),
-            workflow_run_repository,
+            repos: Repos { kv, workflow_runs },
         })
     }
 
@@ -70,31 +80,18 @@ impl ZygoLocalService {
 
         // todo: the workflow tag should be derived from the schema - otherwise all tags will be
         // recoverable from the event stream/store except this one?
-        self.workflow_run_repository
+        self.repos
+            .workflow_runs
             .insert(&id, &content_hash, tags)
             .await?;
 
         Ok(run_id)
     }
 
-    /// Returns the repository used by the workflow-run store.
-    pub fn workflow_run_repository(&self) -> WorkflowRunRepository {
-        self.workflow_run_repository.clone()
-    }
-
-    /// Returns the repository used by the tag store.
-    ///
-    /// Tags are currently persisted by the workflow-run repository. Keeping this
-    /// accessor semantic lets the desktop stores stay decoupled from that
-    /// implementation detail while the repositories are split later.
-    pub fn tag_repository(&self) -> WorkflowRunRepository {
-        self.workflow_run_repository.clone()
-    }
-
     pub fn stream_processor(&self, run_id: &WorkflowRunId) -> LocalStreamProcessor {
         LocalStreamProcessor::new(
             self.base.stream(run_id),
-            self.workflow_run_repository.clone(),
+            self.repos.workflow_runs.clone(),
             run_id.clone(),
         )
     }
@@ -105,8 +102,8 @@ impl ZygoLocalService {
         filter: Option<(&str, &str)>,
     ) -> Result<Vec<WorkflowRun>> {
         match filter {
-            Some((key, value)) => Ok(self.workflow_run_repository.list_by_tag(key, value).await?),
-            None => Ok(self.workflow_run_repository.list_all().await?),
+            Some((key, value)) => Ok(self.repos.workflow_runs.list_by_tag(key, value).await?),
+            None => Ok(self.repos.workflow_runs.list_all().await?),
         }
     }
 }

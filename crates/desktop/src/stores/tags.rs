@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use gpui::{AppContext, Context, EventEmitter, Task};
-use local::db::{Tag, WorkflowRunRepository};
+use local::{Tag, WorkflowRunRepository};
 use zygo_core::models::WorkflowRunId;
 
 #[derive(Debug, Clone)]

@@ -1,9 +1,13 @@
 mod paths;
+mod repos;
 mod stream_processor;
 
-pub mod db;
+mod db;
 mod service;
 
-pub use paths::{database_path, delete_database};
+// This is the single entrypoint for the local Zygo service.
 pub use service::ZygoLocalService;
-pub use stream_processor::LocalStreamProcessor;
+
+// Type re-exports only for convenience
+pub use db::{KvRepository, Tag, WorkflowRun, WorkflowRunRepository};
+pub use repos::Repos;

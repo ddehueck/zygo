@@ -1,7 +1,7 @@
 use std::io::{self, Write};
 
 use anyhow::Result;
-use local::delete_database;
+use local::ZygoLocalService;
 
 pub fn nuke_database() -> Result<()> {
     print!("Delete the Zygo local database? [y/n] ");
@@ -14,7 +14,7 @@ pub fn nuke_database() -> Result<()> {
 
         match response.trim().to_ascii_lowercase().as_str() {
             "y" | "yes" => {
-                if delete_database()? {
+                if ZygoLocalService::delete_database()? {
                     println!("Zygo local database deleted.");
                 } else {
                     println!("No Zygo local database was found.");

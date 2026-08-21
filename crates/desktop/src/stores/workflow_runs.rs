@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use gpui::{AppContext, Context, EventEmitter, Task};
-use local::db::{Tag, WorkflowRun, WorkflowRunRepository};
+use local::{Tag, WorkflowRun, WorkflowRunRepository};
 
 use crate::features::runs::filters::FilterSet;
 
