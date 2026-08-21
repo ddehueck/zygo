@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{io, path::PathBuf, sync::Arc};
 
 use anyhow::Result;
 use serde_json::Value;
@@ -11,8 +11,9 @@ use zygo_core::{
 };
 
 use crate::{
-    LocalStreamProcessor, database_path,
     db::{KvRepository, WorkflowRun, WorkflowRunRepository, migrate},
+    paths,
+    stream_processor::LocalStreamProcessor,
 };
 
 impl StorageProvider for KvRepository {
@@ -40,8 +41,16 @@ pub struct ZygoLocalService {
 }
 
 impl ZygoLocalService {
+    pub fn database_path() -> io::Result<PathBuf> {
+        paths::database_path()
+    }
+
+    pub fn delete_database() -> io::Result<bool> {
+        paths::delete_database()
+    }
+
     pub async fn new(config: ZygoConfig) -> Result<Self> {
-        let path = database_path()?.to_string_lossy().into_owned();
+        let path = Self::database_path()?.to_string_lossy().into_owned();
         let database = Builder::new_local(&path).build().await?;
         let mut connection = database.connect()?;
 

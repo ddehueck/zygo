@@ -182,6 +182,8 @@ impl Render for RunDetailView {
     }
 }
 
+// todo should expose a job summary builder in local that takes a stream
+// perhaps should cache a job summary in the db once stream has been read/summarized?
 async fn load_job_runs(
     service: Arc<ZygoLocalService>,
     run_id: WorkflowRunId,
