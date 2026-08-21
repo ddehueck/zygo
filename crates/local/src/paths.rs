@@ -28,7 +28,8 @@ pub fn delete_database() -> io::Result<bool> {
     let path = database_path()?;
     let mut deleted = remove_file_if_exists(&path)?;
 
-    for suffix in ["-shm", "-wal"] {
+    // Turso docs: https://docs.turso.tech/sql-reference/multiprocess-access#how-it-works
+    for suffix in ["-shm", "-wal", "-tshm"] {
         let mut sidecar = path.as_os_str().to_owned();
         sidecar.push(suffix);
         deleted |= remove_file_if_exists(&PathBuf::from(sidecar))?;

@@ -9,6 +9,7 @@ license.workspace = true
 anyhow = { workspace = true }
 directories = "6.0.0"
 serde_json = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
-turso = "0.7.2"
+turso = "=0.7.2"
 zygo-core = { path = "../core" }

@@ -1,7 +1,7 @@
 use gpui::{
     App, Bounds, TitlebarOptions, WindowBounds, WindowOptions, point, prelude::*, px, size,
 };
-use local::ZygoLocalService;
+use local::{DEFAULT_DATABASE_BUSY_TIMEOUT, ZygoLocalConfig, ZygoLocalService};
 use zygo_core::ZygoConfig;
 
 mod dependencies;
@@ -47,7 +47,13 @@ fn main() {
 
             let task = cx.spawn(async move |cx| {
                 let service = cx
-                    .background_spawn(async { ZygoLocalService::new(ZygoConfig::new(1)).await })
+                    .background_spawn(async {
+                        ZygoLocalService::new(ZygoLocalConfig {
+                            base: ZygoConfig::new(1),
+                            database_busy_timeout: DEFAULT_DATABASE_BUSY_TIMEOUT,
+                        })
+                        .await
+                    })
                     .await;
 
                 cx.update(|cx| {

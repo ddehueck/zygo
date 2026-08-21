@@ -1,9 +1,9 @@
-use std::sync::Arc;
+use turso::transaction::TransactionBehavior;
 
-use tokio::sync::Mutex;
-use turso::{Connection, transaction::TransactionBehavior};
-
-use super::db_models::{Tag, WorkflowRun};
+use super::{
+    Db, DbResult,
+    db_models::{Tag, WorkflowRun},
+};
 
 const INSERT_WORKFLOW_RUN_SQL: &str = "
     INSERT INTO workflow_runs (id, content_hash)
@@ -33,12 +33,12 @@ const INSERT_TAG_ASSOCIATION_SQL: &str = "
 
 #[derive(Clone)]
 pub struct WorkflowRunRepository {
-    connection: Arc<Mutex<Connection>>,
+    database: Db,
 }
 
 impl WorkflowRunRepository {
-    pub fn new(connection: Arc<Mutex<Connection>>) -> Self {
-        Self { connection }
+    pub fn new(database: Db) -> Self {
+        Self { database }
     }
 
     pub async fn insert(
@@ -46,48 +46,64 @@ impl WorkflowRunRepository {
         id: &str,
         content_hash: &str,
         tags: &[(&str, &str)],
-    ) -> turso::Result<()> {
-        let mut connection = self.connection.lock().await;
+    ) -> DbResult<()> {
+        let id = id.to_owned();
+        let content_hash = content_hash.to_owned();
+        let tags = tags
+            .iter()
+            .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+            .collect::<Vec<_>>();
+        let mut connection = self.database.connection.lock().await;
         let tx = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .await?;
 
-        tx.execute(INSERT_WORKFLOW_RUN_SQL, [id, content_hash])
-            .await?;
+        tx.execute(
+            INSERT_WORKFLOW_RUN_SQL,
+            [id.as_str(), content_hash.as_str()],
+        )
+        .await?;
 
-        for &(key, value) in tags {
-            tx.execute(INSERT_TAG_SQL, [key]).await?;
-            tx.execute(INSERT_TAG_ASSOCIATION_SQL, [key, value, id])
-                .await?;
+        for (key, value) in &tags {
+            tx.execute(INSERT_TAG_SQL, [key.as_str()]).await?;
+            tx.execute(
+                INSERT_TAG_ASSOCIATION_SQL,
+                [key.as_str(), value.as_str(), id.as_str()],
+            )
+            .await?;
         }
 
-        tx.commit().await
+        tx.commit().await?;
+        Ok(())
     }
 
-    pub async fn insert_tag(
-        &self,
-        workflow_run_id: &str,
-        key: &str,
-        value: &str,
-    ) -> turso::Result<()> {
-        let mut connection = self.connection.lock().await;
+    pub async fn insert_tag(&self, workflow_run_id: &str, key: &str, value: &str) -> DbResult<()> {
+        let workflow_run_id = workflow_run_id.to_owned();
+        let key = key.to_owned();
+        let value = value.to_owned();
+        let mut connection = self.database.connection.lock().await;
         let tx = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .await?;
 
-        tx.execute(INSERT_TAG_SQL, [key]).await?;
-        tx.execute(INSERT_TAG_ASSOCIATION_SQL, [key, value, workflow_run_id])
-            .await?;
+        tx.execute(INSERT_TAG_SQL, [key.as_str()]).await?;
+        tx.execute(
+            INSERT_TAG_ASSOCIATION_SQL,
+            [key.as_str(), value.as_str(), workflow_run_id.as_str()],
+        )
+        .await?;
 
-        tx.commit().await
+        tx.commit().await?;
+        Ok(())
     }
 
-    pub async fn get_by_id(&self, id: &str) -> turso::Result<Option<WorkflowRun>> {
-        let connection = self.connection.lock().await;
+    pub async fn get_by_id(&self, id: &str) -> DbResult<Option<WorkflowRun>> {
+        let id = id.to_owned();
+        let connection = self.database.connection.lock().await;
         let mut rows = connection
             .query(
                 "SELECT id, content_hash, created_at FROM workflow_runs WHERE id = ?1",
-                [id],
+                [id.as_str()],
             )
             .await?;
 
@@ -98,8 +114,8 @@ impl WorkflowRunRepository {
         Ok(Some(WorkflowRun::from_row(&row, &rows)?))
     }
 
-    pub async fn list_all(&self) -> turso::Result<Vec<WorkflowRun>> {
-        let connection = self.connection.lock().await;
+    pub async fn list_all(&self) -> DbResult<Vec<WorkflowRun>> {
+        let connection = self.database.connection.lock().await;
         let mut rows = connection
             .query(
                 "
@@ -114,8 +130,10 @@ impl WorkflowRunRepository {
         Self::collect_runs(&mut rows).await
     }
 
-    pub async fn list_by_tag(&self, key: &str, value: &str) -> turso::Result<Vec<WorkflowRun>> {
-        let connection = self.connection.lock().await;
+    pub async fn list_by_tag(&self, key: &str, value: &str) -> DbResult<Vec<WorkflowRun>> {
+        let key = key.to_owned();
+        let value = value.to_owned();
+        let connection = self.database.connection.lock().await;
         let mut rows = connection
             .query(
                 "
@@ -127,15 +145,16 @@ impl WorkflowRunRepository {
                     WHERE tags.name = ?1 AND tag_associations.value = ?2
                     ORDER BY workflow_runs.created_at ASC, workflow_runs.rowid ASC
                 ",
-                [key, value],
+                [key.as_str(), value.as_str()],
             )
             .await?;
 
         Self::collect_runs(&mut rows).await
     }
 
-    pub async fn list_tags(&self, workflow_run_id: &str) -> turso::Result<Vec<Tag>> {
-        let connection = self.connection.lock().await;
+    pub async fn list_tags(&self, workflow_run_id: &str) -> DbResult<Vec<Tag>> {
+        let workflow_run_id = workflow_run_id.to_owned();
+        let connection = self.database.connection.lock().await;
         let mut rows = connection
             .query(
                 "
@@ -149,7 +168,7 @@ impl WorkflowRunRepository {
                     WHERE tag_associations.workflow_run_id = ?1
                     ORDER BY tags.name ASC, tag_associations.value ASC
                 ",
-                [workflow_run_id],
+                [workflow_run_id.as_str()],
             )
             .await?;
 
@@ -161,7 +180,7 @@ impl WorkflowRunRepository {
         Ok(tags)
     }
 
-    async fn collect_runs(rows: &mut turso::Rows) -> turso::Result<Vec<WorkflowRun>> {
+    async fn collect_runs(rows: &mut turso::Rows) -> DbResult<Vec<WorkflowRun>> {
         let mut workflow_runs = Vec::new();
         while let Some(row) = rows.next().await? {
             workflow_runs.push(WorkflowRun::from_row(&row, rows)?);
