@@ -1,9 +1,8 @@
 import random
 import time
 
-from zygo import Channel, Workflow
+from zygo import Channel, JobContext, Workflow
 from zygo.codecs import Integer, String
-from zygo.context import JobContext
 
 raw = Channel(id="raw", codec=Integer())
 squared = Channel(id="squared", codec=Integer())
@@ -20,9 +19,9 @@ def square_values(input: int, *, ctx: JobContext) -> int:
 
     rand_wait = random.randint(1, 15)
     if rand_wait % 2 == 0:
-        tags.add("even_wait", "even")
+        tags.add("wait_type", "even")
     else:
-        tags.add("even_wait", "odd")
+        tags.add("wait_type", "odd")
 
     for i in range(rand_wait):
         print(f"[square_values] Waiting: {i + 1}/{rand_wait}")  # ruff: ignore[print]

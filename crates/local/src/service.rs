@@ -77,6 +77,20 @@ impl ZygoLocalService {
         Ok(run_id)
     }
 
+    /// Returns the repository used by the workflow-run store.
+    pub fn workflow_run_repository(&self) -> WorkflowRunRepository {
+        self.workflow_run_repository.clone()
+    }
+
+    /// Returns the repository used by the tag store.
+    ///
+    /// Tags are currently persisted by the workflow-run repository. Keeping this
+    /// accessor semantic lets the desktop stores stay decoupled from that
+    /// implementation detail while the repositories are split later.
+    pub fn tag_repository(&self) -> WorkflowRunRepository {
+        self.workflow_run_repository.clone()
+    }
+
     pub fn stream_processor(&self, run_id: &WorkflowRunId) -> LocalStreamProcessor {
         LocalStreamProcessor::new(
             self.base.stream(run_id),

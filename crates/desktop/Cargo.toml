@@ -6,7 +6,12 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
-gpui = { package = "gpui-ce", version = "0.3.3" }
+gpui = { package = "gpui-unofficial", version = "=1.14.2" }
+gpui_platform = { package = "gpui-platform-gpui-unofficial", version = "=1.14.2" }
+local = { path = "../local" }
+zygo-core = { path = "../core" }
+anyhow = { workspace = true }
+gpuikit = "0.7.0"
 
 [dev-dependencies]
-gpui = { package = "gpui-ce", version = "0.3.3", features = ["test-support"] }
+gpui = { package = "gpui-unofficial", version = "=1.14.2", features = ["test-support"] }
