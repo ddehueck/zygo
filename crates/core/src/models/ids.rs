@@ -41,8 +41,9 @@ macro_rules! define_value {
     };
 }
 
-define_value!(ChannelId, "channel_id");
+define_value!(WorkflowId, "workflow_id");
 define_value!(WorkflowRunId, "workflow_run_id");
+define_value!(ChannelId, "channel_id");
 define_value!(JobId, "job_id");
 define_value!(JobRunId, "job_run_id");
 define_value!(EventId, "event_id");

@@ -7,8 +7,8 @@ use super::{
 };
 
 const INSERT_WORKFLOW_RUN_SQL: &str = "
-    INSERT INTO workflow_runs (id, content_hash)
-    VALUES (?1, ?2)
+    INSERT INTO workflow_runs (id, workflow_id, content_hash)
+    VALUES (?1, ?2, ?3)
     ON CONFLICT(id) DO NOTHING
 ";
 
@@ -42,31 +42,25 @@ impl WorkflowRunRepository {
         Self { database }
     }
 
-    pub async fn insert(&self, id: &str, content_hash: &str, tags: &[(&str, &str)]) -> Result<()> {
-        let id = id.to_owned();
-        let content_hash = content_hash.to_owned();
-        let tags = tags
-            .iter()
-            .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
-            .collect::<Vec<_>>();
+    pub async fn insert(
+        &self,
+        id: &str,
+        workflow_id: &str,
+        content_hash: &str,
+        tags: &[(&str, &str)],
+    ) -> Result<()> {
         let mut connection = self.database.connection.lock().await;
         let tx = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .await?;
 
-        tx.execute(
-            INSERT_WORKFLOW_RUN_SQL,
-            [id.as_str(), content_hash.as_str()],
-        )
-        .await?;
-
-        for (key, value) in &tags {
-            tx.execute(INSERT_TAG_SQL, [key.as_str()]).await?;
-            tx.execute(
-                INSERT_TAG_ASSOCIATION_SQL,
-                [key.as_str(), value.as_str(), id.as_str()],
-            )
+        tx.execute(INSERT_WORKFLOW_RUN_SQL, [id, workflow_id, content_hash])
             .await?;
+
+        for (key, value) in tags {
+            tx.execute(INSERT_TAG_SQL, [*key]).await?;
+            tx.execute(INSERT_TAG_ASSOCIATION_SQL, [*key, *value, id])
+                .await?;
         }
 
         tx.commit().await?;
@@ -74,32 +68,25 @@ impl WorkflowRunRepository {
     }
 
     pub async fn insert_tag(&self, workflow_run_id: &str, key: &str, value: &str) -> Result<()> {
-        let workflow_run_id = workflow_run_id.to_owned();
-        let key = key.to_owned();
-        let value = value.to_owned();
         let mut connection = self.database.connection.lock().await;
         let tx = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .await?;
 
-        tx.execute(INSERT_TAG_SQL, [key.as_str()]).await?;
-        tx.execute(
-            INSERT_TAG_ASSOCIATION_SQL,
-            [key.as_str(), value.as_str(), workflow_run_id.as_str()],
-        )
-        .await?;
+        tx.execute(INSERT_TAG_SQL, [key]).await?;
+        tx.execute(INSERT_TAG_ASSOCIATION_SQL, [key, value, workflow_run_id])
+            .await?;
 
         tx.commit().await?;
         Ok(())
     }
 
     pub async fn get_by_id(&self, id: &str) -> Result<Option<WorkflowRun>> {
-        let id = id.to_owned();
         let connection = self.database.connection.lock().await;
         let mut rows = connection
             .query(
-                "SELECT id, content_hash, created_at FROM workflow_runs WHERE id = ?1",
-                [id.as_str()],
+                "SELECT id, workflow_id, content_hash, created_at FROM workflow_runs WHERE id = ?1",
+                [id],
             )
             .await?;
 
@@ -115,7 +102,7 @@ impl WorkflowRunRepository {
         let mut rows = connection
             .query(
                 "
-                    SELECT id, content_hash, created_at
+                    SELECT id, workflow_id, content_hash, created_at
                     FROM workflow_runs
                     ORDER BY created_at ASC, rowid ASC
                 ",
@@ -127,13 +114,11 @@ impl WorkflowRunRepository {
     }
 
     pub async fn list_by_tag(&self, key: &str, value: &str) -> Result<Vec<WorkflowRun>> {
-        let key = key.to_owned();
-        let value = value.to_owned();
         let connection = self.database.connection.lock().await;
         let mut rows = connection
             .query(
                 "
-                    SELECT workflow_runs.id, workflow_runs.content_hash, workflow_runs.created_at
+                    SELECT workflow_runs.id, workflow_runs.workflow_id, workflow_runs.content_hash, workflow_runs.created_at
                     FROM tags
                     INNER JOIN tag_associations ON tag_associations.tag_id = tags.id
                     INNER JOIN workflow_runs
@@ -141,7 +126,7 @@ impl WorkflowRunRepository {
                     WHERE tags.name = ?1 AND tag_associations.value = ?2
                     ORDER BY workflow_runs.created_at ASC, workflow_runs.rowid ASC
                 ",
-                [key.as_str(), value.as_str()],
+                [key, value],
             )
             .await?;
 
@@ -149,7 +134,6 @@ impl WorkflowRunRepository {
     }
 
     pub async fn list_tags(&self, workflow_run_id: &str) -> Result<Vec<Tag>> {
-        let workflow_run_id = workflow_run_id.to_owned();
         let connection = self.database.connection.lock().await;
         let mut rows = connection
             .query(
@@ -164,7 +148,7 @@ impl WorkflowRunRepository {
                     WHERE tag_associations.workflow_run_id = ?1
                     ORDER BY tags.name ASC, tag_associations.value ASC
                 ",
-                [workflow_run_id.as_str()],
+                [workflow_run_id],
             )
             .await?;
 

@@ -1,9 +1,10 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::{ChannelId, ContentHash, Job, JobEntrypoint, JobId};
+use crate::models::{ChannelId, ContentHash, Job, JobEntrypoint, JobId, WorkflowId};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkflowSchema {
+    pub id: WorkflowId,
     pub content_hash: ContentHash,
     pub input_channel_id: ChannelId,
     pub output_channel_id: ChannelId,

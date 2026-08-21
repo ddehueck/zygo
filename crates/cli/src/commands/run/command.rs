@@ -237,8 +237,7 @@ pub async fn run_workflow(
         version: EventId::new().to_string(),
     };
 
-    let tags = [("workflow", metadata.id.as_str())];
-    let run_id = service.run(data_ref, schema, &tags).await?;
+    let run_id = service.run(data_ref, schema).await?;
     // println!("run_id: {run_id:?}");
 
     // 5. Watch the engine state in an interactive fullscreen terminal view.
