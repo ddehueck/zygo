@@ -3,7 +3,7 @@ use std::sync::Arc;
 use gpui::{Context, Render, Window, div, prelude::*, px};
 use gpuikit::elements::input::input;
 use gpuikit::input::InputState;
-use local::{ZygoLocalService, db::Tag};
+use local::{Tag, ZygoLocalService};
 use zygo_core::models::{EventKind, StreamItem, WorkflowRunId};
 
 use crate::{

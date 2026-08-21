@@ -43,8 +43,8 @@ impl Global for AppDeps {}
 impl AppDeps {
     pub fn new(service: ZygoLocalService, cx: &mut App) -> Self {
         let service = Arc::new(service);
-        let runs_repository = service.workflow_run_repository();
-        let tags_repository = service.tag_repository();
+        let runs_repository = service.repos.workflow_runs.clone();
+        let tags_repository = service.repos.workflow_runs.clone();
 
         let navigator = cx.new(|_| Navigator::new(Routes::WorkflowRuns(WorkflowRunsRoutes::Index)));
         let navigation_navigator = navigator.clone();

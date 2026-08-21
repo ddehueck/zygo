@@ -3,7 +3,7 @@ use gpui::{
 };
 use gpuikit::elements::input::input;
 use gpuikit::input::InputState;
-use local::db::{Tag, WorkflowRun};
+use local::{Tag, WorkflowRun};
 use zygo_core::models::WorkflowRunId;
 
 use crate::{
