@@ -1,12 +1,17 @@
 use turso::{Connection, transaction::TransactionBehavior};
 
-use super::DbResult;
+use super::error::Result;
 
 const MIGRATIONS: &[(i64, &str)] = &[
     (1, include_str!("0001_initial.sql")),
     (2, include_str!("0002_kv.sql")),
 ];
-pub async fn migrate(connection: &mut Connection) -> DbResult<()> {
+
+pub async fn migrate(connection: &mut Connection) -> Result<()> {
+    migrate_once(connection).await
+}
+
+async fn migrate_once(connection: &mut Connection) -> Result<()> {
     let tx = connection
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .await?;
@@ -25,7 +30,7 @@ pub async fn migrate(connection: &mut Connection) -> DbResult<()> {
     Ok(())
 }
 
-async fn current_version(conn: &Connection) -> DbResult<i64> {
+async fn current_version(conn: &Connection) -> Result<i64> {
     let mut rows = conn.query("PRAGMA user_version", ()).await?;
     let row = rows
         .next()

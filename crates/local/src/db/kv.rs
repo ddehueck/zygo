@@ -1,7 +1,7 @@
 use serde_json::Value;
 use turso::transaction::TransactionBehavior;
 
-use super::{Db, DbResult, db_models::Kv};
+use super::{Db, db_models::Kv, error::Result};
 
 const UPSERT_SQL: &str = "
     INSERT INTO kv (key, value)
@@ -19,7 +19,7 @@ impl KvRepository {
         Self { database }
     }
 
-    pub async fn upsert(&self, entry: &Kv) -> DbResult<()> {
+    pub async fn upsert(&self, entry: &Kv) -> Result<()> {
         let key = entry.key.clone();
         let value = serde_json::to_string(&entry.value)?;
         let mut connection = self.database.connection.lock().await;
@@ -32,11 +32,11 @@ impl KvRepository {
         Ok(())
     }
 
-    pub async fn upsert_many(&self, entries: &[(&str, &Value)]) -> DbResult<()> {
+    pub async fn upsert_many(&self, entries: &[(&str, &Value)]) -> Result<()> {
         let entries = entries
             .iter()
             .map(|(key, value)| Ok(((*key).to_owned(), serde_json::to_string(value)?)))
-            .collect::<DbResult<Vec<_>>>()?;
+            .collect::<Result<Vec<_>>>()?;
         let mut connection = self.database.connection.lock().await;
         let tx = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
@@ -51,7 +51,7 @@ impl KvRepository {
         Ok(())
     }
 
-    pub async fn get_by_key(&self, key: &str) -> DbResult<Option<Kv>> {
+    pub async fn get_by_key(&self, key: &str) -> Result<Option<Kv>> {
         let key = key.to_owned();
         let connection = self.database.connection.lock().await;
         let mut rows = connection
@@ -68,7 +68,7 @@ impl KvRepository {
         Ok(Some(Kv::from_row(&row, &rows)?))
     }
 
-    pub async fn list(&self, limit: u32, offset: u32) -> DbResult<Vec<Kv>> {
+    pub async fn list(&self, limit: u32, offset: u32) -> Result<Vec<Kv>> {
         let connection = self.database.connection.lock().await;
         let mut rows = connection
             .query(
@@ -90,7 +90,7 @@ impl KvRepository {
         Ok(entries)
     }
 
-    pub async fn delete(&self, key: &str) -> DbResult<()> {
+    pub async fn delete(&self, key: &str) -> Result<()> {
         let key = key.to_owned();
         let mut connection = self.database.connection.lock().await;
         let tx = connection

@@ -1,9 +1,9 @@
 #[derive(Debug, thiserror::Error)]
-pub enum DbError {
+pub enum Error {
     #[error(transparent)]
     Turso(#[from] turso::Error),
     #[error(transparent)]
     Serialization(#[from] serde_json::Error),
 }
 
-pub type DbResult<T> = Result<T, DbError>;
+pub type Result<T> = std::result::Result<T, Error>;

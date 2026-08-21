@@ -1,8 +1,9 @@
 use turso::transaction::TransactionBehavior;
 
 use super::{
-    Db, DbResult,
+    Db,
     db_models::{Tag, WorkflowRun},
+    error::Result,
 };
 
 const INSERT_WORKFLOW_RUN_SQL: &str = "
@@ -41,12 +42,7 @@ impl WorkflowRunRepository {
         Self { database }
     }
 
-    pub async fn insert(
-        &self,
-        id: &str,
-        content_hash: &str,
-        tags: &[(&str, &str)],
-    ) -> DbResult<()> {
+    pub async fn insert(&self, id: &str, content_hash: &str, tags: &[(&str, &str)]) -> Result<()> {
         let id = id.to_owned();
         let content_hash = content_hash.to_owned();
         let tags = tags
@@ -77,7 +73,7 @@ impl WorkflowRunRepository {
         Ok(())
     }
 
-    pub async fn insert_tag(&self, workflow_run_id: &str, key: &str, value: &str) -> DbResult<()> {
+    pub async fn insert_tag(&self, workflow_run_id: &str, key: &str, value: &str) -> Result<()> {
         let workflow_run_id = workflow_run_id.to_owned();
         let key = key.to_owned();
         let value = value.to_owned();
@@ -97,7 +93,7 @@ impl WorkflowRunRepository {
         Ok(())
     }
 
-    pub async fn get_by_id(&self, id: &str) -> DbResult<Option<WorkflowRun>> {
+    pub async fn get_by_id(&self, id: &str) -> Result<Option<WorkflowRun>> {
         let id = id.to_owned();
         let connection = self.database.connection.lock().await;
         let mut rows = connection
@@ -114,7 +110,7 @@ impl WorkflowRunRepository {
         Ok(Some(WorkflowRun::from_row(&row, &rows)?))
     }
 
-    pub async fn list_all(&self) -> DbResult<Vec<WorkflowRun>> {
+    pub async fn list_all(&self) -> Result<Vec<WorkflowRun>> {
         let connection = self.database.connection.lock().await;
         let mut rows = connection
             .query(
@@ -130,7 +126,7 @@ impl WorkflowRunRepository {
         Self::collect_runs(&mut rows).await
     }
 
-    pub async fn list_by_tag(&self, key: &str, value: &str) -> DbResult<Vec<WorkflowRun>> {
+    pub async fn list_by_tag(&self, key: &str, value: &str) -> Result<Vec<WorkflowRun>> {
         let key = key.to_owned();
         let value = value.to_owned();
         let connection = self.database.connection.lock().await;
@@ -152,7 +148,7 @@ impl WorkflowRunRepository {
         Self::collect_runs(&mut rows).await
     }
 
-    pub async fn list_tags(&self, workflow_run_id: &str) -> DbResult<Vec<Tag>> {
+    pub async fn list_tags(&self, workflow_run_id: &str) -> Result<Vec<Tag>> {
         let workflow_run_id = workflow_run_id.to_owned();
         let connection = self.database.connection.lock().await;
         let mut rows = connection
@@ -180,7 +176,7 @@ impl WorkflowRunRepository {
         Ok(tags)
     }
 
-    async fn collect_runs(rows: &mut turso::Rows) -> DbResult<Vec<WorkflowRun>> {
+    async fn collect_runs(rows: &mut turso::Rows) -> Result<Vec<WorkflowRun>> {
         let mut workflow_runs = Vec::new();
         while let Some(row) = rows.next().await? {
             workflow_runs.push(WorkflowRun::from_row(&row, rows)?);

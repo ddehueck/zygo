@@ -3,7 +3,7 @@ use std::{sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 use turso::{Builder, Connection};
 
-use super::{DbResult, migrations};
+use super::{error::Result, migrations};
 
 #[derive(Clone)]
 pub struct Db {
@@ -11,7 +11,7 @@ pub struct Db {
 }
 
 impl Db {
-    pub async fn open(path: &str, busy_timeout: Duration) -> DbResult<Self> {
+    pub async fn open(path: &str, busy_timeout: Duration) -> Result<Self> {
         let database = Builder::new_local(path)
             .experimental_multiprocess_wal(true)
             .build()

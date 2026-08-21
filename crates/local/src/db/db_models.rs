@@ -1,7 +1,7 @@
 use serde_json::Value;
 use turso::{Row, Rows};
 
-use super::{DbError, DbResult};
+use super::error::{Error, Result};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorkflowRun {
@@ -11,7 +11,7 @@ pub struct WorkflowRun {
 }
 
 impl WorkflowRun {
-    pub fn from_row(row: &Row, rows: &Rows) -> DbResult<Self> {
+    pub fn from_row(row: &Row, rows: &Rows) -> Result<Self> {
         Ok(Self {
             id: row.get(rows.column_index("id")?)?,
             content_hash: row.get(rows.column_index("content_hash")?)?,
@@ -29,7 +29,7 @@ pub struct Tag {
 }
 
 impl Tag {
-    pub fn from_row(row: &Row, rows: &Rows) -> DbResult<Self> {
+    pub fn from_row(row: &Row, rows: &Rows) -> Result<Self> {
         Ok(Self {
             workflow_run_id: row.get(rows.column_index("workflow_run_id")?)?,
             key: row.get(rows.column_index("key")?)?,
@@ -48,12 +48,12 @@ pub struct Kv {
 }
 
 impl Kv {
-    pub fn from_row(row: &Row, rows: &Rows) -> DbResult<Self> {
+    pub fn from_row(row: &Row, rows: &Rows) -> Result<Self> {
         let value: String = row.get(rows.column_index("value")?)?;
 
         Ok(Self {
             key: row.get(rows.column_index("key")?)?,
-            value: serde_json::from_str(&value).map_err(DbError::from)?,
+            value: serde_json::from_str(&value).map_err(Error::from)?,
             created_at: row.get(rows.column_index("created_at")?)?,
             updated_at: row.get(rows.column_index("updated_at")?)?,
         })
