@@ -16,11 +16,12 @@ impl Db {
             .experimental_multiprocess_wal(true)
             .build()
             .await?;
-        let mut connection = database.connect()?;
 
-        // todo: do this in the not open path.
-        // there should be an explicit lock for this maybe?
-        migrations::migrate(&mut connection, busy_timeout).await?;
+        let mut connection = database.connect()?;
+        connection.busy_timeout(busy_timeout)?;
+        connection.pragma_update("foreign_keys", 1).await?;
+
+        migrations::migrate(&mut connection).await?;
 
         Ok(Self {
             connection: Arc::new(Mutex::new(connection)),

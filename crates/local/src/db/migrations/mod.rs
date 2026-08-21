@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use turso::{Connection, transaction::TransactionBehavior};
 
 use super::DbResult;
@@ -8,14 +6,7 @@ const MIGRATIONS: &[(i64, &str)] = &[
     (1, include_str!("0001_initial.sql")),
     (2, include_str!("0002_kv.sql")),
 ];
-pub async fn migrate(connection: &mut Connection, busy_timeout: Duration) -> DbResult<()> {
-    connection.busy_timeout(busy_timeout)?;
-    connection.pragma_update("foreign_keys", 1).await?;
-
-    migrate_once(connection).await
-}
-
-async fn migrate_once(connection: &mut Connection) -> DbResult<()> {
+pub async fn migrate(connection: &mut Connection) -> DbResult<()> {
     let tx = connection
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .await?;
