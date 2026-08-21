@@ -1,10 +1,7 @@
-use std::sync::Arc;
+use serde_json::Value;
+use turso::transaction::TransactionBehavior;
 
-use anyhow::Result;
-use tokio::sync::Mutex;
-use turso::{Connection, transaction::TransactionBehavior};
-
-use super::db_models::Kv;
+use super::{Db, db_models::Kv, error::Result};
 
 const UPSERT_SQL: &str = "
     INSERT INTO kv (key, value)
@@ -14,33 +11,40 @@ const UPSERT_SQL: &str = "
 
 #[derive(Clone)]
 pub struct KvRepository {
-    connection: Arc<Mutex<Connection>>,
+    database: Db,
 }
 
 impl KvRepository {
-    pub fn new(connection: Arc<Mutex<Connection>>) -> Self {
-        Self { connection }
+    pub fn new(database: Db) -> Self {
+        Self { database }
     }
 
     pub async fn upsert(&self, entry: &Kv) -> Result<()> {
+        let key = entry.key.clone();
         let value = serde_json::to_string(&entry.value)?;
-        let connection = self.connection.lock().await;
-        connection
-            .execute(UPSERT_SQL, [entry.key.as_str(), value.as_str()])
+        let mut connection = self.database.connection.lock().await;
+        let tx = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
             .await?;
-
+        tx.execute(UPSERT_SQL, [key.as_str(), value.as_str()])
+            .await?;
+        tx.commit().await?;
         Ok(())
     }
 
-    pub async fn upsert_many(&self, entries: &[(&str, &serde_json::Value)]) -> Result<()> {
-        let mut connection = self.connection.lock().await;
+    pub async fn upsert_many(&self, entries: &[(&str, &Value)]) -> Result<()> {
+        let entries = entries
+            .iter()
+            .map(|(key, value)| Ok(((*key).to_owned(), serde_json::to_string(value)?)))
+            .collect::<Result<Vec<_>>>()?;
+        let mut connection = self.database.connection.lock().await;
         let tx = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .await?;
 
-        for (key, value) in entries {
-            let value = serde_json::to_string(value)?;
-            tx.execute(UPSERT_SQL, [*key, value.as_str()]).await?;
+        for (key, value) in &entries {
+            tx.execute(UPSERT_SQL, [key.as_str(), value.as_str()])
+                .await?;
         }
 
         tx.commit().await?;
@@ -48,11 +52,12 @@ impl KvRepository {
     }
 
     pub async fn get_by_key(&self, key: &str) -> Result<Option<Kv>> {
-        let connection = self.connection.lock().await;
+        let key = key.to_owned();
+        let connection = self.database.connection.lock().await;
         let mut rows = connection
             .query(
                 "SELECT key, value, created_at, updated_at FROM kv WHERE key = ?1",
-                [key],
+                [key.as_str()],
             )
             .await?;
 
@@ -64,7 +69,7 @@ impl KvRepository {
     }
 
     pub async fn list(&self, limit: u32, offset: u32) -> Result<Vec<Kv>> {
-        let connection = self.connection.lock().await;
+        let connection = self.database.connection.lock().await;
         let mut rows = connection
             .query(
                 "
@@ -86,11 +91,14 @@ impl KvRepository {
     }
 
     pub async fn delete(&self, key: &str) -> Result<()> {
-        let connection = self.connection.lock().await;
-        connection
-            .execute("DELETE FROM kv WHERE key = ?1", [key])
+        let key = key.to_owned();
+        let mut connection = self.database.connection.lock().await;
+        let tx = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
             .await?;
-
+        tx.execute("DELETE FROM kv WHERE key = ?1", [key.as_str()])
+            .await?;
+        tx.commit().await?;
         Ok(())
     }
 }

@@ -13,7 +13,7 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use local::ZygoLocalService;
+use local::{DEFAULT_DATABASE_BUSY_TIMEOUT, ZygoLocalConfig, ZygoLocalService};
 use ratatui::{
     Terminal, TerminalOptions, Viewport, backend::CrosstermBackend, widgets::TableState,
 };
@@ -226,7 +226,11 @@ pub async fn run_workflow(
     // 4. Create a zygo service and start the workflow
     let num_workers = workers.unwrap_or(1); // TODO: Use CPU core count
     let config = ZygoConfig::new(num_workers);
-    let service = ZygoLocalService::new(config).await?;
+    let service = ZygoLocalService::new(ZygoLocalConfig {
+        base: config,
+        database_busy_timeout: DEFAULT_DATABASE_BUSY_TIMEOUT,
+    })
+    .await?;
 
     let data_ref = DataReference {
         uri: fsspec_uri.to_string(),

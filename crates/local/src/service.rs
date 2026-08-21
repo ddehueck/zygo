@@ -1,17 +1,17 @@
-use std::{io, path::PathBuf, sync::Arc};
+use std::{io, path::PathBuf};
 
 use anyhow::Result;
 use serde_json::Value;
-use tokio::sync::Mutex;
-use turso::Builder;
+
 use zygo_core::{
-    Zygo, ZygoConfig,
+    Zygo,
     models::{DataReference, WorkflowRunId, WorkflowSchema},
     store::StorageProvider,
 };
 
 use crate::{
-    db::{KvRepository, WorkflowRun, WorkflowRunRepository, migrate},
+    ZygoLocalConfig,
+    db::{Db, KvRepository, WorkflowRun, WorkflowRunRepository},
     paths,
     repos::Repos,
     stream_processor::LocalStreamProcessor,
@@ -19,7 +19,8 @@ use crate::{
 
 impl StorageProvider for KvRepository {
     async fn put(&self, entries: &[(&str, &Value)]) -> Result<()> {
-        self.upsert_many(entries).await
+        self.upsert_many(entries).await?;
+        Ok(())
     }
 
     async fn get(&self, key: &str) -> Result<Option<Value>> {
@@ -50,20 +51,15 @@ impl ZygoLocalService {
         paths::delete_database()
     }
 
-    pub async fn new(config: ZygoConfig) -> Result<Self> {
+    pub async fn new(config: ZygoLocalConfig) -> Result<Self> {
         let path = Self::database_path()?.to_string_lossy().into_owned();
-        let database = Builder::new_local(&path).build().await?;
-        let mut connection = database.connect()?;
-
-        migrate(&mut connection).await?;
-
-        let connection = Arc::new(Mutex::new(connection));
-        let workflow_runs = WorkflowRunRepository::new(connection.clone());
-        let kv = KvRepository::new(connection);
+        let database = Db::open(&path, config.database_busy_timeout).await?;
+        let workflow_runs = WorkflowRunRepository::new(database.clone());
+        let kv = KvRepository::new(database);
         let store = zygo_core::store::Store::new(kv.clone());
 
         Ok(Self {
-            base: Zygo::new(store, config),
+            base: Zygo::new(store, config.base),
             repos: Repos { kv, workflow_runs },
         })
     }
