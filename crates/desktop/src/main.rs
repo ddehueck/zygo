@@ -43,6 +43,7 @@ fn main() {
             cx.set_global(theme::Theme::dark());
             cx.set_global(dependencies::AppStartup::default());
             open_window(cx).expect("failed to open Zygo desktop window");
+            cx.activate(true);
 
             let task = cx.spawn(async move |cx| {
                 let service = cx

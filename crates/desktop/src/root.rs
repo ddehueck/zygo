@@ -2,12 +2,13 @@ use gpui::{AnyElement, App, Context, Entity, Render, RenderOnce, Window, div, pr
 
 use crate::{
     Routes, dependencies, features,
-    features::runs::ui::RunDetailView,
+    features::runs::ui::{RunDetailView, RunListView},
     navigation::{WorkflowRunRoutes, WorkflowRunsRoutes},
     theme, ui,
 };
 
 pub struct ZygoDesktop {
+    run_list_view: Entity<RunListView>,
     detail_view: Entity<RunDetailView>,
 }
 
@@ -16,6 +17,7 @@ impl ZygoDesktop {
         // TODO: should the router be incharge of loading view entities lazily as needed?
         // Or just have optional entities on the root entity that we lazy load via helpers
         Self {
+            run_list_view: cx.new(RunListView::new),
             detail_view: cx.new(RunDetailView::new),
         }
     }
@@ -41,7 +43,7 @@ impl Render for ZygoDesktop {
 
         let content: AnyElement = match current_route {
             Routes::WorkflowRuns(WorkflowRunsRoutes::Index) => {
-                features::runs::ui::RunListView::new().into_any_element()
+                self.run_list_view.clone().into_any_element()
             }
             Routes::WorkflowRuns(WorkflowRunsRoutes::Run {
                 id,

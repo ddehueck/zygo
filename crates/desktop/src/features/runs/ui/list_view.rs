@@ -1,4 +1,4 @@
-use gpui::{App, MouseButton, RenderOnce, Window, div, prelude::*};
+use gpui::{Context, Entity, MouseButton, Render, Window, div, prelude::*, px};
 use local::db::WorkflowRun;
 use zygo_core::models::WorkflowRunId;
 
@@ -6,19 +6,90 @@ use crate::{
     Routes, dependencies,
     navigation::{NavigationHandler, WorkflowRunRoutes, WorkflowRunsRoutes},
     theme::Theme,
+    ui::{SidebarLayout, SidebarSide},
 };
 
-#[derive(IntoElement)]
-pub struct RunListView;
+pub struct RunListView {
+    layout: Entity<SidebarLayout>,
+}
 
 impl RunListView {
-    pub fn new() -> Self {
-        Self
+    pub fn new(cx: &mut Context<Self>) -> Self {
+        let sidebar = cx.new(|_| RunListSidebar);
+        let content = cx.new(|_| RunListContent);
+        let layout = cx.new(|_| {
+            SidebarLayout::new(sidebar, content)
+                .sidebar_side(SidebarSide::Right)
+                .min_sidebar_width(px(180.0))
+                .max_sidebar_width(px(360.0))
+                .sidebar_width(px(220.0))
+        });
+
+        Self { layout }
     }
 }
 
-impl RenderOnce for RunListView {
-    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+impl Render for RunListView {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        div().size_full().child(self.layout.clone())
+    }
+}
+
+struct RunListSidebar;
+
+impl Render for RunListSidebar {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let colors = cx.global::<Theme>().colors;
+
+        div()
+            .flex()
+            .flex_col()
+            .size_full()
+            .gap_5()
+            .p_5()
+            .bg(colors.surface_sunken)
+            .child(
+                div()
+                    .text_lg()
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .child("Run explorer"),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_2()
+                    .text_color(colors.text_secondary)
+                    .child("Drag the divider to resize this sidebar."),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_2()
+                    .pt_3()
+                    .border_t_1()
+                    .border_color(colors.border_muted)
+                    .child(
+                        div()
+                            .text_sm()
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(colors.text_primary)
+                            .child("Filters"),
+                    )
+                    .child(
+                        div()
+                            .text_color(colors.text_secondary)
+                            .child("All workflow runs"),
+                    ),
+            )
+    }
+}
+
+struct RunListContent;
+
+impl Render for RunListContent {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let colors = cx.global::<Theme>().colors;
         let navigate = dependencies::use_navigation(cx);
         let runs = dependencies::use_runs(cx);
