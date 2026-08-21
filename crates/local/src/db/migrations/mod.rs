@@ -8,10 +8,6 @@ const MIGRATIONS: &[(i64, &str)] = &[
 ];
 
 pub async fn migrate(connection: &mut Connection) -> Result<()> {
-    migrate_once(connection).await
-}
-
-async fn migrate_once(connection: &mut Connection) -> Result<()> {
     let tx = connection
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .await?;
