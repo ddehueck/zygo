@@ -4,8 +4,9 @@ use gpui::{App, AppContext, Entity, Global};
 use local::ZygoLocalService;
 
 use crate::{
+    features::runs::RunSync,
     navigation::{NavigationHandler, Navigator, Routes, WorkflowRunsRoutes},
-    stores::{TagStore, WorkflowRunStore},
+    stores::{TagStore, WorkflowRunDetailStore, WorkflowRunStore},
 };
 
 /// Application-wide handles for shared state.
@@ -36,6 +37,8 @@ pub struct AppDeps {
     navigation: NavigationHandler,
     runs: Entity<WorkflowRunStore>,
     tags: Entity<TagStore>,
+    run_details: Entity<WorkflowRunDetailStore>,
+    _run_sync: Entity<RunSync>,
 }
 
 impl Global for AppDeps {}
@@ -45,7 +48,14 @@ impl AppDeps {
         let service = Arc::new(service);
         let runs_repository = service.repos.workflow_runs.clone();
         let run_summaries_repository = service.repos.workflow_run_summaries.clone();
+        let job_run_summaries_repository = service.repos.job_run_summaries.clone();
         let tags_repository = service.repos.workflow_runs.clone();
+
+        let runs =
+            cx.new(|cx| WorkflowRunStore::new(runs_repository, run_summaries_repository, cx));
+        let run_details = cx.new(|_| WorkflowRunDetailStore::new(job_run_summaries_repository));
+        let run_sync =
+            cx.new(|cx| RunSync::new(service.clone(), runs.clone(), run_details.clone(), cx));
 
         let navigator = cx.new(|_| Navigator::new(Routes::WorkflowRuns(WorkflowRunsRoutes::Index)));
         let navigation_navigator = navigator.clone();
@@ -59,8 +69,10 @@ impl AppDeps {
             service,
             navigator,
             navigation,
-            runs: cx.new(|cx| WorkflowRunStore::new(runs_repository, run_summaries_repository, cx)),
+            runs,
             tags: cx.new(|_| TagStore::new(tags_repository)),
+            run_details,
+            _run_sync: run_sync,
         }
     }
 
@@ -103,6 +115,10 @@ pub fn use_runs(cx: &App) -> Entity<WorkflowRunStore> {
 
 pub fn use_tags(cx: &App) -> Entity<TagStore> {
     use_app_dependencies(cx).tags()
+}
+
+pub fn use_run_details(cx: &App) -> Entity<WorkflowRunDetailStore> {
+    use_app_dependencies(cx).run_details.clone()
 }
 
 pub fn use_service(cx: &App) -> Arc<ZygoLocalService> {

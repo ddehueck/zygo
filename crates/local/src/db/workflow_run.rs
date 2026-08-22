@@ -85,7 +85,7 @@ impl WorkflowRunRepository {
         let connection = self.database.connection.lock().await;
         let mut rows = connection
             .query(
-                "SELECT id, workflow_id, content_hash, created_at FROM workflow_runs WHERE id = ?1",
+                "SELECT rowid AS row_id, id, workflow_id, content_hash, created_at FROM workflow_runs WHERE id = ?1",
                 [id],
             )
             .await?;
@@ -102,11 +102,28 @@ impl WorkflowRunRepository {
         let mut rows = connection
             .query(
                 "
-                    SELECT id, workflow_id, content_hash, created_at
+                    SELECT rowid AS row_id, id, workflow_id, content_hash, created_at
                     FROM workflow_runs
-                    ORDER BY created_at ASC, rowid ASC
+                    ORDER BY rowid ASC
                 ",
                 (),
+            )
+            .await?;
+
+        Self::collect_runs(&mut rows).await
+    }
+
+    pub async fn list_after(&self, row_id: i64) -> Result<Vec<WorkflowRunRow>> {
+        let connection = self.database.connection.lock().await;
+        let mut rows = connection
+            .query(
+                "
+                    SELECT rowid AS row_id, id, workflow_id, content_hash, created_at
+                    FROM workflow_runs
+                    WHERE rowid > ?1
+                    ORDER BY rowid ASC
+                ",
+                [row_id],
             )
             .await?;
 
@@ -118,7 +135,12 @@ impl WorkflowRunRepository {
         let mut rows = connection
             .query(
                 "
-                    SELECT workflow_runs.id, workflow_runs.workflow_id, workflow_runs.content_hash, workflow_runs.created_at
+                    SELECT
+                        workflow_runs.rowid AS row_id,
+                        workflow_runs.id,
+                        workflow_runs.workflow_id,
+                        workflow_runs.content_hash,
+                        workflow_runs.created_at
                     FROM tags
                     INNER JOIN tag_associations ON tag_associations.tag_id = tags.id
                     INNER JOIN workflow_runs

@@ -80,6 +80,14 @@ impl Sidebar {
 
 **GPUI Integration:** All stores are defined in a top level `stores` module and then exposed to the GPUI App via an injected stores Entity.
 
+### Data Syncing
+
+A workflow run may be started in the CLI and monitored in the desktop app. This functionality requires data synchronization between the processes.
+
+Whichever processes starts a job is responsible for processing it's event stream and writing to the summary tables in the local db. The other process must then either, subscribe as a reader to get notified when a stream record has been processed by the engine via the core `ZygoService` or poll the summary tables directly.
+
+The data store concept introduced above allows a UI to watch the in memory data while issuing requests or responding to notifications in the background. So, at desktop startup, we initialize a background task to poll the workflow run table with a high-water mark to watch for new runs. When a run is detected, we subscribe as a reader to the `ZygoService` to get notified as the run is processed. We then coalesce these notifications into a single background task to update the data in the data stores. This let's us debounce the rate at which we fetch updates from the db.
+
 ## UI Rendering
 
 GPUI provides two traits to render UI: Render and RenderOnce. Render trait implementations are backed by an Entity with persistent GPUI state. We will use each as appropriate.

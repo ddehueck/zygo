@@ -5,6 +5,7 @@ use super::error::{Error, Result};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorkflowRunRow {
+    pub row_id: i64,
     pub id: String,
     pub workflow_id: String,
     pub content_hash: String,
@@ -14,6 +15,7 @@ pub struct WorkflowRunRow {
 impl WorkflowRunRow {
     pub fn from_row(row: &Row, rows: &Rows) -> Result<Self> {
         Ok(Self {
+            row_id: row.get(rows.column_index("row_id")?)?,
             id: row.get(rows.column_index("id")?)?,
             workflow_id: row.get(rows.column_index("workflow_id")?)?,
             content_hash: row.get(rows.column_index("content_hash")?)?,
