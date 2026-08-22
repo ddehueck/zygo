@@ -1,5 +1,7 @@
 use zygo_core::ipc;
-use zygo_core::models::{ChannelId, ContentHash, Job, JobEntrypoint, WorkflowId, WorkflowSchema};
+use zygo_core::models::{
+    Channel, ChannelId, ContentHash, FileExtension, Job, JobEntrypoint, WorkflowId, WorkflowSchema,
+};
 
 use crate::python::types::WorkflowMetadata;
 
@@ -14,6 +16,21 @@ pub fn workflow_schema_from_metadata(
     python: &str,
 ) -> Result<WorkflowSchema, zygo_core::models::DomainError> {
     let content_hash = ContentHash::try_from(metadata.content_hash)?;
+
+    let channels = metadata
+        .channels
+        .into_iter()
+        .map(|channel| {
+            Ok(Channel {
+                id: ChannelId::try_from(channel.id)?,
+                accepted_file_extensions: channel
+                    .accepted_file_extensions
+                    .into_iter()
+                    .map(FileExtension::from)
+                    .collect(),
+            })
+        })
+        .collect::<Result<Vec<_>, zygo_core::models::DomainError>>()?;
 
     let jobs = metadata
         .jobs
@@ -37,5 +54,6 @@ pub fn workflow_schema_from_metadata(
         input_channel_id: ChannelId::try_from(metadata.input_channel_id)?,
         output_channel_id: ChannelId::try_from(metadata.output_channel_id)?,
         jobs,
+        channels,
     })
 }

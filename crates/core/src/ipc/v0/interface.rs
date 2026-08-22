@@ -15,6 +15,7 @@ pub const ZYGO_PKG_INTERNAL_CLI_MODULE: &str = "zygo._internal.ipc.v0"; // TODO:
 #[serde(rename_all = "snake_case")]
 pub struct ChannelMetadata {
     pub id: String,
+    pub accepted_file_extensions: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
