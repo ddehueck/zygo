@@ -1,10 +1,8 @@
-use std::sync::Arc;
-
 use gpui::{Context, Render, Window, div, prelude::*, px};
 use gpuikit::elements::input::input;
 use gpuikit::input::InputState;
-use local::{Tag, ZygoLocalService};
-use zygo_core::models::{EventKind, StreamItem, WorkflowRunId};
+use local::{JobRunSummaryRow, TagRow};
+use zygo_core::models::WorkflowRunId;
 
 use crate::{
     Routes, dependencies,
@@ -16,16 +14,6 @@ use crate::{
 pub struct RunDetailView {
     run_id: Option<WorkflowRunId>,
     workflow_run_input: gpui::Entity<InputState>,
-    job_runs: Vec<JobRunSummary>,
-    jobs_loading: bool,
-    jobs_error: Option<String>,
-}
-
-#[derive(Clone)]
-struct JobRunSummary {
-    job_id: String,
-    job_run_id: String,
-    status: String,
 }
 
 impl RunDetailView {
@@ -33,47 +21,23 @@ impl RunDetailView {
         Self {
             run_id: None,
             workflow_run_input: cx.new(|cx| InputState::new_singleline(cx)),
-            job_runs: Vec::new(),
-            jobs_loading: false,
-            jobs_error: None,
         }
     }
 
     pub fn set_run_id(&mut self, run_id: WorkflowRunId, cx: &mut Context<Self>) {
         if self.run_id.as_ref() != Some(&run_id) {
             self.run_id = Some(run_id.clone());
-            self.job_runs.clear();
-            self.jobs_loading = true;
-            self.jobs_error = None;
 
-            let service = dependencies::use_service(cx);
+            let details = dependencies::use_run_details(cx);
+            details.update(cx, |store, cx| {
+                store.refresh(run_id.clone(), cx).detach();
+            });
+
             let tags = dependencies::use_tags(cx);
             tags.update(cx, |store, cx| {
                 store.refresh(run_id.clone(), cx).detach();
             });
 
-            let load_run_id = run_id.clone();
-            let result_run_id = run_id;
-            cx.spawn(async move |view, cx| {
-                let result = cx
-                    .background_spawn(async move { load_job_runs(service, load_run_id).await })
-                    .await;
-
-                let _ = view.update(cx, move |view, cx| {
-                    // Ignore a load that completed after navigating to another run.
-                    if view.run_id.as_ref() != Some(&result_run_id) {
-                        return;
-                    }
-
-                    view.jobs_loading = false;
-                    match result {
-                        Ok(job_runs) => view.job_runs = job_runs,
-                        Err(error) => view.jobs_error = Some(error.to_string()),
-                    }
-                    cx.notify();
-                });
-            })
-            .detach();
             cx.notify();
         }
     }
@@ -91,6 +55,12 @@ impl Render for RunDetailView {
             .expect("detail view must have a run ID before rendering")
             .clone();
         let workflow_run_input = self.workflow_run_input.clone();
+        let details = dependencies::use_run_details(cx);
+        let detail_store = details.read(cx);
+        let job_runs = detail_store.summaries_for(&run_id).unwrap_or(&[]);
+        let jobs_loading = detail_store.is_loading(&run_id);
+        let jobs_error = detail_store.error_for(&run_id);
+
         let tags = dependencies::use_tags(cx);
         let tag_store = tags.read(cx);
         let run_tags = tag_store.tags_for(&run_id).unwrap_or(&[]);
@@ -148,9 +118,9 @@ impl Render for RunDetailView {
             )
             .child(tags_section(run_tags, tags_loading, tags_error, colors))
             .child(job_runs_section(
-                &self.job_runs,
-                self.jobs_loading,
-                self.jobs_error.as_deref(),
+                job_runs,
+                jobs_loading,
+                jobs_error,
                 colors,
                 run_id.clone(),
                 navigate,
@@ -184,63 +154,8 @@ impl Render for RunDetailView {
     }
 }
 
-// todo should expose a job summary builder in local that takes a stream
-// perhaps should cache a job summary in the db once stream has been read/summarized?
-async fn load_job_runs(
-    service: Arc<ZygoLocalService>,
-    run_id: WorkflowRunId,
-) -> anyhow::Result<Vec<JobRunSummary>> {
-    let records = service.base.stream(&run_id).collect().await?;
-    let mut job_runs = Vec::new();
-
-    for record in records {
-        if let StreamItem::Event(event) = record.item {
-            update_job_runs(&mut job_runs, event.kind);
-        }
-    }
-
-    Ok(job_runs)
-}
-
-fn update_job_runs(job_runs: &mut Vec<JobRunSummary>, event: EventKind) {
-    let (job_id, job_run_id, status) = match event {
-        EventKind::JobStarted(data) => (
-            data.job_id.to_string(),
-            data.job_run_id.to_string(),
-            "running",
-        ),
-        EventKind::JobSucceeded(data) => (
-            data.job_id.to_string(),
-            data.job_run_id.to_string(),
-            "succeeded",
-        ),
-        EventKind::JobFailed(data) => (
-            data.job_id.to_string(),
-            data.job_run_id.to_string(),
-            "failed",
-        ),
-        EventKind::DataReferenceInserted(_)
-        | EventKind::ChannelItemInserted(_)
-        | EventKind::TagInserted(_) => return,
-    };
-
-    if let Some(job_run) = job_runs
-        .iter_mut()
-        .find(|job_run| job_run.job_run_id == job_run_id)
-    {
-        job_run.job_id = job_id;
-        job_run.status = status.to_owned();
-    } else {
-        job_runs.push(JobRunSummary {
-            job_id,
-            job_run_id,
-            status: status.to_owned(),
-        });
-    }
-}
-
 fn tags_section(
-    tags: &[Tag],
+    tags: &[TagRow],
     loading: bool,
     error: Option<&str>,
     colors: crate::theme::Colors,
@@ -313,7 +228,7 @@ fn tag_table_cell(value: impl Into<gpui::SharedString>) -> gpui::Div {
         .child(value.into())
 }
 
-fn tag_row(tag: &Tag, index: usize, colors: crate::theme::Colors) -> impl IntoElement {
+fn tag_row(tag: &TagRow, index: usize, colors: crate::theme::Colors) -> impl IntoElement {
     div()
         .id(format!("workflow-run-tag-{index}"))
         .flex()
@@ -326,7 +241,7 @@ fn tag_row(tag: &Tag, index: usize, colors: crate::theme::Colors) -> impl IntoEl
 }
 
 fn job_runs_section(
-    job_runs: &[JobRunSummary],
+    job_runs: &[JobRunSummaryRow],
     loading: bool,
     error: Option<&str>,
     colors: crate::theme::Colors,
@@ -403,7 +318,7 @@ fn job_table_cell(value: impl Into<gpui::SharedString>) -> gpui::Div {
 }
 
 fn job_run_row(
-    job_run: &JobRunSummary,
+    job_run: &JobRunSummaryRow,
     colors: crate::theme::Colors,
     run_id: WorkflowRunId,
     on_navigate: NavigationHandler,

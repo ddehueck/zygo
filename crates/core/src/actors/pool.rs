@@ -29,7 +29,7 @@ impl<S: StorageProvider> ActorPool<S> {
     ///! Idempotently initializes a workflow run with an actor.
     pub async fn run_with_actor(
         &self,
-        id: WorkflowRunId,
+        id: &WorkflowRunId,
         input: DataReference,
         schema: WorkflowSchema,
     ) -> Result<(), anyhow::Error> {

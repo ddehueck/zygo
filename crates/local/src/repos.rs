@@ -1,4 +1,6 @@
-use crate::db::{KvRepository, WorkflowRunRepository};
+use crate::db::{
+    JobRunSummaryRepository, KvRepository, WorkflowRunRepository, WorkflowRunSummaryRepository,
+};
 
 /// Repositories owned by a [`ZygoLocalService`](crate::ZygoLocalService).
 ///
@@ -7,4 +9,6 @@ use crate::db::{KvRepository, WorkflowRunRepository};
 pub struct Repos {
     pub kv: KvRepository,
     pub workflow_runs: WorkflowRunRepository,
+    pub workflow_run_summaries: WorkflowRunSummaryRepository,
+    pub job_run_summaries: JobRunSummaryRepository,
 }

@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use gpui::{AppContext, Context, EventEmitter, Task};
-use local::{Tag, WorkflowRunRepository};
+use local::{TagRow, WorkflowRunRepository};
 use zygo_core::models::WorkflowRunId;
 
 #[derive(Debug, Clone)]
@@ -18,7 +18,7 @@ pub enum TagStoreEvent {
 
 pub struct TagStore {
     repository: WorkflowRunRepository,
-    tags_by_run: HashMap<String, Vec<Tag>>,
+    tags_by_run: HashMap<String, Vec<TagRow>>,
     loading: HashSet<String>,
     errors: HashMap<String, String>,
 }
@@ -35,7 +35,7 @@ impl TagStore {
         }
     }
 
-    pub fn tags_for(&self, workflow_run_id: &WorkflowRunId) -> Option<&[Tag]> {
+    pub fn tags_for(&self, workflow_run_id: &WorkflowRunId) -> Option<&[TagRow]> {
         self.tags_by_run
             .get(workflow_run_id.as_ref())
             .map(Vec::as_slice)

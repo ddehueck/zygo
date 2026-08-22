@@ -2,7 +2,7 @@ use turso::transaction::TransactionBehavior;
 
 use super::{
     Db,
-    db_models::{Tag, WorkflowRun},
+    db_models::{TagRow, WorkflowRunRow},
     error::Result,
 };
 
@@ -81,11 +81,11 @@ impl WorkflowRunRepository {
         Ok(())
     }
 
-    pub async fn get_by_id(&self, id: &str) -> Result<Option<WorkflowRun>> {
+    pub async fn get_by_id(&self, id: &str) -> Result<Option<WorkflowRunRow>> {
         let connection = self.database.connection.lock().await;
         let mut rows = connection
             .query(
-                "SELECT id, workflow_id, content_hash, created_at FROM workflow_runs WHERE id = ?1",
+                "SELECT rowid AS row_id, id, workflow_id, content_hash, created_at FROM workflow_runs WHERE id = ?1",
                 [id],
             )
             .await?;
@@ -94,17 +94,17 @@ impl WorkflowRunRepository {
             return Ok(None);
         };
 
-        Ok(Some(WorkflowRun::from_row(&row, &rows)?))
+        Ok(Some(WorkflowRunRow::from_row(&row, &rows)?))
     }
 
-    pub async fn list_all(&self) -> Result<Vec<WorkflowRun>> {
+    pub async fn list_all(&self) -> Result<Vec<WorkflowRunRow>> {
         let connection = self.database.connection.lock().await;
         let mut rows = connection
             .query(
                 "
-                    SELECT id, workflow_id, content_hash, created_at
+                    SELECT rowid AS row_id, id, workflow_id, content_hash, created_at
                     FROM workflow_runs
-                    ORDER BY created_at ASC, rowid ASC
+                    ORDER BY rowid ASC
                 ",
                 (),
             )
@@ -113,12 +113,34 @@ impl WorkflowRunRepository {
         Self::collect_runs(&mut rows).await
     }
 
-    pub async fn list_by_tag(&self, key: &str, value: &str) -> Result<Vec<WorkflowRun>> {
+    pub async fn list_after(&self, row_id: i64) -> Result<Vec<WorkflowRunRow>> {
         let connection = self.database.connection.lock().await;
         let mut rows = connection
             .query(
                 "
-                    SELECT workflow_runs.id, workflow_runs.workflow_id, workflow_runs.content_hash, workflow_runs.created_at
+                    SELECT rowid AS row_id, id, workflow_id, content_hash, created_at
+                    FROM workflow_runs
+                    WHERE rowid > ?1
+                    ORDER BY rowid ASC
+                ",
+                [row_id],
+            )
+            .await?;
+
+        Self::collect_runs(&mut rows).await
+    }
+
+    pub async fn list_by_tag(&self, key: &str, value: &str) -> Result<Vec<WorkflowRunRow>> {
+        let connection = self.database.connection.lock().await;
+        let mut rows = connection
+            .query(
+                "
+                    SELECT
+                        workflow_runs.rowid AS row_id,
+                        workflow_runs.id,
+                        workflow_runs.workflow_id,
+                        workflow_runs.content_hash,
+                        workflow_runs.created_at
                     FROM tags
                     INNER JOIN tag_associations ON tag_associations.tag_id = tags.id
                     INNER JOIN workflow_runs
@@ -133,7 +155,7 @@ impl WorkflowRunRepository {
         Self::collect_runs(&mut rows).await
     }
 
-    pub async fn list_tags(&self, workflow_run_id: &str) -> Result<Vec<Tag>> {
+    pub async fn list_tags(&self, workflow_run_id: &str) -> Result<Vec<TagRow>> {
         let connection = self.database.connection.lock().await;
         let mut rows = connection
             .query(
@@ -154,16 +176,16 @@ impl WorkflowRunRepository {
 
         let mut tags = Vec::new();
         while let Some(row) = rows.next().await? {
-            tags.push(Tag::from_row(&row, &rows)?);
+            tags.push(TagRow::from_row(&row, &rows)?);
         }
 
         Ok(tags)
     }
 
-    async fn collect_runs(rows: &mut turso::Rows) -> Result<Vec<WorkflowRun>> {
+    async fn collect_runs(rows: &mut turso::Rows) -> Result<Vec<WorkflowRunRow>> {
         let mut workflow_runs = Vec::new();
         while let Some(row) = rows.next().await? {
-            workflow_runs.push(WorkflowRun::from_row(&row, rows)?);
+            workflow_runs.push(WorkflowRunRow::from_row(&row, rows)?);
         }
 
         Ok(workflow_runs)

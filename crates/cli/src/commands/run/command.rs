@@ -254,7 +254,7 @@ pub async fn run_workflow(
     // that notifies when the engine has made a meaningful update and then
     // advancing the local stream processor.
     let mut rx = service.base.subscribe(&run_id).await?;
-    let stream_processor = service.stream_processor(&run_id);
+    let mut stream_processor = service.stream_processor(&run_id);
     let mut cursor = RunCursor::default();
 
     let mut summary = WorkflowRunSummary::new(metadata.id.clone());
