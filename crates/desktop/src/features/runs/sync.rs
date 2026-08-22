@@ -1,19 +1,18 @@
 use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use gpui::{AppContext, Context, Entity, Task};
-use local::{WorkflowRunSummaryRow, ZygoLocalService};
+use local::ZygoLocalService;
 use zygo_core::models::WorkflowRunId;
 
 use crate::stores::{WorkflowRunDetailStore, WorkflowRunStore};
 
 const RUN_POLL_INTERVAL: Duration = Duration::from_secs(1);
-const SUMMARY_POLL_INTERVAL: Duration = Duration::from_secs(1);
 const REFRESH_DEBOUNCE: Duration = Duration::from_millis(250);
 
 /// Coordinates workflow-run discovery and background updates to the run store.
 ///
-/// A service actor can be subscribed to when it belongs to this process. Runs
-/// created by another process are synchronized by watching their summary row.
+/// Runs are discovered through one repository poller. When a run belongs to
+/// this process, its engine watch channel drives subsequent store refreshes.
 pub struct RunSync {
     service: Arc<ZygoLocalService>,
     runs: Entity<WorkflowRunStore>,
@@ -86,6 +85,11 @@ impl RunSync {
         }
     }
 
+    /// Registers a run created by this process without waiting for the discovery poll.
+    pub fn observe_new_run(&mut self, run_id: WorkflowRunId, cx: &mut Context<Self>) {
+        self.observe_run(run_id, cx);
+    }
+
     fn observe_run(&mut self, run_id: WorkflowRunId, cx: &mut Context<Self>) {
         let run_key = run_id.to_string();
         if !self.observed_runs.insert(run_key) {
@@ -98,7 +102,6 @@ impl RunSync {
 
         let service = self.service.clone();
         let subscription_run_id = run_id.clone();
-        let fallback_run_id = run_id;
         let task = cx.spawn(async move |sync, cx| {
             match service.base.subscribe(&subscription_run_id).await {
                 Ok(mut receiver) => {
@@ -127,57 +130,8 @@ impl RunSync {
                     }
                 }
                 Err(_) => {
-                    let _ = sync.update(cx, |sync, cx| {
-                        sync.start_summary_poller(fallback_run_id, cx);
-                    });
+                    // There is no in-process actor to observe for this run.
                 }
-            }
-        });
-        self.tasks.push(task);
-    }
-
-    fn start_summary_poller(&mut self, run_id: WorkflowRunId, cx: &mut Context<Self>) {
-        let repository = self.service.repos.workflow_run_summaries.clone();
-        let task_run_id = run_id.clone();
-        let task = cx.spawn(async move |sync, cx| {
-            let executor = cx.background_executor().clone();
-            let mut previous: Option<WorkflowRunSummaryRow> = None;
-
-            loop {
-                let repository = repository.clone();
-                let query_run_id = task_run_id.clone();
-                let result = cx
-                    .background_spawn(async move {
-                        repository
-                            .get_by_workflow_run_id(query_run_id.as_ref())
-                            .await
-                    })
-                    .await;
-
-                match result {
-                    Ok(Some(summary)) => {
-                        let changed = previous.as_ref() != Some(&summary);
-                        let terminal = matches!(summary.status.as_str(), "succeeded" | "failed");
-                        previous = Some(summary);
-
-                        if changed
-                            && sync
-                                .update(cx, |sync, cx| {
-                                    sync.request_refresh(task_run_id.clone(), cx)
-                                })
-                                .is_err()
-                        {
-                            return;
-                        }
-
-                        if terminal {
-                            return;
-                        }
-                    }
-                    Ok(None) | Err(_) => {}
-                }
-
-                executor.timer(SUMMARY_POLL_INTERVAL).await;
             }
         });
         self.tasks.push(task);

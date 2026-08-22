@@ -30,6 +30,7 @@ env/
 ENV/
 
 # Test / lint / type-check caches
+packages/py-zygo/todoreplaceme/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
