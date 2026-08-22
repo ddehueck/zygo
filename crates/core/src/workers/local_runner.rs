@@ -50,7 +50,10 @@ impl<S: StorageProvider> LocalJobRunner<S> {
             JobEntrypoint::Python(cli) => cli.run_entrypoint(self.args.clone()),
         };
 
-        let worker_log = WorkerLog::new(JobRunId::try_from(self.args.job_run_id.clone())?);
+        let worker_log = WorkerLog::in_directory(
+            JobRunId::try_from(self.args.job_run_id.clone())?,
+            self.entrypoint.cwd(),
+        );
         let mut log_file = worker_log.get_write_file().await?;
 
         // Both streams share one OS pipe, so order is kernel arrival order; child buffering and

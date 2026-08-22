@@ -1,29 +1,47 @@
-use std::path::PathBuf;
-
-use tokio::{
+use std::{
     fs::{self, File},
-    io::{AsyncReadExt, BufReader},
+    io::{BufReader, Read},
+    path::PathBuf,
 };
+
+use tokio::fs::File as TokioFile;
 
 use crate::models::JobRunId;
 
 pub struct WorkerLog {
     job_run_id: JobRunId,
+    cwd: Option<PathBuf>,
 }
 
 impl WorkerLog {
     pub fn new(job_run_id: JobRunId) -> Self {
-        Self { job_run_id }
+        Self {
+            job_run_id,
+            cwd: None,
+        }
+    }
+
+    pub fn in_directory(job_run_id: JobRunId, cwd: impl Into<PathBuf>) -> Self {
+        Self {
+            job_run_id,
+            cwd: Some(cwd.into()),
+        }
     }
 
     fn log_file_path(&self) -> PathBuf {
-        // TODO: We'll need the workflow metadata to include the store location
-        // for now, we'll ignore that and use a relative path
-        PathBuf::from(format!("{}.log", self.job_run_id))
+        // TODO: I think the engine will just read the log stream with no writing to disk
+        // Then the client/python lib will be in charge of persisting the log to a file and storing that in
+        // the user-configured store.
+        // So, there is definitely a refactor brewing in this are of the architecture.
+        let filename = format!("{}.log", self.job_run_id);
+        match &self.cwd {
+            Some(cwd) => cwd.join(&filename),
+            None => PathBuf::from(filename),
+        }
     }
 
-    pub async fn get_write_file(&self) -> std::io::Result<File> {
-        fs::OpenOptions::new()
+    pub async fn get_write_file(&self) -> std::io::Result<TokioFile> {
+        tokio::fs::OpenOptions::new()
             .write(true)
             .create(true)
             .append(true)
@@ -31,11 +49,15 @@ impl WorkerLog {
             .await
     }
 
-    pub async fn get_read_file(&self) -> std::io::Result<File> {
-        fs::OpenOptions::new()
+    pub async fn get_read_file(&self) -> std::io::Result<TokioFile> {
+        tokio::fs::OpenOptions::new()
             .read(true)
             .open(self.log_file_path())
             .await
+    }
+
+    fn get_read_file_sync(&self) -> std::io::Result<File> {
+        fs::OpenOptions::new().read(true).open(self.log_file_path())
     }
 }
 
@@ -47,12 +69,26 @@ pub struct WorkerLogReader {
 impl WorkerLogReader {
     /// Opens a log and loads all content already present in the file.
     pub async fn new(job_run_id: JobRunId) -> std::io::Result<Self> {
-        let file = WorkerLog::new(job_run_id).get_read_file().await?;
+        Self::new_sync(job_run_id)
+    }
+
+    /// Opens a log without depending on an async runtime.
+    pub fn new_sync(job_run_id: JobRunId) -> std::io::Result<Self> {
+        Self::from_log(WorkerLog::new(job_run_id))
+    }
+
+    /// Opens a log from a specific job entrypoint working directory.
+    pub fn new_sync_in(job_run_id: JobRunId, cwd: impl Into<PathBuf>) -> std::io::Result<Self> {
+        Self::from_log(WorkerLog::in_directory(job_run_id, cwd))
+    }
+
+    fn from_log(log: WorkerLog) -> std::io::Result<Self> {
+        let file = log.get_read_file_sync()?;
         let mut reader = Self {
             reader: BufReader::new(file),
             contents: Vec::new(),
         };
-        reader.refresh().await?;
+        reader.refresh_sync()?;
 
         Ok(reader)
     }
@@ -63,7 +99,12 @@ impl WorkerLogReader {
 
     /// Appends bytes written since the previous refresh to the retained contents.
     pub async fn refresh(&mut self) -> std::io::Result<()> {
-        self.reader.read_to_end(&mut self.contents).await?;
+        self.refresh_sync()
+    }
+
+    /// Appends bytes written since the previous refresh to the retained contents.
+    pub fn refresh_sync(&mut self) -> std::io::Result<()> {
+        self.reader.read_to_end(&mut self.contents)?;
         Ok(())
     }
 }
@@ -119,5 +160,29 @@ mod tests {
         tokio::fs::remove_file(log_path)
             .await
             .expect("test log should be removed");
+    }
+
+    #[test]
+    fn reader_loads_log_from_entrypoint_working_directory() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("test clock should be after the Unix epoch")
+            .as_nanos();
+        let job_run_id = JobRunId::try_from(format!(
+            "worker-log-reader-cwd-test-{}-{unique}",
+            std::process::id()
+        ))
+        .expect("test job run ID should be valid");
+        let cwd = std::env::temp_dir().join(format!("zygo-worker-log-cwd-{unique}"));
+        std::fs::create_dir_all(&cwd).expect("test working directory should be created");
+
+        let log_path = WorkerLog::in_directory(job_run_id.clone(), cwd.clone()).log_file_path();
+        std::fs::write(&log_path, b"entrypoint line\n").expect("test log should be created");
+
+        let reader = WorkerLogReader::new_sync_in(job_run_id, cwd.clone())
+            .expect("test log should open from its working directory");
+        assert_eq!(reader.contents(), b"entrypoint line\n");
+
+        std::fs::remove_dir_all(cwd).expect("test working directory should be removed");
     }
 }

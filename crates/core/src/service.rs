@@ -3,7 +3,7 @@ use crate::{
     context::ServiceContext,
     engine::EngineSnapshot,
     models::{DataReference, WorkflowRunId, WorkflowSchema},
-    store::{StorageProvider, Store},
+    store::{StorageProvider, Store, keyspace::KeySpace},
     stream::StreamReader,
     workers::WorkerPool,
 };
@@ -50,5 +50,17 @@ impl<S: StorageProvider> Zygo<S> {
 
     pub fn stream(&self, run_id: &WorkflowRunId) -> StreamReader<S> {
         StreamReader::new(self.store.clone(), run_id)
+    }
+
+    pub async fn workflow_schema(
+        &self,
+        run_id: &WorkflowRunId,
+    ) -> Result<Option<WorkflowSchema>, anyhow::Error> {
+        let schema_value = self.store.get(&KeySpace::run(run_id).schema()).await?;
+
+        schema_value
+            .map(serde_json::from_value)
+            .transpose()
+            .map_err(Into::into)
     }
 }

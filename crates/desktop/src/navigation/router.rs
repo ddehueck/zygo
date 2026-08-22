@@ -43,6 +43,7 @@ impl WorkflowRunsRoutes {
 pub enum WorkflowRunRoutes {
     Index,
     New,
+    JobLog { job_run_id: String, job_id: String },
 }
 
 impl WorkflowRunRoutes {
@@ -62,6 +63,21 @@ impl WorkflowRunRoutes {
             breadcrumbs.push(Breadcrumb {
                 label: "New".to_string(),
                 route: run_route(WorkflowRunRoutes::New),
+            });
+        }
+
+        if let WorkflowRunRoutes::JobLog { job_run_id, job_id } = self {
+            let job_run_id_suffix: String = job_run_id
+                .chars()
+                .skip(job_run_id.chars().count().saturating_sub(4))
+                .collect();
+
+            breadcrumbs.push(Breadcrumb {
+                label: format!("{} logs {}", job_id, job_run_id_suffix),
+                route: run_route(WorkflowRunRoutes::JobLog {
+                    job_run_id: job_run_id.clone(),
+                    job_id: job_id.clone(),
+                }),
             });
         }
 
