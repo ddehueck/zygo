@@ -25,7 +25,10 @@ impl From<&WorkflowBlueprint> for WorkflowSchema {
             .channels
             .iter()
             .cloned()
-            .map(|id| Channel { id })
+            .map(|id| Channel {
+                id,
+                accepted_file_extensions: Vec::new(),
+            })
             .collect();
         let jobs = blueprint.jobs.iter().map(Into::into).collect();
         let edges = blueprint

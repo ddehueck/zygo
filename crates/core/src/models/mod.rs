@@ -2,6 +2,7 @@ pub mod channel;
 pub mod commands;
 pub mod data_reference;
 pub mod event;
+mod file_extension;
 pub mod ids;
 pub mod job;
 pub mod job_entrypoint;
@@ -58,6 +59,7 @@ pub use event::{
     ChannelItemInsertedData, DataReferenceInsertedData, Event, EventKind, JobFailedData,
     JobRunSource, JobStartedData, JobSucceededData, Source, TagInsertedData,
 };
+pub use file_extension::FileExtension;
 pub use ids::*;
 pub use job::{Job, job_run_id};
 pub use job_entrypoint::JobEntrypoint;

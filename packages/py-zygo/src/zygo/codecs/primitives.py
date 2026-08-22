@@ -5,6 +5,7 @@ from zygo.codecs.base import (
     Codec,
     CodecDecodeError,
     CodecEncodeError,
+    FileExtension,
     FileFormat,
 )
 
@@ -20,10 +21,7 @@ class Bytes(Codec[bytes]):
     @property
     @override
     def format(self) -> FileFormat:
-        return FileFormat(
-            content_type="application/octet-stream",
-            extension=".bin",
-        )
+        return FileFormat(extension=FileExtension(".bin"))
 
     @override
     def encode(self, value: bytes, /) -> bytes:
@@ -47,10 +45,7 @@ class String(Codec[str]):
     @property
     @override
     def format(self) -> FileFormat:
-        return FileFormat(
-            content_type="text/plain; charset=utf-8",
-            extension=".txt",
-        )
+        return FileFormat(extension=FileExtension(".txt"))
 
     @override
     def encode(self, value: str, /) -> bytes:
@@ -77,10 +72,7 @@ class Integer(Codec[int]):
     @property
     @override
     def format(self) -> FileFormat:
-        return FileFormat(
-            content_type="text/plain; charset=us-ascii",
-            extension=".txt",
-        )
+        return FileFormat(extension=FileExtension(".txt"))
 
     @override
     def encode(self, value: int, /) -> bytes:
@@ -109,10 +101,7 @@ class Float(Codec[float]):
     @property
     @override
     def format(self) -> FileFormat:
-        return FileFormat(
-            content_type="text/plain; charset=us-ascii",
-            extension=".txt",
-        )
+        return FileFormat(extension=FileExtension(".txt"))
 
     @override
     def encode(self, value: float, /) -> bytes:
@@ -153,10 +142,7 @@ class Boolean(Codec[bool]):
     @property
     @override
     def format(self) -> FileFormat:
-        return FileFormat(
-            content_type="text/plain; charset=us-ascii",
-            extension=".txt",
-        )
+        return FileFormat(extension=FileExtension(".txt"))
 
     @override
     def encode(self, value: bool, /) -> bytes:

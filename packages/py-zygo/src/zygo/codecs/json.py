@@ -6,6 +6,7 @@ from zygo.codecs.base import (
     Codec,
     CodecDecodeError,
     CodecEncodeError,
+    FileExtension,
     FileFormat,
 )
 
@@ -28,10 +29,7 @@ class Json[T](Codec[T]):
     @property
     @override
     def format(self) -> FileFormat:
-        return FileFormat(
-            content_type="application/json",
-            extension=".json",
-        )
+        return FileFormat(extension=FileExtension(".json"))
 
     @override
     def encode(self, value: T, /) -> bytes:

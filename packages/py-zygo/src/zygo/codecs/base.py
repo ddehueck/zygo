@@ -1,13 +1,22 @@
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, Self
+
+
+class FileExtension(str):
+    """A file extension normalized without leading dots."""
+
+    def __new__(cls, value: str) -> Self:
+        return str.__new__(cls, value.lstrip("."))
+
+    def with_leading_dot(self) -> str:
+        return f".{self}"
 
 
 @dataclass(frozen=True)
 class FileFormat:
     """What the resulting file should look like for a codec."""
 
-    content_type: str
-    extension: str
+    extension: FileExtension
 
 
 class CodecError(ValueError):
