@@ -38,3 +38,11 @@ pub enum JobEntrypoint {
     // TODO: These should implement a run cmd?
     Python(ipc::v0::PythonCli),
 }
+
+impl JobEntrypoint {
+    pub fn cwd(&self) -> &str {
+        match self {
+            Self::Python(entrypoint) => entrypoint.cwd(),
+        }
+    }
+}

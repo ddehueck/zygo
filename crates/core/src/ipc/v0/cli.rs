@@ -24,11 +24,15 @@ pub struct PythonCli {
 
 impl PythonCli {
     pub fn new(python_exec_path: String, cwd: String, target: String) -> Self {
-        return Self {
+        Self {
             python_exec: python_exec_path,
-            cwd: cwd,
-            target: target,
-        };
+            cwd,
+            target,
+        }
+    }
+
+    pub fn cwd(&self) -> &str {
+        &self.cwd
     }
 
     pub fn run_entrypoint(&self, args: RunCommandArgs) -> Command {

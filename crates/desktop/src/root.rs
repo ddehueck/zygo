@@ -2,7 +2,7 @@ use gpui::{AnyElement, App, Context, Entity, Render, RenderOnce, Window, div, pr
 
 use crate::{
     Routes, dependencies, features,
-    features::runs::ui::{RunDetailView, RunListView},
+    features::runs::ui::{JobLogsView, RunDetailView, RunListView},
     navigation::{WorkflowRunRoutes, WorkflowRunsRoutes},
     theme, ui,
 };
@@ -10,6 +10,7 @@ use crate::{
 pub struct ZygoDesktop {
     run_list_view: Entity<RunListView>,
     detail_view: Entity<RunDetailView>,
+    job_logs_view: Entity<JobLogsView>,
 }
 
 impl ZygoDesktop {
@@ -19,6 +20,7 @@ impl ZygoDesktop {
         Self {
             run_list_view: cx.new(RunListView::new),
             detail_view: cx.new(RunDetailView::new),
+            job_logs_view: cx.new(JobLogsView::new),
         }
     }
 }
@@ -58,6 +60,15 @@ impl Render for ZygoDesktop {
                 id,
                 routes: WorkflowRunRoutes::New,
             }) => features::runs::ui::NewRunView::new(id).into_any_element(),
+            Routes::WorkflowRuns(WorkflowRunsRoutes::Run {
+                id,
+                routes: WorkflowRunRoutes::JobLog { job_run_id, job_id },
+            }) => {
+                self.job_logs_view.update(cx, |view, cx| {
+                    view.set_job(id, job_id, job_run_id, cx);
+                });
+                self.job_logs_view.clone().into_any_element()
+            }
         };
 
         div()

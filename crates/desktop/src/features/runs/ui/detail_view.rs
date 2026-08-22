@@ -8,7 +8,7 @@ use zygo_core::models::{EventKind, StreamItem, WorkflowRunId};
 
 use crate::{
     Routes, dependencies,
-    navigation::{WorkflowRunRoutes, WorkflowRunsRoutes},
+    navigation::{NavigationHandler, WorkflowRunRoutes, WorkflowRunsRoutes},
     theme::Theme,
     ui::Button,
 };
@@ -84,7 +84,7 @@ impl Render for RunDetailView {
         let colors = cx.global::<Theme>().colors;
         let navigate = dependencies::use_navigation(cx);
         let list_navigation = navigate.clone();
-        let new_run_navigation = navigate;
+        let new_run_navigation = navigate.clone();
         let run_id = self
             .run_id
             .as_ref()
@@ -152,6 +152,8 @@ impl Render for RunDetailView {
                 self.jobs_loading,
                 self.jobs_error.as_deref(),
                 colors,
+                run_id.clone(),
+                navigate,
             ))
             .child(
                 div()
@@ -328,6 +330,8 @@ fn job_runs_section(
     loading: bool,
     error: Option<&str>,
     colors: crate::theme::Colors,
+    run_id: WorkflowRunId,
+    on_navigate: NavigationHandler,
 ) -> gpui::Div {
     let content = if loading {
         div()
@@ -364,7 +368,11 @@ fn job_runs_section(
                     .child(job_table_cell("Job ID").font_weight(gpui::FontWeight::SEMIBOLD))
                     .child(job_table_cell("Job run ID").font_weight(gpui::FontWeight::SEMIBOLD)),
             )
-            .children(job_runs.iter().map(|job_run| job_run_row(job_run, colors)))
+            .children(
+                job_runs.iter().map(|job_run| {
+                    job_run_row(job_run, colors, run_id.clone(), on_navigate.clone())
+                }),
+            )
     };
 
     div()
@@ -394,8 +402,23 @@ fn job_table_cell(value: impl Into<gpui::SharedString>) -> gpui::Div {
         .child(value.into())
 }
 
-fn job_run_row(job_run: &JobRunSummary, colors: crate::theme::Colors) -> impl IntoElement {
+fn job_run_row(
+    job_run: &JobRunSummary,
+    colors: crate::theme::Colors,
+    run_id: WorkflowRunId,
+    on_navigate: NavigationHandler,
+) -> impl IntoElement {
+    let job_id = job_run.job_id.clone();
+    let job_run_id = job_run.job_run_id.clone();
+    let route = Routes::WorkflowRuns(WorkflowRunsRoutes::Run {
+        id: run_id,
+        routes: WorkflowRunRoutes::JobLog { job_run_id, job_id },
+    });
+
     div()
+        .on_mouse_down(gpui::MouseButton::Left, move |_, window, cx| {
+            on_navigate(&route, window, cx);
+        })
         .id(format!("workflow-run-job-{}", job_run.job_run_id))
         .flex()
         .w_full()
