@@ -7,7 +7,7 @@ use tokio::{
 
 use crate::ipc;
 use crate::ipc::v0::RunCommandArgs;
-use crate::models::{JobEntrypoint, JobRunId};
+use crate::models::{Entrypoint, JobRunId};
 
 use crate::workers::WorkerLog;
 use crate::{
@@ -25,7 +25,7 @@ use crate::{
 pub struct LocalJobRunner<S: StorageProvider> {
     context: ActorContext<S>,
     source: JobRunSource,
-    entrypoint: JobEntrypoint,
+    entrypoint: Entrypoint,
     args: RunCommandArgs, // TODO: Generalize - revist when adding support for other run commands?
 }
 
@@ -33,7 +33,7 @@ impl<S: StorageProvider> LocalJobRunner<S> {
     pub fn new(
         context: ActorContext<S>,
         source: JobRunSource,
-        entrypoint: JobEntrypoint,
+        entrypoint: Entrypoint,
         args: RunCommandArgs,
     ) -> Self {
         Self {
@@ -47,7 +47,7 @@ impl<S: StorageProvider> LocalJobRunner<S> {
     pub async fn run(&self) -> Result<()> {
         // TODO: Bubble up errors in events.
         let mut command = match &self.entrypoint {
-            JobEntrypoint::Python(cli) => cli.run_entrypoint(self.args.clone()),
+            Entrypoint::Python(cli) => cli.run_entrypoint(self.args.clone()),
         };
 
         let worker_log = WorkerLog::in_directory(

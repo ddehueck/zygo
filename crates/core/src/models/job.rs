@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::models::JobEntrypoint;
+use crate::models::Entrypoint;
 
 use super::ids::{ChannelId, ContentHash, JobId};
 
@@ -15,7 +15,7 @@ pub struct Job {
     pub input_channel_id: ChannelId,
     pub output_channel_id: ChannelId,
     pub content_hash: ContentHash,
-    pub entrypoint: JobEntrypoint,
+    pub entrypoint: Entrypoint,
 }
 
 /// A core assumption of the system is that a job is a pure function of its input data.

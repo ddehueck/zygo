@@ -1,7 +1,7 @@
 //! Generation of jobs and their graph wiring.
 
 use rand_chacha::ChaCha8Rng;
-use zygo_core::models::{ChannelId, ContentHash, Job, JobEntrypoint, JobId, OrchestratorMode};
+use zygo_core::models::{ChannelId, ContentHash, Entrypoint, Job, JobId, OrchestratorMode};
 
 use crate::generators::Generate;
 use crate::generators::entrypoint::EntrypointGenerator;
@@ -12,7 +12,7 @@ pub struct JobBlueprint {
     pub content_hash: ContentHash,
     pub input_channel: ChannelId,
     pub output_channels: Vec<ChannelId>,
-    pub entrypoint: JobEntrypoint,
+    pub entrypoint: Entrypoint,
 }
 
 impl From<&JobBlueprint> for Job {
