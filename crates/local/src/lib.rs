@@ -12,7 +12,8 @@ pub use service::ZygoLocalService;
 
 // Type re-exports only for convenience
 pub use db::{
-    DbError, DbResult, JobRunSummaryRepository, JobRunSummaryRow, KvRepository, TagRow,
-    WorkflowRunRepository, WorkflowRunRow, WorkflowRunSummaryRepository, WorkflowRunSummaryRow,
+    DbError, DbResult, JobRunSummaryCounts, JobRunSummaryRepository, JobRunSummaryRow,
+    KvRepository, TagRow, WorkflowRunRepository, WorkflowRunRow, WorkflowRunSummaryRepository,
+    WorkflowRunSummaryRow,
 };
 pub use repos::Repos;

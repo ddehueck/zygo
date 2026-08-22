@@ -4,7 +4,7 @@ use gpui::{Context, Render, Window, div, prelude::*, px};
 use gpuikit::elements::input::input;
 use gpuikit::input::InputState;
 use local::{TagRow, ZygoLocalService};
-use zygo_core::models::{EventKind, StreamItem, WorkflowRunId};
+use zygo_core::models::WorkflowRunId;
 
 use crate::{
     Routes, dependencies,
@@ -184,59 +184,25 @@ impl Render for RunDetailView {
     }
 }
 
-// todo should expose a job summary builder in local that takes a stream
-// perhaps should cache a job summary in the db once stream has been read/summarized?
 async fn load_job_runs(
     service: Arc<ZygoLocalService>,
     run_id: WorkflowRunId,
 ) -> anyhow::Result<Vec<JobRunSummary>> {
-    let records = service.base.stream(&run_id).collect().await?;
-    let mut job_runs = Vec::new();
+    let workflow_run_id = run_id.to_string();
+    let summaries = service
+        .repos
+        .job_run_summaries
+        .list_by_workflow_run_id(&workflow_run_id)
+        .await?;
 
-    for record in records {
-        if let StreamItem::Event(event) = record.item {
-            update_job_runs(&mut job_runs, event.kind);
-        }
-    }
-
-    Ok(job_runs)
-}
-
-fn update_job_runs(job_runs: &mut Vec<JobRunSummary>, event: EventKind) {
-    let (job_id, job_run_id, status) = match event {
-        EventKind::JobStarted(data) => (
-            data.job_id.to_string(),
-            data.job_run_id.to_string(),
-            "running",
-        ),
-        EventKind::JobSucceeded(data) => (
-            data.job_id.to_string(),
-            data.job_run_id.to_string(),
-            "succeeded",
-        ),
-        EventKind::JobFailed(data) => (
-            data.job_id.to_string(),
-            data.job_run_id.to_string(),
-            "failed",
-        ),
-        EventKind::DataReferenceInserted(_)
-        | EventKind::ChannelItemInserted(_)
-        | EventKind::TagInserted(_) => return,
-    };
-
-    if let Some(job_run) = job_runs
-        .iter_mut()
-        .find(|job_run| job_run.job_run_id == job_run_id)
-    {
-        job_run.job_id = job_id;
-        job_run.status = status.to_owned();
-    } else {
-        job_runs.push(JobRunSummary {
-            job_id,
-            job_run_id,
-            status: status.to_owned(),
-        });
-    }
+    Ok(summaries
+        .into_iter()
+        .map(|summary| JobRunSummary {
+            job_id: summary.job_id,
+            job_run_id: summary.job_run_id,
+            status: summary.status,
+        })
+        .collect())
 }
 
 fn tags_section(

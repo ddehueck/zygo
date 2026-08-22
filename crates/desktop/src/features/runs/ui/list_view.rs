@@ -3,7 +3,7 @@ use gpui::{
 };
 use gpuikit::elements::input::input;
 use gpuikit::input::InputState;
-use local::{TagRow, WorkflowRunRow};
+use local::{TagRow, WorkflowRunSummaryRow};
 use zygo_core::models::WorkflowRunId;
 
 use crate::{
@@ -248,8 +248,12 @@ impl Render for RunListContent {
                     .border_b_1()
                     .border_color(colors.border_muted)
                     .child(table_cell("ID").font_weight(gpui::FontWeight::SEMIBOLD))
-                    .child(table_cell("Content hash").font_weight(gpui::FontWeight::SEMIBOLD))
-                    .child(table_cell("Created at").font_weight(gpui::FontWeight::SEMIBOLD)),
+                    .child(table_cell("Status").font_weight(gpui::FontWeight::SEMIBOLD))
+                    .child(table_cell("Active jobs").font_weight(gpui::FontWeight::SEMIBOLD))
+                    .child(table_cell("Succeeded").font_weight(gpui::FontWeight::SEMIBOLD))
+                    .child(table_cell("Errored").font_weight(gpui::FontWeight::SEMIBOLD))
+                    .child(table_cell("Started at").font_weight(gpui::FontWeight::SEMIBOLD))
+                    .child(table_cell("Completed at").font_weight(gpui::FontWeight::SEMIBOLD)),
             )
             .children(
                 store
@@ -322,22 +326,34 @@ fn table_cell(value: impl Into<gpui::SharedString>) -> gpui::Div {
 }
 
 fn run_row(
-    run: &WorkflowRunRow,
+    run: &WorkflowRunSummaryRow,
     colors: crate::theme::Colors,
     on_navigate: NavigationHandler,
 ) -> impl IntoElement {
     let mut row = div()
-        .id(format!("workflow-run-{}", run.id))
+        .id(format!("workflow-run-{}", run.workflow_run_id))
         .flex()
         .w_full()
         .border_b_1()
         .border_color(colors.border_muted)
         .hover(|style| style.bg(colors.surface_raised))
-        .child(table_cell(run.id.clone()))
-        .child(table_cell(run.content_hash.clone()))
-        .child(table_cell(run.created_at.clone()));
+        .child(table_cell(run.workflow_run_id.clone()))
+        .child(table_cell(run.status.clone()))
+        .child(table_cell(run.active_job_count.to_string()))
+        .child(table_cell(run.succeeded_job_count.to_string()))
+        .child(table_cell(run.errored_job_count.to_string()))
+        .child(table_cell(
+            run.started_at
+                .map(|timestamp| timestamp.to_string())
+                .unwrap_or_else(|| "—".to_owned()),
+        ))
+        .child(table_cell(
+            run.completed_at
+                .map(|timestamp| timestamp.to_string())
+                .unwrap_or_else(|| "—".to_owned()),
+        ));
 
-    if let Ok(run_id) = WorkflowRunId::try_from(run.id.clone()) {
+    if let Ok(run_id) = WorkflowRunId::try_from(run.workflow_run_id.clone()) {
         row = row.on_mouse_down(MouseButton::Left, move |_, window, cx| {
             on_navigate(
                 &Routes::WorkflowRuns(WorkflowRunsRoutes::Run {

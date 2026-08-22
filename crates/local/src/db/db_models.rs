@@ -26,8 +26,8 @@ impl WorkflowRunRow {
 pub struct WorkflowRunSummaryRow {
     pub workflow_run_id: String,
     pub status: String,
-    pub started_at: Option<String>,
-    pub completed_at: Option<String>,
+    pub started_at: Option<i64>,
+    pub completed_at: Option<i64>,
     pub active_job_count: i64,
     pub succeeded_job_count: i64,
     pub errored_job_count: i64,
@@ -61,6 +61,13 @@ pub struct JobRunSummaryRow {
     pub retry_count: i64,
     pub created_at: String,
     pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct JobRunSummaryCounts {
+    pub active_job_count: i64,
+    pub succeeded_job_count: i64,
+    pub errored_job_count: i64,
 }
 
 impl JobRunSummaryRow {

@@ -8,7 +8,9 @@ mod workflow_run;
 mod workflow_run_summary;
 
 pub use database::Db;
-pub use db_models::{JobRunSummaryRow, TagRow, WorkflowRunRow, WorkflowRunSummaryRow};
+pub use db_models::{
+    JobRunSummaryCounts, JobRunSummaryRow, TagRow, WorkflowRunRow, WorkflowRunSummaryRow,
+};
 pub use error::{Error as DbError, Result as DbResult};
 
 pub use job_run_summary::JobRunSummaryRepository;

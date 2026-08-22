@@ -45,6 +45,50 @@ impl WorkflowRunSummaryRepository {
     }
 
     pub async fn upsert(&self, summary: &WorkflowRunSummaryRow) -> Result<()> {
+        self.upsert_values(
+            &summary.workflow_run_id,
+            &summary.status,
+            summary.started_at,
+            summary.completed_at,
+            summary.active_job_count,
+            summary.succeeded_job_count,
+            summary.errored_job_count,
+        )
+        .await
+    }
+
+    pub async fn upsert_projection(
+        &self,
+        workflow_run_id: &str,
+        status: &str,
+        started_at: Option<i64>,
+        completed_at: Option<i64>,
+        active_job_count: i64,
+        succeeded_job_count: i64,
+        errored_job_count: i64,
+    ) -> Result<()> {
+        self.upsert_values(
+            workflow_run_id,
+            status,
+            started_at,
+            completed_at,
+            active_job_count,
+            succeeded_job_count,
+            errored_job_count,
+        )
+        .await
+    }
+
+    async fn upsert_values(
+        &self,
+        workflow_run_id: &str,
+        status: &str,
+        started_at: Option<i64>,
+        completed_at: Option<i64>,
+        active_job_count: i64,
+        succeeded_job_count: i64,
+        errored_job_count: i64,
+    ) -> Result<()> {
         let mut connection = self.database.connection.lock().await;
         let tx = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
@@ -53,13 +97,13 @@ impl WorkflowRunSummaryRepository {
         tx.execute(
             UPSERT_SQL,
             params![
-                summary.workflow_run_id.as_str(),
-                summary.status.as_str(),
-                summary.started_at.as_deref(),
-                summary.completed_at.as_deref(),
-                summary.active_job_count,
-                summary.succeeded_job_count,
-                summary.errored_job_count,
+                workflow_run_id,
+                status,
+                started_at,
+                completed_at,
+                active_job_count,
+                succeeded_job_count,
+                errored_job_count,
             ],
         )
         .await?;

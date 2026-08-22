@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use gpui::{AppContext, Context, EventEmitter, Task};
-use local::{TagRow, WorkflowRunRepository, WorkflowRunRow};
+use local::{TagRow, WorkflowRunRepository, WorkflowRunSummaryRepository, WorkflowRunSummaryRow};
 
 use crate::features::runs::filters::FilterSet;
 
@@ -13,8 +13,9 @@ pub enum WorkflowRunStoreEvent {
 
 pub struct WorkflowRunStore {
     repository: WorkflowRunRepository,
-    all_workflow_runs: Vec<WorkflowRunRow>,
-    workflow_runs: Vec<WorkflowRunRow>,
+    summary_repository: WorkflowRunSummaryRepository,
+    all_workflow_runs: Vec<WorkflowRunSummaryRow>,
+    workflow_runs: Vec<WorkflowRunSummaryRow>,
     tags_by_run: HashMap<String, Vec<TagRow>>,
     available_tags: Vec<TagRow>,
     active_filter: FilterSet,
@@ -25,9 +26,14 @@ pub struct WorkflowRunStore {
 impl EventEmitter<WorkflowRunStoreEvent> for WorkflowRunStore {}
 
 impl WorkflowRunStore {
-    pub fn new(repository: WorkflowRunRepository, cx: &mut Context<Self>) -> Self {
+    pub fn new(
+        repository: WorkflowRunRepository,
+        summary_repository: WorkflowRunSummaryRepository,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let mut store = Self {
             repository,
+            summary_repository,
             all_workflow_runs: Vec::new(),
             workflow_runs: Vec::new(),
             tags_by_run: HashMap::new(),
@@ -40,11 +46,11 @@ impl WorkflowRunStore {
         store
     }
 
-    pub fn workflow_runs(&self) -> &[WorkflowRunRow] {
+    pub fn workflow_runs(&self) -> &[WorkflowRunSummaryRow] {
         &self.workflow_runs
     }
 
-    pub fn all_workflow_runs(&self) -> &[WorkflowRunRow] {
+    pub fn all_workflow_runs(&self) -> &[WorkflowRunSummaryRow] {
         &self.all_workflow_runs
     }
 
@@ -76,22 +82,23 @@ impl WorkflowRunStore {
         cx.notify();
 
         let repository = self.repository.clone();
+        let summary_repository = self.summary_repository.clone();
         let task = cx.spawn(async move |store, cx| {
             let result = cx
                 .background_spawn(async move {
-                    let workflow_runs = repository.list_all().await?;
+                    let workflow_runs = summary_repository.list_all().await?;
                     let mut tags_by_run = HashMap::with_capacity(workflow_runs.len());
                     let mut available_tags = Vec::new();
                     let mut seen_tags = HashSet::new();
 
                     for workflow_run in &workflow_runs {
-                        let tags = repository.list_tags(&workflow_run.id).await?;
+                        let tags = repository.list_tags(&workflow_run.workflow_run_id).await?;
                         for tag in &tags {
                             if seen_tags.insert((tag.key.clone(), tag.value.clone())) {
                                 available_tags.push(tag.clone());
                             }
                         }
-                        tags_by_run.insert(workflow_run.id.clone(), tags);
+                        tags_by_run.insert(workflow_run.workflow_run_id.clone(), tags);
                     }
 
                     Ok::<_, anyhow::Error>((workflow_runs, tags_by_run, available_tags))
@@ -128,7 +135,7 @@ impl WorkflowRunStore {
             .iter()
             .filter(|workflow_run| {
                 self.tags_by_run
-                    .get(&workflow_run.id)
+                    .get(&workflow_run.workflow_run_id)
                     .is_some_and(|tags| self.active_filter.matches(tags))
             })
             .cloned()

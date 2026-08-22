@@ -100,11 +100,7 @@ impl ZygoLocalService {
     }
 
     pub fn stream_processor(&self, run_id: &WorkflowRunId) -> LocalStreamProcessor {
-        LocalStreamProcessor::new(
-            self.base.stream(run_id),
-            self.repos.workflow_runs.clone(),
-            run_id.clone(),
-        )
+        LocalStreamProcessor::new(self.repos.clone(), run_id.clone(), self.base.stream(run_id))
     }
 
     // todo: don't love that this is here. There's a repository/deps refactor brewing.
