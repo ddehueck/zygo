@@ -11,7 +11,10 @@ use zygo_core::{
 
 use crate::{
     ZygoLocalConfig,
-    db::{Db, KvRepository, WorkflowRun, WorkflowRunRepository},
+    db::{
+        Db, JobRunSummaryRepository, KvRepository, WorkflowRunRepository, WorkflowRunRow,
+        WorkflowRunSummaryRepository,
+    },
     paths,
     repos::Repos,
     stream_processor::LocalStreamProcessor,
@@ -57,12 +60,19 @@ impl ZygoLocalService {
         let path = Self::database_path()?.to_string_lossy().into_owned();
         let database = Db::open(&path, config.database_busy_timeout).await?;
         let workflow_runs = WorkflowRunRepository::new(database.clone());
+        let workflow_run_summaries = WorkflowRunSummaryRepository::new(database.clone());
+        let job_run_summaries = JobRunSummaryRepository::new(database.clone());
         let kv = KvRepository::new(database);
         let store = zygo_core::store::Store::new(kv.clone());
 
         Ok(Self {
             base: Zygo::new(store, config.base),
-            repos: Repos { kv, workflow_runs },
+            repos: Repos {
+                kv,
+                workflow_runs,
+                workflow_run_summaries,
+                job_run_summaries,
+            },
         })
     }
 
@@ -71,6 +81,7 @@ impl ZygoLocalService {
         let content_hash = schema.content_hash.to_string();
 
         let workflow_run_id = WorkflowRunId::new(&schema.content_hash, &input)?;
+
         // saves a record of the run before actually running it
         // we save the workflow id as a tag so we can filter runs by workflow
         self.repos
@@ -83,9 +94,7 @@ impl ZygoLocalService {
             )
             .await?;
 
-        self.base
-            .run(workflow_run_id.clone(), input, schema)
-            .await?;
+        self.base.run(&workflow_run_id, input, schema).await?;
 
         Ok(workflow_run_id)
     }
@@ -102,7 +111,7 @@ impl ZygoLocalService {
     pub async fn list_workflow_runs(
         &self,
         filter: Option<(&str, &str)>,
-    ) -> Result<Vec<WorkflowRun>> {
+    ) -> Result<Vec<WorkflowRunRow>> {
         match filter {
             Some((key, value)) => Ok(self.repos.workflow_runs.list_by_tag(key, value).await?),
             None => Ok(self.repos.workflow_runs.list_all().await?),

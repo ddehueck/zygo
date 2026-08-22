@@ -3,7 +3,7 @@ use std::sync::Arc;
 use gpui::{Context, Render, Window, div, prelude::*, px};
 use gpuikit::elements::input::input;
 use gpuikit::input::InputState;
-use local::{Tag, ZygoLocalService};
+use local::{TagRow, ZygoLocalService};
 use zygo_core::models::{EventKind, StreamItem, WorkflowRunId};
 
 use crate::{
@@ -240,7 +240,7 @@ fn update_job_runs(job_runs: &mut Vec<JobRunSummary>, event: EventKind) {
 }
 
 fn tags_section(
-    tags: &[Tag],
+    tags: &[TagRow],
     loading: bool,
     error: Option<&str>,
     colors: crate::theme::Colors,
@@ -313,7 +313,7 @@ fn tag_table_cell(value: impl Into<gpui::SharedString>) -> gpui::Div {
         .child(value.into())
 }
 
-fn tag_row(tag: &Tag, index: usize, colors: crate::theme::Colors) -> impl IntoElement {
+fn tag_row(tag: &TagRow, index: usize, colors: crate::theme::Colors) -> impl IntoElement {
     div()
         .id(format!("workflow-run-tag-{index}"))
         .flex()

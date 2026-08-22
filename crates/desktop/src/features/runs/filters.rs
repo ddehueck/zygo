@@ -1,4 +1,4 @@
-use local::Tag;
+use local::TagRow;
 
 /// A single tag constraint. When `value` is `None`, any value for the tag key
 /// satisfies the constraint.
@@ -63,7 +63,7 @@ impl FilterSet {
         self.tags.is_empty()
     }
 
-    pub fn matches(&self, tags: &[Tag]) -> bool {
+    pub fn matches(&self, tags: &[TagRow]) -> bool {
         self.tags.iter().all(|filter| {
             tags.iter().any(|tag| {
                 tag.key == filter.key
@@ -80,8 +80,8 @@ impl FilterSet {
 mod tests {
     use super::*;
 
-    fn tag(key: &str, value: &str) -> Tag {
-        Tag {
+    fn tag(key: &str, value: &str) -> TagRow {
+        TagRow {
             workflow_run_id: "run-1".to_owned(),
             key: key.to_owned(),
             value: value.to_owned(),

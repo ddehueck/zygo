@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use gpui::{AppContext, Context, EventEmitter, Task};
-use local::{Tag, WorkflowRun, WorkflowRunRepository};
+use local::{TagRow, WorkflowRunRepository, WorkflowRunRow};
 
 use crate::features::runs::filters::FilterSet;
 
@@ -13,10 +13,10 @@ pub enum WorkflowRunStoreEvent {
 
 pub struct WorkflowRunStore {
     repository: WorkflowRunRepository,
-    all_workflow_runs: Vec<WorkflowRun>,
-    workflow_runs: Vec<WorkflowRun>,
-    tags_by_run: HashMap<String, Vec<Tag>>,
-    available_tags: Vec<Tag>,
+    all_workflow_runs: Vec<WorkflowRunRow>,
+    workflow_runs: Vec<WorkflowRunRow>,
+    tags_by_run: HashMap<String, Vec<TagRow>>,
+    available_tags: Vec<TagRow>,
     active_filter: FilterSet,
     loading: bool,
     error: Option<String>,
@@ -40,11 +40,11 @@ impl WorkflowRunStore {
         store
     }
 
-    pub fn workflow_runs(&self) -> &[WorkflowRun] {
+    pub fn workflow_runs(&self) -> &[WorkflowRunRow] {
         &self.workflow_runs
     }
 
-    pub fn all_workflow_runs(&self) -> &[WorkflowRun] {
+    pub fn all_workflow_runs(&self) -> &[WorkflowRunRow] {
         &self.all_workflow_runs
     }
 
@@ -52,7 +52,7 @@ impl WorkflowRunStore {
         &self.active_filter
     }
 
-    pub fn available_tags(&self) -> &[Tag] {
+    pub fn available_tags(&self) -> &[TagRow] {
         &self.available_tags
     }
 

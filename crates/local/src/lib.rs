@@ -11,5 +11,8 @@ pub use config::{DEFAULT_DATABASE_BUSY_TIMEOUT, ZygoLocalConfig};
 pub use service::ZygoLocalService;
 
 // Type re-exports only for convenience
-pub use db::{DbError, DbResult, KvRepository, Tag, WorkflowRun, WorkflowRunRepository};
+pub use db::{
+    DbError, DbResult, JobRunSummaryRepository, JobRunSummaryRow, KvRepository, TagRow,
+    WorkflowRunRepository, WorkflowRunRow, WorkflowRunSummaryRepository, WorkflowRunSummaryRow,
+};
 pub use repos::Repos;

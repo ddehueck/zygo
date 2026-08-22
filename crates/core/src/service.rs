@@ -34,7 +34,7 @@ impl<S: StorageProvider> Zygo<S> {
 
     pub async fn run(
         &self,
-        id: WorkflowRunId,
+        id: &WorkflowRunId,
         input: DataReference,
         schema: WorkflowSchema,
     ) -> Result<(), anyhow::Error> {

@@ -1,7 +1,7 @@
 use serde_json::Value;
 use turso::transaction::TransactionBehavior;
 
-use super::{Db, db_models::Kv, error::Result};
+use super::{Db, db_models::KvRow, error::Result};
 
 const UPSERT_SQL: &str = "
     INSERT INTO kv (key, value)
@@ -19,7 +19,7 @@ impl KvRepository {
         Self { database }
     }
 
-    pub async fn upsert(&self, entry: &Kv) -> Result<()> {
+    pub async fn upsert(&self, entry: &KvRow) -> Result<()> {
         let value = serde_json::to_string(&entry.value)?;
         let mut connection = self.database.connection.lock().await;
         let tx = connection
@@ -49,7 +49,7 @@ impl KvRepository {
         Ok(())
     }
 
-    pub async fn get_by_key(&self, key: &str) -> Result<Option<Kv>> {
+    pub async fn get_by_key(&self, key: &str) -> Result<Option<KvRow>> {
         let connection = self.database.connection.lock().await;
         let mut rows = connection
             .query(
@@ -62,10 +62,10 @@ impl KvRepository {
             return Ok(None);
         };
 
-        Ok(Some(Kv::from_row(&row, &rows)?))
+        Ok(Some(KvRow::from_row(&row, &rows)?))
     }
 
-    pub async fn list(&self, limit: u32, offset: u32) -> Result<Vec<Kv>> {
+    pub async fn list(&self, limit: u32, offset: u32) -> Result<Vec<KvRow>> {
         let connection = self.database.connection.lock().await;
         let mut rows = connection
             .query(
@@ -81,7 +81,7 @@ impl KvRepository {
 
         let mut entries = Vec::new();
         while let Some(row) = rows.next().await? {
-            entries.push(Kv::from_row(&row, &rows)?);
+            entries.push(KvRow::from_row(&row, &rows)?);
         }
 
         Ok(entries)

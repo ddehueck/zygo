@@ -3,7 +3,7 @@ use gpui::{
 };
 use gpuikit::elements::input::input;
 use gpuikit::input::InputState;
-use local::{Tag, WorkflowRun};
+use local::{TagRow, WorkflowRunRow};
 use zygo_core::models::WorkflowRunId;
 
 use crate::{
@@ -199,7 +199,7 @@ fn filter_input(
 }
 
 fn tag_badge(
-    tag: &Tag,
+    tag: &TagRow,
     colors: crate::theme::Colors,
     tag_key_input: Entity<InputState>,
     tag_value_input: Entity<InputState>,
@@ -322,7 +322,7 @@ fn table_cell(value: impl Into<gpui::SharedString>) -> gpui::Div {
 }
 
 fn run_row(
-    run: &WorkflowRun,
+    run: &WorkflowRunRow,
     colors: crate::theme::Colors,
     on_navigate: NavigationHandler,
 ) -> impl IntoElement {

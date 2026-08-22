@@ -21,3 +21,19 @@ The configured busy timeout is the sole retry/wait policy for database writes. B
 Obviously, it's an experimental feature and they state that they may change the api and storage format so a migration path may need to be built in the future.
 
 Another downside is that Windows support is not available. So until Turso adds Windows support, Windows users can only use one local app at a time.
+
+
+## DB Structure
+
+The DB has two responsibilities:
+1. Have a durable record of all workflow runs.
+2. Summarize/index the run data for application features.
+
+To this end we use "summary" tables that store aggregated data computed over each runs event stream. These are designed to only require the event stream to recompute and nothing else.
+
+### Tables
+- `workflow_run`: Durable record of a local workflow run.
+- `workflow_run_summary`: Top-level summary of workflow run data, e.g. status, total duration, # of active jobs, etc.
+- `job_run_summary`: Top-level summary of job run data, e.g. status, duration, # of retries, etc.
+- `tags`: Normalized table of all tags associated with workflow runs, jobs, and data references.
+- `tag_associations`: Store the many-to-many relationships between tags and other tables along with the tag instance's value.
