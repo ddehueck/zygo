@@ -11,13 +11,14 @@ const REFRESH_DEBOUNCE: Duration = Duration::from_millis(250);
 
 /// Coordinates workflow-run discovery and background updates to the run store.
 ///
-/// Runs are discovered through one repository poller. When a run belongs to
-/// this process, its engine watch channel drives subsequent store refreshes.
+/// Runs are discovered through one repository poller. The database poll also
+/// keeps runs created by another process current. When a run belongs to this
+/// process, its engine watch channel provides lower-latency store refreshes.
 pub struct RunSync {
     service: Arc<ZygoLocalService>,
     runs: Entity<WorkflowRunStore>,
     details: Entity<WorkflowRunDetailStore>,
-    observed_runs: HashSet<String>,
+    observed_runs: HashSet<WorkflowRunId>,
     pending_runs: HashSet<WorkflowRunId>,
     tasks: Vec<Task<()>>,
     refresh_task: Option<Task<()>>,
@@ -68,6 +69,21 @@ impl RunSync {
                     }
                 }
 
+                // Engine watch channels only exist in the process that owns the
+                // actor. Refresh from the database as well so runs started by
+                // the CLI (or another desktop process) continue to advance.
+                if sync
+                    .update(cx, |sync, cx| {
+                        let observed_runs = sync.observed_runs.iter().cloned().collect::<Vec<_>>();
+                        for run_id in observed_runs {
+                            sync.request_refresh(run_id, cx);
+                        }
+                    })
+                    .is_err()
+                {
+                    return;
+                }
+
                 executor.timer(RUN_POLL_INTERVAL).await;
             }
         });
@@ -91,8 +107,7 @@ impl RunSync {
     }
 
     fn observe_run(&mut self, run_id: WorkflowRunId, cx: &mut Context<Self>) {
-        let run_key = run_id.to_string();
-        if !self.observed_runs.insert(run_key) {
+        if !self.observed_runs.insert(run_id.clone()) {
             return;
         }
 
