@@ -71,10 +71,14 @@ def run(
         # Then send data reference to output channel via stdout ipc
         output_format = job_entry.output_channel.codec.format
         output_bytes = job_entry.output_channel.codec.encode(result)
+        extension = (
+            f"{output_format.extension.with_leading_dot()}"
+            if output_format.extension
+            else ""
+        )
         reference = store.put(
-            f"{job_entry.output_channel.id}{output_format.extension}",
+            f"{job_entry.output_channel.id}{extension}",
             output_bytes,
-            content_type=output_format.content_type,
         )
         write_stdout_ipc_message(
             ChannelItemInserted(

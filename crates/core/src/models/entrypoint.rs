@@ -34,12 +34,12 @@ use crate::ipc;
 //
 // These should impl some common interface to check if they work in the remote orchestrator mode.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum JobEntrypoint {
+pub enum Entrypoint {
     // TODO: These should implement a run cmd?
     Python(ipc::v0::PythonCli),
 }
 
-impl JobEntrypoint {
+impl Entrypoint {
     pub fn cwd(&self) -> &str {
         match self {
             Self::Python(entrypoint) => entrypoint.cwd(),

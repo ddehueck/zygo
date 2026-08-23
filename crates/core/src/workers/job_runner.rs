@@ -1,7 +1,7 @@
 use crate::{
     context::ActorContext,
     ipc::v0::RunCommandArgs,
-    models::{JobEntrypoint, JobRunSource},
+    models::{Entrypoint, JobRunSource},
     store::StorageProvider,
     workers::LocalJobRunner,
 };
@@ -17,7 +17,7 @@ impl Runner {
         &self,
         context: ActorContext<S>,
         source: JobRunSource,
-        entrypoint: JobEntrypoint,
+        entrypoint: Entrypoint,
         args: RunCommandArgs,
     ) -> Result<(), anyhow::Error> {
         LocalJobRunner::new(context, source, entrypoint, args)

@@ -2,6 +2,7 @@ use std::{rc::Rc, sync::Arc};
 
 use gpui::{App, AppContext, Entity, Global};
 use local::ZygoLocalService;
+use tokio::runtime::{Handle, Runtime};
 
 use crate::{
     features::runs::RunSync,
@@ -38,13 +39,22 @@ pub struct AppDeps {
     runs: Entity<WorkflowRunStore>,
     tags: Entity<TagStore>,
     run_details: Entity<WorkflowRunDetailStore>,
-    _run_sync: Entity<RunSync>,
+    run_sync: Entity<RunSync>,
+    tokio_handle: Handle,
+    _tokio_runtime: Arc<Runtime>,
 }
 
 impl Global for AppDeps {}
 
 impl AppDeps {
     pub fn new(service: ZygoLocalService, cx: &mut App) -> Self {
+        let tokio_runtime = Arc::new(
+            tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+                .expect("failed to create the desktop Tokio runtime"),
+        );
+        let tokio_handle = tokio_runtime.handle().clone();
         let service = Arc::new(service);
         let runs_repository = service.repos.workflow_runs.clone();
         let run_summaries_repository = service.repos.workflow_run_summaries.clone();
@@ -72,8 +82,14 @@ impl AppDeps {
             runs,
             tags: cx.new(|_| TagStore::new(tags_repository)),
             run_details,
-            _run_sync: run_sync,
+            run_sync,
+            tokio_handle,
+            _tokio_runtime: tokio_runtime,
         }
+    }
+
+    pub fn tokio_handle(&self) -> Handle {
+        self.tokio_handle.clone()
     }
 
     pub fn service(&self) -> Arc<ZygoLocalService> {
@@ -121,6 +137,14 @@ pub fn use_run_details(cx: &App) -> Entity<WorkflowRunDetailStore> {
     use_app_dependencies(cx).run_details.clone()
 }
 
+pub fn use_run_sync(cx: &App) -> Entity<RunSync> {
+    use_app_dependencies(cx).run_sync.clone()
+}
+
 pub fn use_service(cx: &App) -> Arc<ZygoLocalService> {
     use_app_dependencies(cx).service()
+}
+
+pub fn use_tokio_handle(cx: &App) -> Handle {
+    use_app_dependencies(cx).tokio_handle()
 }

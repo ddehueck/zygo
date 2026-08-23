@@ -15,6 +15,7 @@ pub const ZYGO_PKG_INTERNAL_CLI_MODULE: &str = "zygo._internal.ipc.v0"; // TODO:
 #[serde(rename_all = "snake_case")]
 pub struct ChannelMetadata {
     pub id: String,
+    pub accepted_file_extensions: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -22,32 +23,19 @@ pub struct ChannelMetadata {
 pub struct JobMetadata {
     pub id: String,
     pub content_hash: String,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum EdgeKind {
-    Input,
-    Output,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub struct EdgeMetadata {
-    pub job_id: String,
-    pub channel_id: String,
-    pub kind: EdgeKind,
+    pub input_channel_id: String,
+    pub output_channel_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct WorkflowMetadata {
     pub id: String,
-    pub input_channel: String,
+    pub input_channel_id: String,
+    pub output_channel_id: String,
     pub content_hash: String,
-    pub channels: Vec<ChannelMetadata>,
     pub jobs: Vec<JobMetadata>,
-    pub edges: Vec<EdgeMetadata>,
+    pub channels: Vec<ChannelMetadata>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

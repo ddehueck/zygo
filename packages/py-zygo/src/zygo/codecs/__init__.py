@@ -3,6 +3,7 @@ from zygo.codecs.base import (
     CodecDecodeError,
     CodecEncodeError,
     CodecError,
+    FileExtension,
     FileFormat,
 )
 from zygo.codecs.json import Json
@@ -15,6 +16,7 @@ __all__ = [
     "CodecDecodeError",
     "CodecEncodeError",
     "CodecError",
+    "FileExtension",
     "FileFormat",
     "Float",
     "Integer",

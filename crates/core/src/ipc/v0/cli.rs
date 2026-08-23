@@ -1,3 +1,5 @@
+use std::process::Command as StdCommand;
+
 use serde::{Deserialize, Serialize};
 use tokio::process::Command;
 
@@ -10,7 +12,9 @@ use crate::{
         },
     },
     models::{
-        self, ChannelItemInsertedData, DataReferenceInsertedData, EventKind, TagInsertedData,
+        self, Channel, ChannelId, ChannelItemInsertedData, ContentHash, DataReferenceInsertedData,
+        Entrypoint, EventKind, FileExtension, Job, JobId, TagInsertedData, WorkflowId,
+        WorkflowSchema,
     },
 };
 
@@ -61,8 +65,8 @@ impl PythonCli {
         Ok(None)
     }
 
-    pub fn metadata_entrypoint(&self) -> Command {
-        let mut command = Command::new(self.python_exec.clone());
+    pub fn metadata_entrypoint(&self) -> StdCommand {
+        let mut command = StdCommand::new(self.python_exec.clone());
         command.current_dir(&self.cwd).args(vec![
             "-m".into(),
             ZYGO_PKG_INTERNAL_CLI_MODULE.into(),
@@ -75,6 +79,61 @@ impl PythonCli {
     pub fn parse_metadata_response(response: &str) -> Result<WorkflowMetadata> {
         let metadata: WorkflowMetadata = serde_json::from_str(response)?;
         Ok(metadata)
+    }
+
+    /// Builds the runtime schema returned by this entrypoint's metadata command.
+    pub fn workflow_schema_from_metadata(
+        &self,
+        metadata: WorkflowMetadata,
+    ) -> Result<WorkflowSchema> {
+        let content_hash = ContentHash::try_from(metadata.content_hash)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        let entrypoint = Entrypoint::Python(self.clone());
+        let channels = metadata
+            .channels
+            .into_iter()
+            .map(|channel| {
+                Ok(Channel {
+                    id: ChannelId::try_from(channel.id)
+                        .map_err(|error| anyhow::anyhow!(error.to_string()))?,
+                    accepted_file_extensions: channel
+                        .accepted_file_extensions
+                        .into_iter()
+                        .map(FileExtension::from)
+                        .collect(),
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let jobs = metadata
+            .jobs
+            .into_iter()
+            .map(|job| {
+                Ok(Job {
+                    id: JobId::try_from(job.id)
+                        .map_err(|error| anyhow::anyhow!(error.to_string()))?,
+                    content_hash: ContentHash::try_from(job.content_hash)
+                        .map_err(|error| anyhow::anyhow!(error.to_string()))?,
+                    input_channel_id: ChannelId::try_from(job.input_channel_id)
+                        .map_err(|error| anyhow::anyhow!(error.to_string()))?,
+                    output_channel_id: ChannelId::try_from(job.output_channel_id)
+                        .map_err(|error| anyhow::anyhow!(error.to_string()))?,
+                    entrypoint: entrypoint.clone(),
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        Ok(WorkflowSchema {
+            id: WorkflowId::try_from(metadata.id)
+                .map_err(|error| anyhow::anyhow!(error.to_string()))?,
+            entrypoint,
+            content_hash,
+            input_channel_id: ChannelId::try_from(metadata.input_channel_id)
+                .map_err(|error| anyhow::anyhow!(error.to_string()))?,
+            output_channel_id: ChannelId::try_from(metadata.output_channel_id)
+                .map_err(|error| anyhow::anyhow!(error.to_string()))?,
+            jobs,
+            channels,
+        })
     }
 }
 

@@ -6,6 +6,12 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChannelMetadata {
+    pub id: String,
+    pub accepted_file_extensions: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct JobMetadata {
     pub id: String,
     pub content_hash: String,
@@ -20,4 +26,5 @@ pub struct WorkflowMetadata {
     pub output_channel_id: String,
     pub content_hash: String,
     pub jobs: Vec<JobMetadata>,
+    pub channels: Vec<ChannelMetadata>,
 }

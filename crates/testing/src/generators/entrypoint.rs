@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use rand_chacha::ChaCha8Rng;
-use zygo_core::models::{JobEntrypoint, LocalEntrypoint, OrchestratorMode, RemoteEntrypoint};
+use zygo_core::models::{Entrypoint, LocalEntrypoint, OrchestratorMode, RemoteEntrypoint};
 
 use crate::generators::{Generate, choose};
 
@@ -31,17 +31,17 @@ impl Default for EntrypointGenerator {
 }
 
 impl Generate for EntrypointGenerator {
-    type Output = JobEntrypoint;
+    type Output = Entrypoint;
     type Context = OrchestratorMode;
 
-    fn generate(&self, rng: &mut ChaCha8Rng, mode: OrchestratorMode) -> JobEntrypoint {
+    fn generate(&self, rng: &mut ChaCha8Rng, mode: OrchestratorMode) -> Entrypoint {
         match mode {
-            OrchestratorMode::Local => JobEntrypoint::Local(LocalEntrypoint {
+            OrchestratorMode::Local => Entrypoint::Local(LocalEntrypoint {
                 cwd: choose(rng, &self.working_dirs).clone(),
                 exec: choose(rng, &self.local_commands).clone(),
                 args: vec![],
             }),
-            OrchestratorMode::Remote => JobEntrypoint::Remote(RemoteEntrypoint {
+            OrchestratorMode::Remote => Entrypoint::Remote(RemoteEntrypoint {
                 url: choose(rng, &self.remote_urls).clone(),
                 headers: HashMap::new(),
             }),
