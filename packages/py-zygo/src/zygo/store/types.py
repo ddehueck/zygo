@@ -24,8 +24,19 @@ class Reference:
     """A stable reference to a data object stored in the Store."""
 
     key: str
-    scope: Scope
     uri: FsspecUri
-    etag: str
-    size: int | None = None
-    content_type: str | None = None
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "key": self.key,
+            "uri": str(self.uri),
+        }
+
+    @staticmethod
+    def from_dict(data: dict[str, str]) -> Reference:
+        if "uri" not in data:
+            raise TypeError(f"Expected str, got {type(data['uri'])}")
+        if "key" not in data:
+            raise TypeError(f"Expected str, got {type(data['key'])}")
+
+        return Reference(key=data["key"], uri=FsspecUri(data["uri"]))

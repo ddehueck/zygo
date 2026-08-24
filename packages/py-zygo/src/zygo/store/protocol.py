@@ -5,9 +5,27 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, BinaryIO, Literal, Protocol, TextIO, overload
 
 if TYPE_CHECKING:
-    from contextlib import AbstractContextManager
+    from pathlib import Path
+    from types import TracebackType
 
     from zygo.store.types import Reference, Scope
+
+
+class StoreContextManager[T](Protocol):
+    @property
+    def reference(self) -> Reference:
+        """The stored object reference, available after successful context exit."""
+        ...
+
+    def __enter__(self) -> T: ...
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+        /,
+    ) -> bool | None: ...
 
 
 class StoreProtocol(Protocol):
@@ -94,7 +112,7 @@ class StoreProtocol(Protocol):
         mode: Literal["r", "w", "a", "x", "rt", "wt", "at", "xt"] = ...,
         *,
         scope: Scope = ...,
-    ) -> AbstractContextManager[TextIO]: ...
+    ) -> StoreContextManager[TextIO]: ...
 
     @overload
     def open(
@@ -103,7 +121,7 @@ class StoreProtocol(Protocol):
         mode: Literal["rb", "wb", "ab", "xb"],
         *,
         scope: Scope = ...,
-    ) -> AbstractContextManager[BinaryIO]: ...
+    ) -> StoreContextManager[BinaryIO]: ...
 
     @overload
     def open(
@@ -112,7 +130,7 @@ class StoreProtocol(Protocol):
         mode: str,
         *,
         scope: Scope = ...,
-    ) -> AbstractContextManager[TextIO | BinaryIO]: ...
+    ) -> StoreContextManager[TextIO | BinaryIO]: ...
 
     def open(
         self,
@@ -120,7 +138,7 @@ class StoreProtocol(Protocol):
         mode: str = "r",
         *,
         scope: Scope = "job",
-    ) -> AbstractContextManager[TextIO | BinaryIO]:
+    ) -> StoreContextManager[TextIO | BinaryIO]:
         """
         Open a stored object as a file-like handle (context manager).
 
@@ -133,14 +151,49 @@ class StoreProtocol(Protocol):
                 is passed.
 
         Returns:
-            A context manager that yields a file-like object.
+            A context manager that yields a file-like object and exposes its
+            reference after a successful context exit.
 
         Example::
 
             with store.open(ref, "r") as f:
                 lines = f.readlines()
 
-            with store.open(ref, "w") as f:
+            output = store.open("output.txt", "w")
+            with output as f:
                 f.writelines(lines)
+
+            reference = output.reference
         """
+        ...
+
+    def open_file(
+        self, key: str, mode: Literal["r", "w"], *, scope: Scope = "job"
+    ) -> StoreContextManager[TmpFileProtocol]:
+        """Return a temporary file.
+
+        When in write mode, the file is published under ``key`` on exit.
+        When in read mode, the file is downloaded from the store on enter.
+
+        This isn't as efficient as using open() but it is useful for integrating
+        with libraries that expect a real fs.
+
+        Args:
+            key: Logical name to read or publish.
+            mode: ``"r"`` to download an existing object or ``"w"`` to publish
+                the completed file.
+            scope: Isolation level (default: "job").
+        """
+        ...
+
+
+class TmpFileProtocol(Protocol):
+    @property
+    def path(self) -> Path:
+        """The local path containing the temporary file."""
+        ...
+
+    @property
+    def reference(self) -> Reference:
+        """The stored object reference, available after successful context exit."""
         ...

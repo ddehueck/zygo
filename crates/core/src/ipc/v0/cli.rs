@@ -77,7 +77,11 @@ impl PythonCli {
     }
 
     pub fn parse_metadata_response(response: &str) -> Result<WorkflowMetadata> {
-        let metadata: WorkflowMetadata = serde_json::from_str(response)?;
+        let payload = response
+            .lines()
+            .find_map(|line| line.strip_prefix(STDOUT_IPC_PREFIX))
+            .ok_or_else(|| crate::ipc::error::Error::other("metadata IPC response not found"))?;
+        let metadata: WorkflowMetadata = serde_json::from_str(payload)?;
         Ok(metadata)
     }
 

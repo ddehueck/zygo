@@ -30,7 +30,7 @@ class DataReference:
         """Convert a store reference to the cross-language IPC representation."""
         return cls(
             uri=str(reference.uri),
-            version=reference.etag,
+            version="1",  # TODO: implement or remove versioning?
         )
 
 

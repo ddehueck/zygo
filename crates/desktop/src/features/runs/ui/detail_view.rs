@@ -248,7 +248,7 @@ fn job_runs_section(
     run_id: WorkflowRunId,
     on_navigate: NavigationHandler,
 ) -> gpui::Div {
-    let content = if loading {
+    let content = if loading && job_runs.is_empty() {
         div()
             .id("workflow-run-jobs-loading")
             .text_color(colors.text_secondary)

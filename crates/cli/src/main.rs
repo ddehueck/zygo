@@ -1,5 +1,4 @@
 mod commands;
-mod python;
 mod tui;
 
 use clap::{Parser, Subcommand};
@@ -29,6 +28,7 @@ enum Command {
     Run {
         target: String,
         fsspec_uri: String,
+        #[arg(long)]
         workers: Option<usize>,
     },
 }

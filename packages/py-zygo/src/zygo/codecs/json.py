@@ -1,6 +1,14 @@
 import json
 import math
-from typing import cast, get_args, get_origin, override
+from typing import (
+    Protocol,
+    cast,
+    get_args,
+    get_origin,
+    get_type_hints,
+    is_typeddict,
+    override,
+)
 
 from zygo.codecs.base import (
     Codec,
@@ -13,8 +21,16 @@ from zygo.codecs.base import (
 _DICT_TYPE_ARGUMENT_COUNT = 2
 
 
+class _TypedDictType(Protocol):
+    __required_keys__: frozenset[str]
+
+
 class Json[T](Codec[T]):
-    """A typed primitive container encoded as canonical UTF-8 JSON."""
+    """A typed container encoded as canonical UTF-8 JSON.
+
+    Passing ``dict`` as the value type enables arbitrary JSON objects whose
+    values are validated recursively as JSON-compatible values.
+    """
 
     def __init__(self, value_type: type[T]) -> None:
         super().__init__()
@@ -63,7 +79,12 @@ class Json[T](Codec[T]):
 
 
 def _validate_type_shape(value_type: object) -> None:
-    if _is_json_primitive_type(value_type):
+    if _is_json_primitive_type(value_type) or value_type is dict:
+        return
+
+    if is_typeddict(value_type):
+        for field_type in _typed_dict_fields(value_type).values():
+            _validate_type_shape(field_type)
         return
 
     origin = get_origin(value_type)
@@ -77,7 +98,7 @@ def _validate_type_shape(value_type: object) -> None:
         return
 
     raise TypeError(
-        "Json supports only None, bool, int, float, str, list[T], and dict[str, T]"
+        "Json supports only None, bool, int, float, str, dict, list[T], dict[str, T], and TypedDicts with supported field types"
     )
 
 
@@ -90,6 +111,19 @@ def _validate_value(
 ) -> None:
     if _is_json_primitive_type(expected):
         _validate_primitive(value, expected, path=path)
+        return
+
+    if expected is dict:
+        _validate_json_object(value, path=path)
+        return
+
+    if is_typeddict(expected):
+        _validate_typed_dict(
+            value,
+            expected,
+            path=path,
+            decoding=decoding,
+        )
         return
 
     origin = get_origin(expected)
@@ -126,6 +160,79 @@ def _validate_value(
 
     action = "decode" if decoding else "encode"
     raise TypeError(f"Unsupported JSON type while attempting to {action}: {expected!r}")
+
+
+def _validate_json_object(value: object, *, path: str) -> None:
+    if not isinstance(value, dict):
+        _raise_type_error(path, dict, value)
+
+    for key, item in cast("dict[object, object]", value).items():
+        if not isinstance(key, str):
+            raise TypeError(f"{path} expected string keys, got {type(key).__name__}")
+        _validate_json_value(item, path=f"{path}.{key}")
+
+
+def _validate_json_value(value: object, *, path: str) -> None:
+    if value is None or type(value) is bool or type(value) is int:
+        return
+    if type(value) is float:
+        if not math.isfinite(cast("float", value)):
+            raise ValueError(f"{path} does not support NaN or infinity")
+        return
+    if type(value) is str:
+        return
+    if isinstance(value, list):
+        for index, item in enumerate(cast("list[object]", value)):
+            _validate_json_value(item, path=f"{path}[{index}]")
+        return
+    if isinstance(value, dict):
+        _validate_json_object(value, path=path)
+        return
+    raise TypeError(f"{path} expected a JSON-compatible value, got {type(value).__name__}")
+
+
+def _typed_dict_fields(value_type: object) -> dict[str, object]:
+    return cast(
+        "dict[str, object]",
+        get_type_hints(cast("type[object]", value_type)),
+    )
+
+
+def _validate_typed_dict(
+    value: object,
+    expected: object,
+    *,
+    path: str,
+    decoding: bool,
+) -> None:
+    if not isinstance(value, dict):
+        _raise_type_error(path, expected, value)
+
+    untyped_items = cast("dict[object, object]", value)
+    for key in untyped_items:
+        if not isinstance(key, str):
+            raise TypeError(f"{path} expected string keys, got {type(key).__name__}")
+
+    items = cast("dict[str, object]", value)
+    field_types = _typed_dict_fields(expected)
+    required_keys = cast("_TypedDictType", expected).__required_keys__
+    missing_keys = required_keys - items.keys()
+    if missing_keys:
+        missing_key = min(missing_keys)
+        raise TypeError(f"{path} missing required key {missing_key!r}")
+
+    unexpected_keys = items.keys() - field_types.keys()
+    if unexpected_keys:
+        unexpected_key = min(unexpected_keys)
+        raise TypeError(f"{path} got unexpected key {unexpected_key!r}")
+
+    for key, item in items.items():
+        _validate_value(
+            item,
+            field_types[key],
+            path=f"{path}.{key}",
+            decoding=decoding,
+        )
 
 
 def _is_json_primitive_type(value_type: object) -> bool:

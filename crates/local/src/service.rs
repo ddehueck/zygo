@@ -77,10 +77,23 @@ impl ZygoLocalService {
     }
 
     pub async fn run(&self, input: DataReference, schema: WorkflowSchema) -> Result<WorkflowRunId> {
+        self.run_many(vec![input], schema).await
+    }
+
+    pub async fn run_many(
+        &self,
+        inputs: Vec<DataReference>,
+        schema: WorkflowSchema,
+    ) -> Result<WorkflowRunId> {
+        anyhow::ensure!(
+            !inputs.is_empty(),
+            "a workflow run requires at least one input"
+        );
+
         let workflow_id = schema.id.to_string();
         let content_hash = schema.content_hash.to_string();
 
-        let workflow_run_id = WorkflowRunId::new(&schema.content_hash, &input)?;
+        let workflow_run_id = WorkflowRunId::new_many(&schema.content_hash, &inputs)?;
 
         // saves a record of the run before actually running it
         // we save the workflow id as a tag so we can filter runs by workflow
@@ -94,7 +107,7 @@ impl ZygoLocalService {
             )
             .await?;
 
-        self.base.run(&workflow_run_id, input, schema).await?;
+        self.base.run_many(&workflow_run_id, inputs, schema).await?;
 
         Ok(workflow_run_id)
     }

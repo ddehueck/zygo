@@ -14,7 +14,7 @@ pub type ActorTx = tokio::sync::mpsc::Sender<ActorMessage>;
 pub type ActorRx = tokio::sync::mpsc::Receiver<ActorMessage>;
 
 pub struct ActorMessage {
-    pub event: Event,
+    pub events: Vec<Event>,
     pub reply_tx: tokio::sync::oneshot::Sender<Result<(), anyhow::Error>>,
 }
 
@@ -113,10 +113,12 @@ impl<S: StorageProvider> Actor<S> {
         let mut messages = Vec::with_capacity(ACTOR_MESSAGE_BATCH_SIZE);
 
         while rx.recv_many(&mut messages, ACTOR_MESSAGE_BATCH_SIZE).await > 0 {
-            let (events, reply_txs): (Vec<_>, Vec<_>) = messages
-                .drain(..)
-                .map(|message| (StreamItem::Event(message.event), message.reply_tx))
-                .unzip();
+            let mut events = Vec::new();
+            let mut reply_txs = Vec::with_capacity(messages.len());
+            for message in messages.drain(..) {
+                events.extend(message.events.into_iter().map(StreamItem::Event));
+                reply_txs.push(message.reply_tx);
+            }
 
             let result: Result<()> = async {
                 let write_set = stream_writer.append(events).await?;

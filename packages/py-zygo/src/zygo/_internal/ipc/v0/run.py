@@ -33,9 +33,7 @@ def run(
         job_run_id=JobRunId(args.job_run_id),
         data_ref=Reference(
             key=args.data_reference_uri,
-            scope="job",
             uri=FsspecUri(args.data_reference_uri),
-            etag=args.data_reference_version,
         ),
     )
 

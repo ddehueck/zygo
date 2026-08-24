@@ -7,6 +7,7 @@ import pytest
 from zygo import Input, Output, Publisher, Reference, Workflow
 from zygo._internal.ipc.v0 import metadata as metadata_module
 from zygo._internal.ipc.v0.metadata import build_workflow_metadata
+from zygo._internal.ipc.v0.types import STDOUT_IPC_PREFIX
 
 
 def _workflow() -> Workflow:
@@ -73,6 +74,8 @@ def test_inspect_workflow_prints_json(
 
     metadata_module.inspect_workflow("module:workflow")
 
-    assert json.loads(capsys.readouterr().out) == asdict(
+    stdout = capsys.readouterr().out
+    assert stdout.startswith(STDOUT_IPC_PREFIX)
+    assert json.loads(stdout.removeprefix(STDOUT_IPC_PREFIX)) == asdict(
         build_workflow_metadata(workflow)
     )
