@@ -38,7 +38,18 @@ impl<S: StorageProvider> Zygo<S> {
         input: DataReference,
         schema: WorkflowSchema,
     ) -> Result<(), anyhow::Error> {
-        self.actor_pool.run_with_actor(id, input, schema).await
+        self.run_many(id, vec![input], schema).await
+    }
+
+    pub async fn run_many(
+        &self,
+        id: &WorkflowRunId,
+        inputs: Vec<DataReference>,
+        schema: WorkflowSchema,
+    ) -> Result<(), anyhow::Error> {
+        self.actor_pool
+            .run_with_actor_many(id, inputs, schema)
+            .await
     }
 
     pub async fn subscribe(

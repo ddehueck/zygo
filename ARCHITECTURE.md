@@ -125,3 +125,23 @@ The local crate is responsible for providing simple application layer for buildi
 For example, the desktop app and CLI tool can both be used to run workflows locally. When running workflows locally, we want to keep a history of workflow runs and provide easy search and filtering capabilities. So, we need a local db to store this information and index it. We don't want this in the core crate because this is a local-only concern.
 
 This way zygo's core logic can be extended to build various applications and services e.g. a cloud zygo service.
+
+
+# WIPs
+
+## Data Isolation
+
+Sometimes data needs to be shared across runs/jobs. e.g. ckpt files
+Sometimes data will need to be cached globally. e.g. external datasets, model files, etc 
+Sometimes a python package won't be fsspec compatible - e.g. 
+
+```python
+from mne.datasets import eegbci
+
+paths = eegbci.load_data(
+        subjects=subject,
+        runs=[4, 8, 12],
+        path=download_root,
+        update_path=False,
+    )
+```

@@ -1,5 +1,7 @@
 use std::{
+    fs,
     io::{ErrorKind, stdout},
+    path::{Path, PathBuf},
     process::Command,
     time::Duration,
 };
@@ -20,14 +22,12 @@ use ratatui::{
 use zygo_core::{
     ZygoConfig,
     engine::RunCursor,
-    models::{DataReference, EventId, JobRunId, StreamItem},
+    ipc::v0::PythonCli,
+    models::{DataReference, JobRunId, StreamItem},
     workers::WorkerLogReader,
 };
 
-use crate::{
-    python::{WorkflowMetadata, workflow_schema_from_metadata},
-    tui::{JobLogView, WorkflowRunView, job_run_at_position},
-};
+use crate::tui::{JobLogView, WorkflowRunView, job_run_at_position};
 
 use super::{JobRunSummary, WorkflowRunSummary};
 
@@ -216,11 +216,18 @@ pub async fn run_workflow(
     // println!("metadata: {metadata}");
 
     // 3.5 Parse the metadata into a structured format
-    let metadata: WorkflowMetadata = serde_json::from_str(&metadata)?;
+    let python_cli = PythonCli::new(python.clone(), cwd, target.to_owned());
+    let metadata = PythonCli::parse_metadata_response(&metadata)?;
     // println!("parsed metadata: {metadata:?}");
 
-    let schema =
-        workflow_schema_from_metadata(metadata.clone(), cwd.as_ref(), target, python.as_ref())?;
+    let input_extensions = metadata
+        .channels
+        .iter()
+        .find(|channel| channel.id == metadata.input_channel_id)
+        .map_or_else(Vec::new, |channel| channel.accepted_file_extensions.clone());
+    let inputs = input_data_references(fsspec_uri, &input_extensions)?;
+
+    let schema = python_cli.workflow_schema_from_metadata(metadata.clone())?;
     // println!("built workflow schema: {schema:?}");
 
     // 4. Create a zygo service and start the workflow
@@ -232,12 +239,7 @@ pub async fn run_workflow(
     })
     .await?;
 
-    let data_ref = DataReference {
-        uri: fsspec_uri.to_string(),
-        version: EventId::new().to_string(),
-    };
-
-    let run_id = service.run(data_ref, schema).await?;
+    let run_id = service.run_many(inputs, schema).await?;
     // println!("run_id: {run_id:?}");
 
     // 5. Watch the engine state in an interactive fullscreen terminal view.
@@ -435,4 +437,64 @@ pub async fn run_workflow(
     drop(terminal);
 
     Ok(())
+}
+
+fn input_data_references(
+    input_uri: &str,
+    accepted_file_extensions: &[String],
+) -> anyhow::Result<Vec<DataReference>> {
+    let Some(path) = local_path(input_uri) else {
+        return Ok(vec![DataReference {
+            uri: input_uri.to_owned(),
+            version: String::from("1"),
+        }]);
+    };
+
+    if !path.is_dir() {
+        return Ok(vec![DataReference {
+            uri: input_uri.to_owned(),
+            version: String::from("1"),
+        }]);
+    }
+
+    let accepted_extensions = accepted_file_extensions
+        .iter()
+        .map(|extension| extension.trim_start_matches('.').to_ascii_lowercase())
+        .collect::<Vec<_>>();
+    let mut files = fs::read_dir(&path)?
+        .map(|entry| entry.map(|entry| entry.path()))
+        .collect::<Result<Vec<_>, _>>()?;
+    files.retain(|file| {
+        file.is_file()
+            && (accepted_extensions.is_empty()
+                || file.extension().is_some_and(|extension| {
+                    let extension = extension.to_string_lossy().to_ascii_lowercase();
+                    accepted_extensions
+                        .iter()
+                        .any(|accepted| accepted == &extension)
+                }))
+    });
+    files.sort();
+
+    anyhow::ensure!(
+        !files.is_empty(),
+        "input directory '{}' contains no files accepted by the input channel",
+        path.display()
+    );
+
+    Ok(files
+        .into_iter()
+        .map(|file| DataReference {
+            uri: file.to_string_lossy().into_owned(),
+            version: String::from("1"),
+        })
+        .collect())
+}
+
+fn local_path(uri: &str) -> Option<PathBuf> {
+    if let Some(path) = uri.strip_prefix("file://") {
+        return Some(PathBuf::from(path));
+    }
+
+    (!uri.contains("://")).then(|| Path::new(uri).to_path_buf())
 }

@@ -11,27 +11,36 @@ A user can still opt-in to a shared store across a workflow run via the `scope` 
 
 from __future__ import annotations
 
+from contextlib import AbstractContextManager
+from pathlib import Path
 import posixpath
 import re
+import tempfile
 from typing import TYPE_CHECKING, BinaryIO, Literal, TextIO, cast, overload, override
 
 import fsspec  # type: ignore
 
 from zygo._internal.fsspec import FsspecUri
 from zygo.store import Reference, StoreProtocol
+from zygo.store.protocol import TmpFileProtocol
 
 if TYPE_CHECKING:
-    from contextlib import AbstractContextManager
+    from types import TracebackType
 
     from fsspec.spec import AbstractFileSystem  # type: ignore
 
     from zygo.store._internal.types import PartitionKey
+    from zygo.store.protocol import StoreContextManager
     from zygo.store.types import Scope, StoreOptions
     from zygo.types import JobRunContext
 
 
 def _partition(partition_key: PartitionKey, value: str) -> str:
     return f"{partition_key}={value}"
+
+
+def _contains_any_partition_key(key: str, partition_keys: list[PartitionKey]) -> bool:
+    return any(f"{pk}=" in key for pk in partition_keys)
 
 
 def _normalize_key(key: str) -> str:
@@ -49,17 +58,6 @@ def _build_fs(options: StoreOptions) -> AbstractFileSystem:
     return cast("AbstractFileSystem", fs)
 
 
-def _file_metadata(fs: AbstractFileSystem, path: str) -> tuple[str, int | None]:
-    """Return ``(etag, size)`` for *path*, falling back to safe defaults."""
-    info = fs.info(path)  # type: ignore
-    info_dict = (
-        cast("dict[str, str | int | None]", info) if isinstance(info, dict) else {}
-    )
-    etag = info_dict.get("etag")
-    size = info_dict.get("size")
-    return (str(etag) if etag else "dummy", int(size) if size else None)
-
-
 class StoreImpl(StoreProtocol):
     """
     A high-level store built on fsspec.
@@ -70,6 +68,14 @@ class StoreImpl(StoreProtocol):
         self._context = context
         self._options = options
         self._fs = _build_fs(options)
+
+    def _is_uri(self, value: str) -> bool:
+        """
+        Returns True if the value is a URI.
+        Useful for allowing URIs to be free passed around.
+        """
+        # TODO: This should really just check for a protocol prefix.
+        return _contains_any_partition_key(value, ["job_run_id", "workflow_run_id"])
 
     def _prefix(self, scope: Scope) -> str:
         """
@@ -97,6 +103,10 @@ class StoreImpl(StoreProtocol):
         return posixpath.join(self._options.root_uri.path, "store", "global")
 
     def _uri_for_key(self, key: str, scope: Scope) -> str:
+        # TODO: Better interface for passing URIs directly across the whole store.
+        if self._is_uri(key):
+            return key
+
         key = _normalize_key(key)
         prefix = self._prefix(scope)
         return posixpath.join(prefix, key)
@@ -120,15 +130,9 @@ class StoreImpl(StoreProtocol):
         with self._fs.open(uri, "wb") as f:  # type: ignore
             f.write(data)  # type: ignore
 
-        etag, size = _file_metadata(self._fs, uri)
-
         return Reference(
             key=key,
-            scope=scope,
             uri=FsspecUri(uri),
-            etag=etag,
-            size=size,
-            content_type=content_type,
         )
 
     @override
@@ -158,7 +162,7 @@ class StoreImpl(StoreProtocol):
         mode: Literal["r", "w", "a", "x", "rt", "wt", "at", "xt"] = ...,
         *,
         scope: Scope = ...,
-    ) -> AbstractContextManager[TextIO]: ...
+    ) -> StoreContextManager[TextIO]: ...
 
     @overload
     def open(
@@ -167,7 +171,7 @@ class StoreImpl(StoreProtocol):
         mode: Literal["rb", "wb", "ab", "xb"],
         *,
         scope: Scope = ...,
-    ) -> AbstractContextManager[BinaryIO]: ...
+    ) -> StoreContextManager[BinaryIO]: ...
 
     @overload
     def open(
@@ -176,7 +180,7 @@ class StoreImpl(StoreProtocol):
         mode: str,
         *,
         scope: Scope = ...,
-    ) -> AbstractContextManager[TextIO | BinaryIO]: ...
+    ) -> StoreContextManager[TextIO | BinaryIO]: ...
 
     @override
     def open(
@@ -185,7 +189,7 @@ class StoreImpl(StoreProtocol):
         mode: str = "r",
         *,
         scope: Scope = "job",
-    ) -> AbstractContextManager[TextIO | BinaryIO]:
+    ) -> StoreContextManager[TextIO | BinaryIO]:
         uri_raw = (
             ref.uri if isinstance(ref, Reference) else self._uri_for_key(ref, scope)
         )
@@ -197,7 +201,26 @@ class StoreImpl(StoreProtocol):
             if self._options.root_uri.is_local():
                 self._fs.makedirs(parent, exist_ok=True)  # type: ignore
 
-        return self._fs.open(uri_str, mode)  # type: ignore
+        context = cast(
+            "AbstractContextManager[TextIO | BinaryIO]",
+            self._fs.open(uri_str, mode),  # type: ignore
+        )
+        reference = (
+            ref
+            if isinstance(ref, Reference)
+            else Reference(key=ref, uri=FsspecUri(uri_str))
+        )
+        return _StoreOpenContext(context, reference)
+
+    @override
+    def open_file(
+        self, key: str, mode: Literal["r", "w"], *, scope: Scope = "job"
+    ) -> StoreContextManager[TmpFileProtocol]:
+        reference = Reference(
+            key=key,
+            uri=FsspecUri(self._uri_for_key(key, scope)),
+        )
+        return _OpenFileContext(self, reference, mode)
 
 
 _COPY_CHUNK = 8 * 1024 * 1024  # 8 MiB
@@ -240,12 +263,129 @@ def ingest(*, data_uri: FsspecUri, store_options: StoreOptions) -> Reference:
                 break
             sink.write(chunk)  # type: ignore[reportAny]
 
-    etag, size = _file_metadata(store_fs, dest)
-
     return Reference(
         key=key,
-        scope="global",
         uri=FsspecUri(f"{store_options.root_uri.protocol}://{dest}"),
-        etag=etag,
-        size=size,
     )
+
+
+class _StoreOpenContext[T](AbstractContextManager[T]):
+    def __init__(
+        self,
+        context: AbstractContextManager[T],
+        reference: Reference,
+    ) -> None:
+        super().__init__()
+        self._context = context
+        self._target_reference = reference
+        self._reference: Reference | None = None
+
+    @property
+    def reference(self) -> Reference:
+        if self._reference is None:
+            raise RuntimeError(
+                "Reference is only available after successful context exit"
+            )
+        return self._reference
+
+    @override
+    def __enter__(self) -> T:
+        super().__enter__()
+        return self._context.__enter__()
+
+    @override
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool | None:
+        suppress = self._context.__exit__(exc_type, exc_value, traceback)
+        if exc_type is None:
+            self._reference = self._target_reference
+        return suppress
+
+
+class _OpenFileContext(AbstractContextManager[TmpFileProtocol]):
+    def __init__(
+        self,
+        store: StoreImpl,
+        reference: Reference,
+        mode: Literal["r", "w"],
+    ) -> None:
+        super().__init__()
+
+        if mode not in {"r", "w"}:
+            raise ValueError(f"Invalid mode: {mode}")
+
+        self._store = store
+        self._target_reference = reference
+        self._mode: Literal["r", "w"] = mode
+        self._directory: tempfile.TemporaryDirectory[str] | None = None
+        self._path: Path | None = None
+        self._reference: Reference | None = None
+
+    @property
+    def path(self) -> Path:
+        if self._path is None:
+            raise RuntimeError("Temporary file is only available inside its context")
+        return self._path
+
+    @property
+    def reference(self) -> Reference:
+        if self._reference is None:
+            raise RuntimeError(
+                "Reference is only available after successful context exit"
+            )
+        return self._reference
+
+    @override
+    def __enter__(self) -> TmpFileProtocol:
+        super().__enter__()
+        if self._directory is not None:
+            raise RuntimeError(
+                "Temporary file context cannot be entered more than once"
+            )
+
+        initial_data = (
+            self._store.get(self._target_reference) if self._mode == "r" else None
+        )
+        self._directory = tempfile.TemporaryDirectory()
+
+        # NB: It's important for to preserve the initial data file's name/extension.
+        # Some libs will validate files by extension, so we need to preserve it.
+        if initial_data is not None:
+            self._path = Path(self._directory.name) / posixpath.basename(
+                self._target_reference.key
+            )
+            self._path.write_bytes(initial_data)
+        else:
+            with tempfile.NamedTemporaryFile(
+                dir=self._directory.name,
+                delete=False,
+            ) as temporary_file:
+                self._path = Path(temporary_file.name)
+        return self
+
+    @override
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        _exc_value: BaseException | None,
+        _traceback: TracebackType | None,
+    ) -> None:
+        directory = self._directory
+        if directory is None:
+            raise RuntimeError("Temporary file context has not been entered")
+
+        try:
+            if exc_type is None:
+                match self._mode:
+                    case "w":
+                        self._reference = self._store.put(
+                            self._target_reference.key, self.path.read_bytes()
+                        )
+                    case "r":
+                        self._reference = self._target_reference
+        finally:
+            directory.cleanup()

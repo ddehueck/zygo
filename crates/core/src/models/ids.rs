@@ -1,3 +1,5 @@
+use std::{fmt::Write, slice};
+
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -64,12 +66,21 @@ impl WorkflowRunId {
         workflow_schema_content_hash: &ContentHash,
         data_reference: &DataReference,
     ) -> Result<Self, DomainError> {
-        let name = format!(
-            "{}\0{}\0{}",
-            workflow_schema_content_hash.as_ref(),
-            data_reference.version,
-            data_reference.uri
-        );
+        Self::new_many(
+            workflow_schema_content_hash,
+            slice::from_ref(data_reference),
+        )
+    }
+
+    pub fn new_many(
+        workflow_schema_content_hash: &ContentHash,
+        data_references: &[DataReference],
+    ) -> Result<Self, DomainError> {
+        let mut name = workflow_schema_content_hash.as_ref().to_owned();
+        for data_reference in data_references {
+            write!(name, "\0{}\0{}", data_reference.version, data_reference.uri)
+                .expect("writing to a String cannot fail");
+        }
         Self::try_from(Uuid::new_v5(&WORKFLOW_RUN_NAMESPACE, name.as_bytes()).to_string())
     }
 }

@@ -33,6 +33,20 @@ impl<S: StorageProvider> ActorPool<S> {
         input: DataReference,
         schema: WorkflowSchema,
     ) -> Result<(), anyhow::Error> {
+        self.run_with_actor_many(id, vec![input], schema).await
+    }
+
+    pub async fn run_with_actor_many(
+        &self,
+        id: &WorkflowRunId,
+        inputs: Vec<DataReference>,
+        schema: WorkflowSchema,
+    ) -> Result<(), anyhow::Error> {
+        anyhow::ensure!(
+            !inputs.is_empty(),
+            "a workflow run requires at least one input"
+        );
+
         let mut registry = self.registry.lock().await;
 
         if registry.contains_key(&id) {
@@ -43,20 +57,22 @@ impl<S: StorageProvider> ActorPool<S> {
         registry.insert(id.clone(), actor_handle.clone());
         drop(registry); // Release lock after actor handle is inserted
 
-        let input_channel_inserted_event = Event {
-            id: EventId::new(),
-            is_replay: false,
-            timestamp: SystemTime::now(),
-            kind: EventKind::ChannelItemInserted(ChannelItemInsertedData {
-                channel_id: schema.input_channel_id,
-                data_reference: input,
-            }),
-            source: Source::Input,
-            run_id: id.clone(),
-        };
+        let input_events = inputs
+            .into_iter()
+            .map(|input| Event {
+                id: EventId::new(),
+                is_replay: false,
+                timestamp: SystemTime::now(),
+                kind: EventKind::ChannelItemInserted(ChannelItemInsertedData {
+                    channel_id: schema.input_channel_id.clone(),
+                    data_reference: input,
+                }),
+                source: Source::Input,
+                run_id: id.clone(),
+            })
+            .collect();
 
-        self.send_event(&actor_handle, input_channel_inserted_event)
-            .await?;
+        self.send_events(&actor_handle, input_events).await?;
 
         Ok(())
     }
@@ -92,21 +108,21 @@ impl<S: StorageProvider> ActorPool<S> {
         ActorHandle::spawn(&run_context).await
     }
 
-    async fn send_event(
+    async fn send_events(
         &self,
         actor_handle: &ActorHandle,
-        event: Event,
+        events: Vec<Event>,
     ) -> Result<(), anyhow::Error> {
         let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
         actor_handle
             .tx
-            .send_timeout(ActorMessage { event, reply_tx }, DEFAULT_TIMEOUT)
+            .send_timeout(ActorMessage { events, reply_tx }, DEFAULT_TIMEOUT)
             .await
-            .map_err(|error| anyhow::anyhow!("failed to send event to workflow actor: {error}"))?;
+            .map_err(|error| anyhow::anyhow!("failed to send events to workflow actor: {error}"))?;
 
         reply_rx
             .await
-            .map_err(|_| anyhow::anyhow!("workflow actor dropped the event response"))??;
+            .map_err(|_| anyhow::anyhow!("workflow actor dropped the events response"))??;
 
         Ok(())
     }

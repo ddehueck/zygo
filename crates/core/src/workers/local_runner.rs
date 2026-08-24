@@ -139,7 +139,10 @@ impl<S: StorageProvider> LocalJobRunner<S> {
 
         self.context
             .actor_tx
-            .send(ActorMessage { event, reply_tx })
+            .send(ActorMessage {
+                events: vec![event],
+                reply_tx,
+            })
             .await
             .map_err(|_| anyhow!("workflow actor stopped before accepting job event"))?;
 

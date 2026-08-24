@@ -9,3 +9,18 @@ Welcome to the Zygo CLI documentation.
 ## Get started
 
 This guide will cover installing the CLI and running Zygo from your terminal.
+
+## Running with multiple input files
+
+The `run` command accepts either a single input file or a local directory:
+
+```sh
+zygo run myproject.workflow:workflow input.txt
+zygo run myproject.workflow:workflow inputdir/
+```
+
+When the input is a directory, Zygo creates one input channel item for each
+regular file in that directory whose extension is accepted by the workflow's
+input channel. Files are sorted by path before they are inserted, and all files
+belong to the same workflow run. Directory scanning is currently non-recursive;
+remote directory URIs are not expanded yet.
