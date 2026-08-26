@@ -1,6 +1,7 @@
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+import optimizeLocales from "@react-aria/optimize-locales-plugin";
 
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
@@ -17,6 +18,13 @@ export default defineConfig(async () => ({
       },
     }),
     react(),
+    // https://react-aria.adobe.com/frameworks
+    {
+      ...optimizeLocales.vite({
+        locales: ["en-US", "fr-FR"],
+      }),
+      enforce: "pre",
+    },
   ],
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
