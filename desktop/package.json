@@ -2,6 +2,10 @@
   "name": "desktop",
   "private": true,
   "version": "0.1.0",
+  "packageManager": "pnpm@11.24.0",
+  "engines": {
+    "pnpm": ">=11 <12"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -20,12 +24,14 @@
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
     "@tauri-apps/cli": "^2",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^6.1.0",
     "oxfmt": "^0.65.0",
     "oxlint": "^1.80.0",
+    "tailwindcss": "^4.3.3",
     "typescript": "~7.0.2",
     "vite": "^8.2.2"
   }

@@ -1,6 +1,10 @@
 {
   "name": "site",
   "private": true,
+  "packageManager": "pnpm@11.24.0",
+  "engines": {
+    "pnpm": ">=11 <12"
+  },
   "type": "module",
   "sideEffects": false,
   "scripts": {

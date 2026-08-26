@@ -1,5 +1,6 @@
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 import optimizeLocales from "@react-aria/optimize-locales-plugin";
 
@@ -18,6 +19,7 @@ export default defineConfig(async () => ({
       },
     }),
     react(),
+    tailwindcss(),
     // https://react-aria.adobe.com/frameworks
     {
       ...optimizeLocales.vite({
