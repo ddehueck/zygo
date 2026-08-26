@@ -1,6 +1,7 @@
 [package]
 name = "desktop"
 version = "0.1.0"
+default-run = "desktop"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
@@ -19,7 +20,7 @@ codegen = []
 
 [[bin]]
 name = "generate-bindings"
-path = "scripts/gen.rs"
+path = "bin/gen.rs"
 required-features = ["codegen"]
 
 
