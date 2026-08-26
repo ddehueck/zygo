@@ -23,7 +23,7 @@ export default defineConfig(async () => ({
     // https://react-aria.adobe.com/frameworks
     {
       ...optimizeLocales.vite({
-        locales: ["en-US", "fr-FR"],
+        locales: ["en-US"],
       }),
       enforce: "pre",
     },
