@@ -1,3 +1,7 @@
+# List available recipes
+default:
+    @just --list
+
 dev:
     pnpm tauri dev
 
@@ -9,3 +13,10 @@ fmt:
 
 typecheck:
     pnpm tsc
+
+# Generate TypeScript bindings from Rust code
+generate-bindings:
+    cargo run \
+    --manifest-path src-tauri/Cargo.toml \
+    --features codegen \
+    --bin generate-bindings
