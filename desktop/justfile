@@ -1,0 +1,11 @@
+dev:
+    pnpm tauri dev
+
+lint:
+    oxlint
+
+fmt:
+    oxfmt
+
+typecheck:
+    pnpm tsc
