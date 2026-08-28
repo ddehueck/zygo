@@ -1,6 +1,6 @@
 use crate::context::{ActorContext, RunContext};
 use crate::engine::{EngineSnapshot, StepResult};
-use crate::models::StreamItem;
+use crate::models::{StreamItem, WorkflowRunStatus};
 use crate::stream::StreamWriter;
 use crate::{engine::Engine, models::Event, store::StorageProvider};
 use anyhow::Result;
@@ -63,6 +63,10 @@ impl ActorHandle {
 }
 
 impl ActorHandle {
+    pub fn signal_cancel(&self) {
+        self.cancellation.cancel();
+    }
+
     pub async fn cancel(&self) {
         self.cancellation.cancel_and_wait().await;
     }
@@ -108,16 +112,18 @@ impl<S: StorageProvider> Actor<S> {
         loop {
             match engine.step().await {
                 Ok(StepResult::Continue) => continue,
-                Ok(StepResult::Terminal(_)) => break,
                 Ok(StepResult::Idle) => event_notify.notified().await,
-                Ok(StepResult::WorkerPoolCapacityRequired) => {
-                    if let Err(error) = context.worker_pool.wait_for_capacity().await {
-                        eprintln!(
-                            "failed waiting for worker capacity for run {}: {error}",
-                            context.run_id
-                        );
-                        break;
+                Ok(StepResult::Terminal(status)) => {
+                    if status == WorkflowRunStatus::Failed {
+                        context.cancellation.cancel();
+                        if let Err(error) = context.worker_pool.cancel_run(&context.run_id) {
+                            eprintln!(
+                                "failed to remove queued jobs for run {}: {error}",
+                                context.run_id
+                            );
+                        }
                     }
+                    break;
                 }
                 Err(error) => {
                     eprintln!("failed to step engine for run {}: {error}", context.run_id);

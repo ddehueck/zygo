@@ -14,31 +14,29 @@ use crate::ipc;
 use crate::ipc::v0::RunCommandArgs;
 use crate::models::{Entrypoint, JobRunId};
 
-use crate::workers::WorkerLog;
+use crate::workers::{WorkerContext, WorkerLog};
 use crate::{
     actors::ActorMessage,
-    context::ActorContext,
     models::{
         Event, EventId, EventKind, JobFailedData, JobRunSource, JobStartedData, JobSucceededData,
         Source,
     },
-    store::StorageProvider,
 };
 
 const PROCESS_WAIT_POLL_INTERVAL: Duration = Duration::from_millis(25);
 
 /// The local job runner runs the job on the same machine as the orchestrator service.
 /// It kicks the job off and monitors stdout for events to send to the workflow run actor.
-pub struct LocalJobRunner<S: StorageProvider> {
-    context: ActorContext<S>,
+pub struct LocalJobRunner {
+    context: WorkerContext,
     source: JobRunSource,
     entrypoint: Entrypoint,
     args: RunCommandArgs, // TODO: Generalize - revist when adding support for other run commands?
 }
 
-impl<S: StorageProvider> LocalJobRunner<S> {
+impl LocalJobRunner {
     pub fn new(
-        context: ActorContext<S>,
+        context: WorkerContext,
         source: JobRunSource,
         entrypoint: Entrypoint,
         args: RunCommandArgs,
@@ -312,7 +310,6 @@ mod tests {
     };
 
     use super::LocalJobRunner;
-    use crate::store::MemoryStore;
 
     #[tokio::test]
     async fn cleaning_up_an_already_exited_process_group_is_ok() {
@@ -331,7 +328,7 @@ mod tests {
             sleep(Duration::from_millis(10)).await;
         }
 
-        LocalJobRunner::<MemoryStore>::kill_process_group(&mut child)
+        LocalJobRunner::kill_process_group(&mut child)
             .await
             .expect("an exited process group should already be clean");
     }
@@ -369,7 +366,7 @@ mod tests {
             sleep(Duration::from_millis(10)).await;
         }
 
-        LocalJobRunner::<MemoryStore>::kill_process_group(&mut child)
+        LocalJobRunner::kill_process_group(&mut child)
             .await
             .expect("residual process group should be killed and reaped");
 
@@ -400,7 +397,7 @@ mod tests {
             .parse::<u32>()
             .expect("descendant PID should be numeric");
 
-        LocalJobRunner::<MemoryStore>::kill_process_group(&mut child)
+        LocalJobRunner::kill_process_group(&mut child)
             .await
             .expect("process group should be killed");
 

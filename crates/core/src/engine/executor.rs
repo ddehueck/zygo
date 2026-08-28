@@ -1,6 +1,6 @@
 //! Executes command IR produced by the arbiter.
 use crate::context::ActorContext;
-use crate::engine::executor::ExecuteOutcome::{Completed, WorkerPoolCapacityRequired};
+
 use crate::engine::{Error, Result};
 use crate::ipc::v0::RunCommandArgs;
 use crate::models::{
@@ -9,14 +9,8 @@ use crate::models::{
     StreamItem, StreamRecord,
 };
 use crate::store::StorageProvider;
-use crate::workers::Error as WorkerError;
 
 use super::state::{ResultCache, RunState};
-
-pub enum ExecuteOutcome {
-    Completed(ExecuteResult),
-    WorkerPoolCapacityRequired,
-}
 
 pub struct ExecuteResult {
     pub next_state: RunState,
@@ -37,25 +31,17 @@ impl<S: StorageProvider> Executor<S> {
         command: Command,
         context: &ResultCache<S>,
         state: &RunState,
-    ) -> Result<ExecuteOutcome> {
+    ) -> Result<ExecuteResult> {
         match command {
             Command::RunJob(command) => self.run_job(command, context, state).await,
-            Command::ReplayJob(command) => self
-                .replay_job(command, context, state)
-                .await
-                .map(Completed),
-            Command::CacheJobEventSource(command) => self
-                .cache_job_event_source(command, state)
-                .await
-                .map(Completed),
-            Command::CacheJobRunResult(command) => self
-                .cache_job_run_result(command, context, state)
-                .await
-                .map(Completed),
-            Command::SetJobRunStatus(command) => self
-                .record_job_run_status(command, state)
-                .await
-                .map(Completed),
+            Command::ReplayJob(command) => self.replay_job(command, context, state).await,
+            Command::CacheJobEventSource(command) => {
+                self.cache_job_event_source(command, state).await
+            }
+            Command::CacheJobRunResult(command) => {
+                self.cache_job_run_result(command, context, state).await
+            }
+            Command::SetJobRunStatus(command) => self.record_job_run_status(command, state).await,
         }
     }
 
@@ -64,7 +50,7 @@ impl<S: StorageProvider> Executor<S> {
         command: RunJobCommand,
         context: &ResultCache<S>,
         state: &RunState,
-    ) -> Result<ExecuteOutcome> {
+    ) -> Result<ExecuteResult> {
         let job_args = RunCommandArgs {
             job_id: command.job_id.to_string(),
             data_reference_uri: command.data_reference.uri.clone(),
@@ -83,23 +69,17 @@ impl<S: StorageProvider> Executor<S> {
             job_run_id: command.job_run_id,
         };
 
-        match self.context.worker_pool.spawn_job(
+        self.context.worker_pool.enqueue_job(
             self.context.clone(),
             source,
             job_args,
             job_entrypoint,
-        ) {
-            // TODO: Queued job event/status?
-            Ok(_) => Ok(Completed(ExecuteResult {
-                // Record the dispatched job before its asynchronous JobStarted event arrives.
-                // Otherwise, a previously succeeded job can make the workflow look terminal
-                // during the gap between spawning this worker and receiving that event.
-                next_state: state.set_job_status(job_run_id, JobRunStatus::Running),
-                next_events: vec![],
-            })),
-            Err(WorkerError::NoCapacity) => Ok(WorkerPoolCapacityRequired),
-            Err(error) => Err(error.into()),
-        }
+        )?;
+
+        Ok(ExecuteResult {
+            next_state: state.set_job_status(job_run_id, JobRunStatus::Queued),
+            next_events: vec![],
+        })
     }
 
     async fn replay_job(

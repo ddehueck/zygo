@@ -80,6 +80,10 @@ impl<S: StorageProvider> ActorPool<S> {
         };
 
         if let Some(actor_handle) = actor_handle {
+            actor_handle.signal_cancel();
+            if let Err(error) = self.context.worker_pool.cancel_run(workflow_run_id) {
+                eprintln!("failed to remove queued jobs for run {workflow_run_id}: {error}");
+            }
             actor_handle.cancel().await;
         }
     }

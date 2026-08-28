@@ -33,9 +33,13 @@ impl CancellationGroup {
         self.tasks.spawn(task)
     }
 
-    pub async fn cancel_and_wait(&self) {
+    pub fn cancel(&self) {
         self.tasks.close();
         self.token.cancel();
+    }
+
+    pub async fn cancel_and_wait(&self) {
+        self.cancel();
         self.tasks.wait().await;
     }
 }
