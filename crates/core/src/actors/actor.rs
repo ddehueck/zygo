@@ -29,6 +29,7 @@ pub struct Actor<S: StorageProvider> {
 pub struct ActorHandle {
     pub tx: ActorTx,
     pub state_rx: Receiver<EngineSnapshot>,
+    cancellation: crate::CancellationGroup,
 }
 
 impl ActorHandle {
@@ -44,8 +45,20 @@ impl ActorHandle {
             state_tx,
         };
 
-        tokio::spawn(async move { actor.run().await });
-        Ok(Self { tx, state_rx })
+        let cancellation = context.cancellation.clone();
+        drop(cancellation.spawn(async move { actor.run().await }));
+
+        Ok(Self {
+            tx,
+            state_rx,
+            cancellation,
+        })
+    }
+}
+
+impl ActorHandle {
+    pub async fn cancel(&self) {
+        self.cancellation.cancel_and_wait().await;
     }
 }
 
@@ -59,6 +72,7 @@ impl<S: StorageProvider> Actor<S> {
         } = self;
 
         tokio::select! {
+            _ = context.cancellation.cancelled() => {}
             // Dropping the receiver future closes it when the engine reaches a terminal state.
             _ = Self::engine_loop(&context, &event_notify, &state_tx) => {}
             // TODO: Should we just pass the writer reference to the job runners?

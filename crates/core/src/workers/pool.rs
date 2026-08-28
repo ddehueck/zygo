@@ -44,22 +44,33 @@ impl WorkerPool {
         args: RunCommandArgs,
         entrypoint: Entrypoint,
     ) -> Result<()> {
+        if context.cancellation.is_cancelled() {
+            return Err(Closed);
+        }
+
         let permit = match self.semaphore.clone().try_acquire_owned() {
             Ok(permit) => permit,
             Err(TryAcquireError::NoPermits) => return Err(NoCapacity),
             Err(TryAcquireError::Closed) => return Err(Closed),
         };
 
-        tokio::spawn(async move {
-            if let Err(e) = Runner::new()
+        let task_group = context.cancellation.clone();
+        let cancellation = task_group.clone();
+        drop(task_group.spawn(async move {
+            if cancellation.is_cancelled() {
+                drop(permit);
+                return;
+            }
+
+            if let Err(error) = Runner::new()
                 .run_job(context, source, entrypoint, args)
                 .await
             {
                 // TODO: Better error handling here
-                eprintln!("job failed: {e}");
+                eprintln!("job failed: {error}");
             }
             drop(permit);
-        });
+        }));
 
         Ok(())
     }

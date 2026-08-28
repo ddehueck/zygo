@@ -118,6 +118,10 @@ In principle, there are optimizations to further parallelize the engine's operat
 
 todo
 
+#### Cancellation
+
+Cancellation is scoped to a single workflow run. A run-level cancellation group signals its actor and workers and tracks their tasks so `Zygo::cancel` does not return until cleanup completes; local Python jobs run in OS process groups (Job Objects on Windows), allowing cancellation to terminate each worker and its descendants before the runtime exits. Persisted `Cancelled` workflow and job statuses are not yet modeled.
+
 ### The Local Crate
 
 The local crate is responsible for providing simple application layer for building local tools to interact with the core create. 

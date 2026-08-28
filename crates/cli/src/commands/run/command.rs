@@ -339,8 +339,10 @@ pub async fn run_workflow(
             LoopEvent::Input(Some(TerminalEvent::Key(key)))
                 if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) =>
             {
-                if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
-                    // TODO: Send a kill signal to active workflow child processes.
+                let cancel_key = key.code == KeyCode::Char('q')
+                    || (key.code == KeyCode::Char('c')
+                        && key.modifiers.contains(KeyModifiers::CONTROL));
+                if cancel_key {
                     should_quit = true;
                 } else {
                     match &screen {
@@ -350,7 +352,6 @@ pub async fn run_workflow(
                             }
                             KeyCode::Down => select_next(&mut table_state, summary.job_runs.len()),
                             KeyCode::Enter => open_job_index = table_state.selected(),
-                            KeyCode::Char('q') if is_terminal => should_quit = true,
                             _ => {}
                         },
                         Screen::Logs(_) if key.code == KeyCode::Esc => screen = Screen::Summary,
@@ -382,6 +383,7 @@ pub async fn run_workflow(
         }
 
         if should_quit {
+            service.cancel(&run_id).await?;
             break;
         }
 
@@ -411,7 +413,7 @@ pub async fn run_workflow(
                 terminal.draw(|frame| {
                     last_area = frame.area();
                     frame.render_stateful_widget(
-                        WorkflowRunView::new(&summary, target, fsspec_uri, is_terminal),
+                        WorkflowRunView::new(&summary, target, fsspec_uri),
                         frame.area(),
                         &mut table_state,
                     );

@@ -112,6 +112,10 @@ impl ZygoLocalService {
         Ok(workflow_run_id)
     }
 
+    pub async fn cancel(&self, run_id: &WorkflowRunId) -> Result<()> {
+        self.base.cancel(run_id).await
+    }
+
     pub fn stream_processor(&self, run_id: &WorkflowRunId) -> LocalStreamProcessor {
         LocalStreamProcessor::new(self.repos.clone(), run_id.clone(), self.base.stream(run_id))
     }

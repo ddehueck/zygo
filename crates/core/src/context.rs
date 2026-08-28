@@ -1,4 +1,5 @@
 use crate::{
+    CancellationGroup,
     actors::ActorTx,
     models::WorkflowRunId,
     store::{StorageProvider, Store},
@@ -30,14 +31,20 @@ pub struct RunContext<S: StorageProvider> {
     pub store: Store<S>,
     pub worker_pool: WorkerPool,
     pub run_id: WorkflowRunId,
+    pub cancellation: CancellationGroup,
 }
 
 impl<S: StorageProvider> RunContext<S> {
-    pub fn new(context: &ServiceContext<S>, run_id: &WorkflowRunId) -> Self {
+    pub fn new(
+        context: &ServiceContext<S>,
+        run_id: &WorkflowRunId,
+        cancellation: CancellationGroup,
+    ) -> Self {
         Self {
             store: context.store.clone(),
             worker_pool: context.worker_pool.clone(),
             run_id: run_id.clone(),
+            cancellation,
         }
     }
 }
@@ -57,6 +64,7 @@ impl<S: StorageProvider> Clone for RunContext<S> {
             store: self.store.clone(),
             worker_pool: self.worker_pool.clone(),
             run_id: self.run_id.clone(),
+            cancellation: self.cancellation.clone(),
         }
     }
 }
@@ -67,6 +75,7 @@ pub struct ActorContext<S: StorageProvider> {
     pub run_id: WorkflowRunId,
     pub actor_tx: ActorTx,
     pub stream_writer: StreamWriter,
+    pub cancellation: CancellationGroup,
 }
 
 impl<S: StorageProvider> ActorContext<S> {
@@ -77,6 +86,7 @@ impl<S: StorageProvider> ActorContext<S> {
             run_id: context.run_id.clone(),
             actor_tx,
             stream_writer,
+            cancellation: context.cancellation.clone(),
         }
     }
 }
@@ -87,6 +97,7 @@ impl<S: StorageProvider> From<&ActorContext<S>> for RunContext<S> {
             store: context.store.clone(),
             worker_pool: context.worker_pool.clone(),
             run_id: context.run_id.clone(),
+            cancellation: context.cancellation.clone(),
         }
     }
 }
@@ -99,6 +110,7 @@ impl<S: StorageProvider> Clone for ActorContext<S> {
             run_id: self.run_id.clone(),
             actor_tx: self.actor_tx.clone(),
             stream_writer: self.stream_writer.clone(),
+            cancellation: self.cancellation.clone(),
         }
     }
 }

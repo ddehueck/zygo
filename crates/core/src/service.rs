@@ -52,6 +52,11 @@ impl<S: StorageProvider> Zygo<S> {
             .await
     }
 
+    pub async fn cancel(&self, run_id: &WorkflowRunId) -> Result<(), anyhow::Error> {
+        self.actor_pool.cancel(run_id).await;
+        Ok(())
+    }
+
     pub async fn subscribe(
         &self,
         run_id: &WorkflowRunId,

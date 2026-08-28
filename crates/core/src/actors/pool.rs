@@ -1,4 +1,5 @@
 use crate::{
+    CancellationGroup,
     actors::actor::{ActorHandle, ActorMessage},
     context::{RunContext, ServiceContext},
     engine::EngineSnapshot,
@@ -77,6 +78,17 @@ impl<S: StorageProvider> ActorPool<S> {
         Ok(())
     }
 
+    pub async fn cancel(&self, workflow_run_id: &WorkflowRunId) {
+        let actor_handle = {
+            let registry = self.registry.lock().await;
+            registry.get(workflow_run_id).cloned()
+        };
+
+        if let Some(actor_handle) = actor_handle {
+            actor_handle.cancel().await;
+        }
+    }
+
     pub async fn subscribe(
         &self,
         workflow_run_id: &WorkflowRunId,
@@ -104,7 +116,8 @@ impl<S: StorageProvider> ActorPool<S> {
             .put(&[(schema_key, schema_value)])
             .await?;
 
-        let run_context = RunContext::new(&self.context, workflow_run_id);
+        let cancellation = CancellationGroup::new();
+        let run_context = RunContext::new(&self.context, workflow_run_id, cancellation);
         ActorHandle::spawn(&run_context).await
     }
 
