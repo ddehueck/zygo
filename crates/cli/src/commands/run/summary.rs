@@ -1,4 +1,4 @@
-use std::time::SystemTime;
+use std::{collections::HashMap, time::SystemTime};
 
 use zygo_core::{
     engine::EngineSnapshot,
@@ -9,6 +9,7 @@ pub struct WorkflowRunSummary {
     pub workflow_id: String,
     pub workflow_status: String,
     pub job_runs: Vec<JobRunSummary>,
+    job_run_indices: HashMap<String, usize>,
 }
 
 pub struct JobRunSummary {
@@ -25,6 +26,7 @@ impl WorkflowRunSummary {
             workflow_id,
             workflow_status: WorkflowRunStatus::Running.to_string(),
             job_runs: vec![],
+            job_run_indices: HashMap::new(),
         }
     }
 
@@ -38,24 +40,24 @@ impl WorkflowRunSummary {
         match event.kind {
             EventKind::JobStarted(data) => {
                 let job_run_id = data.job_run_id.to_string();
+                let job_id = data.job_id.to_string();
 
-                if let Some(job_run) = self
-                    .job_runs
-                    .iter_mut()
-                    .find(|job_run| job_run.job_run_id == job_run_id)
-                {
-                    job_run.job_id = data.job_id.to_string();
+                if let Some(&index) = self.job_run_indices.get(&job_run_id) {
+                    let job_run = &mut self.job_runs[index];
+                    job_run.job_id = job_id;
                     job_run.status = "running".to_owned();
                     job_run.started_at = Some(timestamp);
                     job_run.ended_at = None;
                 } else {
+                    let index = self.job_runs.len();
                     self.job_runs.push(JobRunSummary {
-                        job_id: data.job_id.to_string(),
-                        job_run_id,
+                        job_id,
+                        job_run_id: job_run_id.clone(),
                         status: "running".to_owned(),
                         started_at: Some(timestamp),
                         ended_at: None,
                     });
+                    self.job_run_indices.insert(job_run_id, index);
                 }
             }
             EventKind::JobSucceeded(data) => self.complete_job_run(
@@ -83,22 +85,21 @@ impl WorkflowRunSummary {
         status: &str,
         ended_at: SystemTime,
     ) {
-        if let Some(job_run) = self
-            .job_runs
-            .iter_mut()
-            .find(|job_run| job_run.job_run_id == job_run_id)
-        {
+        if let Some(&index) = self.job_run_indices.get(&job_run_id) {
+            let job_run = &mut self.job_runs[index];
             job_run.job_id = job_id;
             job_run.status = status.to_owned();
             job_run.ended_at = Some(ended_at);
         } else {
+            let index = self.job_runs.len();
             self.job_runs.push(JobRunSummary {
                 job_id,
-                job_run_id,
+                job_run_id: job_run_id.clone(),
                 status: status.to_owned(),
                 started_at: None,
                 ended_at: Some(ended_at),
             });
+            self.job_run_indices.insert(job_run_id, index);
         }
     }
 }

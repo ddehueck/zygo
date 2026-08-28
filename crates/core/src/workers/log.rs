@@ -8,6 +8,8 @@ use tokio::fs::File as TokioFile;
 
 use crate::models::JobRunId;
 
+const LOG_DIRECTORY: &str = "zygo_logs";
+
 pub struct WorkerLog {
     job_run_id: JobRunId,
     cwd: Option<PathBuf>,
@@ -35,17 +37,22 @@ impl WorkerLog {
         // So, there is definitely a refactor brewing in this are of the architecture.
         let filename = format!("{}.log", self.job_run_id);
         match &self.cwd {
-            Some(cwd) => cwd.join(&filename),
-            None => PathBuf::from(filename),
+            Some(cwd) => cwd.join(LOG_DIRECTORY).join(&filename),
+            None => PathBuf::from(LOG_DIRECTORY).join(filename),
         }
     }
 
     pub async fn get_write_file(&self) -> std::io::Result<TokioFile> {
+        let path = self.log_file_path();
+        if let Some(parent) = path.parent() {
+            tokio::fs::create_dir_all(parent).await?;
+        }
+
         tokio::fs::OpenOptions::new()
             .write(true)
             .create(true)
             .append(true)
-            .open(self.log_file_path())
+            .open(path)
             .await
     }
 
@@ -130,6 +137,9 @@ mod tests {
         ))
         .expect("test job run ID should be valid");
         let log_path = WorkerLog::new(job_run_id.clone()).log_file_path();
+        tokio::fs::create_dir_all(log_path.parent().expect("log path should have a parent"))
+            .await
+            .expect("test log directory should be created");
         tokio::fs::write(&log_path, b"existing line\n")
             .await
             .expect("test log should be created");
@@ -177,6 +187,8 @@ mod tests {
         std::fs::create_dir_all(&cwd).expect("test working directory should be created");
 
         let log_path = WorkerLog::in_directory(job_run_id.clone(), cwd.clone()).log_file_path();
+        std::fs::create_dir_all(log_path.parent().expect("log path should have a parent"))
+            .expect("test log directory should be created");
         std::fs::write(&log_path, b"entrypoint line\n").expect("test log should be created");
 
         let reader = WorkerLogReader::new_sync_in(job_run_id, cwd.clone())

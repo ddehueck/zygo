@@ -37,18 +37,21 @@ class _JobWithContext(Protocol[T_job_in_contra, T_job_out_co]):
     ) -> T_job_out_co: ...
 
 
+type _JobReturn[T] = T | list[T] | None
+
+
 class _JobDecorator(Protocol[T_job_in, T_job_out]):
     @overload
     def __call__(
         self,
-        fn: _JobWithContext[T_job_in, T_job_out | None],
-    ) -> _JobWithContext[T_job_in, T_job_out | None]: ...
+        fn: _JobWithContext[T_job_in, _JobReturn[T_job_out]],
+    ) -> _JobWithContext[T_job_in, _JobReturn[T_job_out]]: ...
 
     @overload
     def __call__(
         self,
-        fn: Callable[[T_job_in], T_job_out | None],
-    ) -> Callable[[T_job_in], T_job_out | None]: ...
+        fn: Callable[[T_job_in], _JobReturn[T_job_out]],
+    ) -> Callable[[T_job_in], _JobReturn[T_job_out]]: ...
 
 
 @final
@@ -86,7 +89,10 @@ class Workflow:
         A job must have an input and output channel and a unique ID (derived from the function name).
 
         The function's input type must match the type of the input channel.
-        The function's return type must be the output channel type or that type unioned with `None`.
+        The function's return type must be:
+            - the output channel type
+            - a list of the output channel type `list[T_job_out]` (useful for fan-out)
+            - any union of the above and `None`, such as `T_job_out | list[T_job_out] | None`
 
         Example:
             @workflow.job(input=channel, output=channel)
@@ -99,11 +105,11 @@ class Workflow:
         """
 
         def decorator(
-            fn: Callable[[T_job_in], T_job_out | None]
-            | _JobWithContext[T_job_in, T_job_out | None],
+            fn: Callable[[T_job_in], _JobReturn[T_job_out]]
+            | _JobWithContext[T_job_in, _JobReturn[T_job_out]],
         ) -> (
-            Callable[[T_job_in], T_job_out | None]
-            | _JobWithContext[T_job_in, T_job_out | None]
+            Callable[[T_job_in], _JobReturn[T_job_out]]
+            | _JobWithContext[T_job_in, _JobReturn[T_job_out]]
         ):
             job_fn = cast("FunctionType", fn)
             validate_job(

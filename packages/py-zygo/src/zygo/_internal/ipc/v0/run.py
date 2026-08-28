@@ -45,8 +45,8 @@ def run(
         store = StoreImpl(
             context=run_context,
             options=StoreOptions(
-                # TODO: Where to pipe these options through
-                root_uri=FsspecUri(uri="file://./todoreplaceme")
+                # TODO: Where to pipe these options through - allow setting this as config
+                root_uri=FsspecUri(uri="file://./zygo_workflow_results")
             ),
         )
 
@@ -60,30 +60,51 @@ def run(
             input_data=decoded_input,
             ctx=JobContextImpl(store=store),
         )
+        # Run the user-defined job function with injected dependencies.
         result = callable_w_deps()
-
         if result is None:
             return
 
-        # Save to store to get a data reference.
-        # Then send data reference to output channel via stdout ipc
         output_format = job_entry.output_channel.codec.format
-        output_bytes = job_entry.output_channel.codec.encode(result)
-        extension = (
-            f"{output_format.extension.with_leading_dot()}"
-            if output_format.extension
-            else ""
-        )
-        reference = store.put(
-            f"{job_entry.output_channel.id}{extension}",
-            output_bytes,
-        )
-        write_stdout_ipc_message(
-            ChannelItemInserted(
-                channel_id=job_entry.output_channel.id,
-                data_reference=DataReference.from_reference(reference),
+
+        # Save output to store in multiple files or in a single file depending on the
+        # return value and channel type.
+        #
+        # e.g. if the return value is a list and the channel type is a scalar,
+        #      save each item in a separate file and publish a reference to each file.
+
+        is_returned_list = isinstance(result, list)
+        is_channel_scalar = job_entry.output_channel.is_scalar
+        is_batch = is_returned_list and is_channel_scalar
+
+        result_as_batch = result if is_batch else [result]
+
+        # Save to store to get a data reference.
+        data_references: list[Reference] = []
+        for index, item in enumerate(result_as_batch):
+            output_bytes = job_entry.output_channel.codec.encode(item)
+
+            extension = (
+                f"{output_format.extension.with_leading_dot()}"
+                if output_format.extension
+                else ""
             )
-        )
+            reference = store.put(
+                f"{job_entry.output_channel.id}_{index}{extension}",
+                output_bytes,
+            )
+            data_references.append(reference)
+
+
+        # Then send data reference to output channel via stdout ipc
+        # todo: atomic batch?
+        for reference in data_references:
+            write_stdout_ipc_message(
+                ChannelItemInserted(
+                    channel_id=job_entry.output_channel.id,
+                    data_reference=DataReference.from_reference(reference),
+                )
+            )
 
     except Exception as e:
         raise RuntimeError(f"Failed to run job {args.job_id}: {e}") from e
