@@ -27,16 +27,23 @@ pub struct Actor<S: StorageProvider> {
 
 #[derive(Clone)]
 pub struct ActorHandle {
-    pub tx: ActorTx,
     pub state_rx: Receiver<EngineSnapshot>,
     cancellation: crate::CancellationGroup,
 }
 
 impl ActorHandle {
-    pub async fn spawn<S: StorageProvider>(context: &RunContext<S>) -> Result<Self> {
+    pub async fn spawn<S: StorageProvider>(
+        context: &RunContext<S>,
+        initial_events: Vec<Event>,
+    ) -> Result<Self> {
         let (tx, rx) = tokio::sync::mpsc::channel::<ActorMessage>(ACTOR_MESSAGE_CHANNEL_CAPACITY);
         let (state_tx, state_rx) = tokio::sync::watch::channel(EngineSnapshot::default());
         let stream_writer = StreamWriter::init(context).await?;
+
+        // Bootstrap the durable stream before the engine can observe a terminal snapshot and exit.
+        let events = initial_events.into_iter().map(StreamItem::Event).collect();
+        let write_set = stream_writer.append(events).await?;
+        write_set.commit(&context.store).await?;
 
         let actor = Actor {
             rx,
@@ -49,7 +56,6 @@ impl ActorHandle {
         drop(cancellation.spawn(async move { actor.run().await }));
 
         Ok(Self {
-            tx,
             state_rx,
             cancellation,
         })
