@@ -1,9 +1,7 @@
-use std::{fmt::Write, slice};
-
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::models::{DataReference, DomainError};
+use crate::models::DomainError;
 
 macro_rules! define_value {
     ($name:ident, $label:literal) => {
@@ -58,29 +56,24 @@ impl EventId {
     }
 }
 
-/// Namespace for generating deterministic workflow run IDs.
-const WORKFLOW_RUN_NAMESPACE: Uuid = Uuid::from_u128(0x6ba7_b812_9dad_11d1_80b4_00c0_4fd4_30c8);
-
 impl WorkflowRunId {
-    pub fn new(
-        workflow_schema_content_hash: &ContentHash,
-        data_reference: &DataReference,
-    ) -> Result<Self, DomainError> {
-        Self::new_many(
-            workflow_schema_content_hash,
-            slice::from_ref(data_reference),
-        )
+    /// Creates a unique workflow execution attempt.
+    ///
+    /// Workflow run IDs must not double as result-cache keys: restarting the same
+    /// workflow and inputs should create a fresh stream, while deterministic job
+    /// run IDs independently reuse results from jobs that completed successfully.
+    pub fn new() -> Self {
+        Self::try_from(Uuid::now_v7().to_string())
+            .expect("generated UUID must be a valid workflow run ID")
     }
+}
 
-    pub fn new_many(
-        workflow_schema_content_hash: &ContentHash,
-        data_references: &[DataReference],
-    ) -> Result<Self, DomainError> {
-        let mut name = workflow_schema_content_hash.as_ref().to_owned();
-        for data_reference in data_references {
-            write!(name, "\0{}\0{}", data_reference.version, data_reference.uri)
-                .expect("writing to a String cannot fail");
-        }
-        Self::try_from(Uuid::new_v5(&WORKFLOW_RUN_NAMESPACE, name.as_bytes()).to_string())
+#[cfg(test)]
+mod tests {
+    use super::WorkflowRunId;
+
+    #[test]
+    fn workflow_execution_attempts_have_unique_ids() {
+        assert_ne!(WorkflowRunId::new(), WorkflowRunId::new());
     }
 }
