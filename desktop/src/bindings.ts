@@ -5,5 +5,39 @@ import { invoke as __TAURI_INVOKE } from "@tauri-apps/api/core";
 /** Commands */
 export const commands = {
 	greet: (name: string, title: string) => __TAURI_INVOKE<string>("greet", { name, title }),
+	listWorkflowRunSummaries: (request: ListWorkflowRunSummariesRequest) => typedError<ListWorkflowRunSummariesResponse, string>(__TAURI_INVOKE("list_workflow_run_summaries", { request })),
 };
+
+/* Types */
+export type ListWorkflowRunSummariesRequest = {
+	cursor: string | null,
+	limit: number,
+};
+
+export type ListWorkflowRunSummariesResponse = {
+	summaries: WorkflowRunSummary[],
+	next_cursor: string | null,
+};
+
+export type WorkflowRunSummary = {
+	workflow_run_id: string,
+	status: string,
+	started_at: number | null,
+	completed_at: number | null,
+	active_job_count: number,
+	succeeded_job_count: number,
+	errored_job_count: number,
+	created_at: string,
+	updated_at: string,
+};
+
+/* Tauri Specta runtime */
+async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {
+    try {
+        return { status: "ok", data: await result };
+    } catch (e) {
+        if (e instanceof Error) throw e;
+        return { status: "error", error: e as any };
+    }
+}
 

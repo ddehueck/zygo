@@ -12,8 +12,8 @@ use zygo_core::{
 use crate::{
     ZygoLocalConfig,
     db::{
-        Db, JobRunSummaryRepository, KvRepository, WorkflowRunRepository, WorkflowRunRow,
-        WorkflowRunSummaryRepository,
+        CdcRepository, Db, JobRunSummaryRepository, KvRepository, WorkflowRunRepository,
+        WorkflowRunRow, WorkflowRunSummaryRepository,
     },
     paths,
     repos::Repos,
@@ -58,7 +58,8 @@ impl ZygoLocalService {
 
     pub async fn new(config: ZygoLocalConfig) -> Result<Self> {
         let path = Self::database_path()?.to_string_lossy().into_owned();
-        let database = Db::open(&path, config.database_busy_timeout).await?;
+        let database = Db::open(&path, config.database_busy_timeout, true).await?;
+        let cdc = CdcRepository::new(database.clone());
         let workflow_runs = WorkflowRunRepository::new(database.clone());
         let workflow_run_summaries = WorkflowRunSummaryRepository::new(database.clone());
         let job_run_summaries = JobRunSummaryRepository::new(database.clone());
@@ -68,6 +69,7 @@ impl ZygoLocalService {
         Ok(Self {
             base: Zygo::new(store, config.base),
             repos: Repos {
+                cdc,
                 kv,
                 workflow_runs,
                 workflow_run_summaries,
@@ -131,5 +133,18 @@ impl ZygoLocalService {
             Some((key, value)) => Ok(self.repos.workflow_runs.list_by_tag(key, value).await?),
             None => Ok(self.repos.workflow_runs.list_all().await?),
         }
+    }
+
+    // todo: remvoe this
+    pub async fn list_workflow_run_summaries(
+        &self,
+        cursor: Option<&str>,
+        limit: u32,
+    ) -> Result<Vec<crate::WorkflowRunSummaryRow>> {
+        Ok(self
+            .repos
+            .workflow_run_summaries
+            .list_after_id(cursor, limit)
+            .await?)
     }
 }

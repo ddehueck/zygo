@@ -1,54 +1,64 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { invoke } from "@tauri-apps/api/core";
-import reactLogo from "../assets/react.svg";
 import { Button } from "../components/Button";
+import { commands, type WorkflowRunSummary } from "../bindings";
 
 export const Route = createFileRoute("/")({
   component: IndexRoute,
 });
 
 function IndexRoute() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+  const [summaries, setSummaries] = useState<WorkflowRunSummary[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
+  async function loadSummaries() {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const result = await commands.listWorkflowRunSummaries({
+        cursor: null,
+        limit: 100,
+      });
+
+      if (result.status === "error") {
+        throw new Error(result.error);
+      }
+
+      setSummaries(result.data.summaries);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   return (
     <main className="container">
-      <h1>Welcome to Tauri + React</h1>
+      <h1>Workflow run summaries</h1>
 
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>SUP! Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
+      <Button
+        variant="primary"
+        isDisabled={isLoading}
+        onPress={() => void loadSummaries()}
       >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <Button type="submit" variant="primary">Greetings</Button>
-      </form>
-      <p>{greetMsg}</p>
+        {isLoading ? "Loading..." : "Load summaries"}
+      </Button>
+
+      {error && <p role="alert">Unable to load summaries: {error}</p>}
+
+      {summaries.length > 0 ? (
+        <ul>
+          {summaries.map((summary) => (
+            <li key={summary.workflow_run_id}>
+              <pre>{JSON.stringify(summary, null, 2)}</pre>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p>No summaries loaded.</p>
+      )}
     </main>
   );
 }

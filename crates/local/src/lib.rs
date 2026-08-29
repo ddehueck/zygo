@@ -2,6 +2,7 @@ mod config;
 mod paths;
 mod repos;
 mod stream_processor;
+mod sync;
 
 mod db;
 mod service;
@@ -12,8 +13,8 @@ pub use service::ZygoLocalService;
 
 // Type re-exports only for convenience
 pub use db::{
-    DbError, DbResult, JobRunSummaryCounts, JobRunSummaryRepository, JobRunSummaryRow,
-    KvRepository, TagRow, WorkflowRunRepository, WorkflowRunRow, WorkflowRunSummaryRepository,
-    WorkflowRunSummaryRow,
+    CdcChangeType, CdcRepository, CdcRow, DbError, DbResult, JobRunSummaryCounts,
+    JobRunSummaryRepository, JobRunSummaryRow, KvRepository, TagRow, WorkflowRunRepository,
+    WorkflowRunRow, WorkflowRunSummaryRepository, WorkflowRunSummaryRow,
 };
 pub use repos::Repos;

@@ -1,7 +1,56 @@
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use turso::{Row, Rows};
+use turso::{Row, Rows, Value as SqlValue};
 
 use super::error::{Error, Result};
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum CdcChangeType {
+    Insert,
+    Update,
+    Delete,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CdcRow {
+    pub change_id: i64,
+    pub change_time: i64,
+    pub change_txn_id: i64,
+    pub change_type: CdcChangeType,
+    pub table_name: String,
+    pub id: SqlValue,
+    /// The row state after the change, decoded from Turso's CDC binary record.
+    /// This is `None` for deletes because CDC only captures the post-change
+    /// state when the row still exists.
+    pub after: Option<Value>,
+}
+
+impl CdcRow {
+    pub fn from_row(row: &Row, rows: &Rows) -> Result<Self> {
+        let change_type = row.get(rows.column_index("change_type")?)?;
+        let change_type = match change_type {
+            1 => CdcChangeType::Insert,
+            0 => CdcChangeType::Update,
+            -1 => CdcChangeType::Delete,
+            _ => return Err(Error::InvalidChangeType(change_type)),
+        };
+
+        let after: Option<String> = row.get(rows.column_index("after")?)?;
+        let after = after
+            .map(|after| serde_json::from_str(&after))
+            .transpose()?;
+
+        Ok(Self {
+            change_id: row.get(rows.column_index("change_id")?)?,
+            change_time: row.get(rows.column_index("change_time")?)?,
+            change_txn_id: row.get(rows.column_index("change_txn_id")?)?,
+            change_type,
+            table_name: row.get(rows.column_index("table_name")?)?,
+            id: row.get_value(rows.column_index("id")?)?,
+            after,
+        })
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorkflowRunRow {
@@ -24,7 +73,7 @@ impl WorkflowRunRow {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkflowRunSummaryRow {
     pub workflow_run_id: String,
     pub status: String,
@@ -53,7 +102,7 @@ impl WorkflowRunSummaryRow {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct JobRunSummaryRow {
     pub workflow_run_id: String,
     pub job_run_id: String,
