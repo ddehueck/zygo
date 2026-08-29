@@ -1,7 +1,10 @@
 import inspect
-from types import FunctionType
+from types import FunctionType, NoneType, UnionType
 from typing import (
+    Union,
     cast,
+    get_args,
+    get_origin,
     get_type_hints,
 )
 
@@ -84,10 +87,39 @@ def _validate_channel_types(
         raise ValueError(message)
 
     return_annotation = type_hints.get("return", inspect.Signature.empty)
-    is_optional_output = return_annotation == output_type | None
-    if return_annotation != output_type and not is_optional_output:
-        message = f"Job {func.__name__!r} return value must be annotated with the output channel type {output_type!r} or {output_type!r} | None, not {return_annotation!r}"
+    if not _is_valid_return_annotation(return_annotation, output_type=output_type):
+        message = f"Job {func.__name__!r} return value must be annotated with the output channel type {output_type!r}, list[{output_type!r}], or a union of those types and None, not {return_annotation!r}"
         raise ValueError(message)
+
+
+def _is_valid_return_annotation(
+    annotation: object,
+    *,
+    output_type: type[object],
+) -> bool:
+    if _is_output_annotation(annotation, output_type=output_type):
+        return True
+
+    if get_origin(annotation) not in {Union, UnionType}:
+        return False
+
+    union_members = cast("tuple[object, ...]", get_args(annotation))
+    return any(member is not NoneType for member in union_members) and all(
+        member is NoneType
+        or _is_output_annotation(member, output_type=output_type)
+        for member in union_members
+    )
+
+
+def _is_output_annotation(
+    annotation: object,
+    *,
+    output_type: type[object],
+) -> bool:
+    if annotation == output_type:
+        return True
+
+    return get_origin(annotation) is list and get_args(annotation) == (output_type,)
 
 
 def _validate_context_parameter(

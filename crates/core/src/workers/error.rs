@@ -2,9 +2,6 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("no capacity")]
-    NoCapacity,
-
     #[error("closed")]
     Closed,
 

@@ -1,9 +1,7 @@
 use crate::{
-    context::ActorContext,
     ipc::v0::RunCommandArgs,
     models::{Entrypoint, JobRunSource},
-    store::StorageProvider,
-    workers::LocalJobRunner,
+    workers::{LocalJobRunner, WorkerContext},
 };
 
 pub struct Runner;
@@ -13,9 +11,9 @@ impl Runner {
         Self
     }
 
-    pub async fn run_job<S: StorageProvider>(
+    pub async fn run_job(
         &self,
-        context: ActorContext<S>,
+        context: WorkerContext,
         source: JobRunSource,
         entrypoint: Entrypoint,
         args: RunCommandArgs,

@@ -1,6 +1,6 @@
 use crate::context::{ActorContext, RunContext};
 use crate::engine::{EngineSnapshot, StepResult};
-use crate::models::StreamItem;
+use crate::models::{StreamItem, WorkflowRunStatus};
 use crate::stream::StreamWriter;
 use crate::{engine::Engine, models::Event, store::StorageProvider};
 use anyhow::Result;
@@ -27,15 +27,23 @@ pub struct Actor<S: StorageProvider> {
 
 #[derive(Clone)]
 pub struct ActorHandle {
-    pub tx: ActorTx,
     pub state_rx: Receiver<EngineSnapshot>,
+    cancellation: crate::CancellationGroup,
 }
 
 impl ActorHandle {
-    pub async fn spawn<S: StorageProvider>(context: &RunContext<S>) -> Result<Self> {
+    pub async fn spawn<S: StorageProvider>(
+        context: &RunContext<S>,
+        initial_events: Vec<Event>,
+    ) -> Result<Self> {
         let (tx, rx) = tokio::sync::mpsc::channel::<ActorMessage>(ACTOR_MESSAGE_CHANNEL_CAPACITY);
         let (state_tx, state_rx) = tokio::sync::watch::channel(EngineSnapshot::default());
         let stream_writer = StreamWriter::init(context).await?;
+
+        // Bootstrap the durable stream before the engine can observe a terminal snapshot and exit.
+        let events = initial_events.into_iter().map(StreamItem::Event).collect();
+        let write_set = stream_writer.append(events).await?;
+        write_set.commit(&context.store).await?;
 
         let actor = Actor {
             rx,
@@ -44,8 +52,23 @@ impl ActorHandle {
             state_tx,
         };
 
-        tokio::spawn(async move { actor.run().await });
-        Ok(Self { tx, state_rx })
+        let cancellation = context.cancellation.clone();
+        drop(cancellation.spawn(async move { actor.run().await }));
+
+        Ok(Self {
+            state_rx,
+            cancellation,
+        })
+    }
+}
+
+impl ActorHandle {
+    pub fn signal_cancel(&self) {
+        self.cancellation.cancel();
+    }
+
+    pub async fn cancel(&self) {
+        self.cancellation.cancel_and_wait().await;
     }
 }
 
@@ -59,6 +82,7 @@ impl<S: StorageProvider> Actor<S> {
         } = self;
 
         tokio::select! {
+            _ = context.cancellation.cancelled() => {}
             // Dropping the receiver future closes it when the engine reaches a terminal state.
             _ = Self::engine_loop(&context, &event_notify, &state_tx) => {}
             // TODO: Should we just pass the writer reference to the job runners?
@@ -88,16 +112,18 @@ impl<S: StorageProvider> Actor<S> {
         loop {
             match engine.step().await {
                 Ok(StepResult::Continue) => continue,
-                Ok(StepResult::Terminal(_)) => break,
                 Ok(StepResult::Idle) => event_notify.notified().await,
-                Ok(StepResult::WorkerPoolCapacityRequired) => {
-                    if let Err(error) = context.worker_pool.wait_for_capacity().await {
-                        eprintln!(
-                            "failed waiting for worker capacity for run {}: {error}",
-                            context.run_id
-                        );
-                        break;
+                Ok(StepResult::Terminal(status)) => {
+                    if status == WorkflowRunStatus::Failed {
+                        context.cancellation.cancel();
+                        if let Err(error) = context.worker_pool.cancel_run(&context.run_id) {
+                            eprintln!(
+                                "failed to remove queued jobs for run {}: {error}",
+                                context.run_id
+                            );
+                        }
                     }
+                    break;
                 }
                 Err(error) => {
                     eprintln!("failed to step engine for run {}: {error}", context.run_id);

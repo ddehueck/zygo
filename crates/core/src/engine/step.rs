@@ -6,7 +6,6 @@ use super::state::RunState;
 pub enum StepResult {
     Idle,
     Continue,
-    WorkerPoolCapacityRequired,
     Terminal(WorkflowRunStatus),
 }
 

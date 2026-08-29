@@ -93,7 +93,9 @@ impl ZygoLocalService {
         let workflow_id = schema.id.to_string();
         let content_hash = schema.content_hash.to_string();
 
-        let workflow_run_id = WorkflowRunId::new_many(&schema.content_hash, &inputs)?;
+        // Each invocation is a distinct execution attempt. Job result reuse is
+        // handled separately by deterministic job run IDs in the result cache.
+        let workflow_run_id = WorkflowRunId::new();
 
         // saves a record of the run before actually running it
         // we save the workflow id as a tag so we can filter runs by workflow
@@ -110,6 +112,10 @@ impl ZygoLocalService {
         self.base.run_many(&workflow_run_id, inputs, schema).await?;
 
         Ok(workflow_run_id)
+    }
+
+    pub async fn cancel(&self, run_id: &WorkflowRunId) -> Result<()> {
+        self.base.cancel(run_id).await
     }
 
     pub fn stream_processor(&self, run_id: &WorkflowRunId) -> LocalStreamProcessor {

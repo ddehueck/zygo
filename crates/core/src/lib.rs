@@ -1,3 +1,4 @@
+mod cancellation;
 mod context;
 mod error;
 mod reader;
@@ -11,6 +12,8 @@ pub mod models;
 pub mod store;
 pub mod stream;
 pub mod workers;
+
+use cancellation::CancellationGroup;
 
 pub use error::{Error, Result};
 pub use reader::WorkflowRunReader;

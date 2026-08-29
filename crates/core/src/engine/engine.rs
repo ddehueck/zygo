@@ -1,5 +1,5 @@
 use super::arbiter::Arbiter;
-use super::executor::{ExecuteOutcome, Executor};
+use super::executor::Executor;
 use super::state::{EngineSnapshot, ResultCache, RunCursor};
 use super::step::{StepOutcome, StepResult};
 use crate::context::{ActorContext, RunContext};
@@ -8,11 +8,6 @@ use crate::store::keyspace::KeySpace;
 use crate::store::{StorageProvider, StoreKey};
 use crate::stream::StreamReader;
 use tokio::sync::watch;
-
-enum EvaluateOutcome {
-    Completed(StepOutcome),
-    WorkerPoolCapacityRequired,
-}
 
 pub struct Engine<S: StorageProvider> {
     context: ActorContext<S>,
@@ -92,12 +87,7 @@ impl<S: StorageProvider> Engine<S> {
 
         let key = KeySpace::run(&self.context.run_id).stream_item(&record.id);
 
-        let outcome = match self.evaluate(key, record).await? {
-            EvaluateOutcome::Completed(outcome) => outcome,
-            EvaluateOutcome::WorkerPoolCapacityRequired => {
-                return Ok(StepResult::WorkerPoolCapacityRequired);
-            }
-        };
+        let outcome = self.evaluate(key, record).await?;
         let snapshot = self.commit(outcome, stream_read.next_cursor).await?;
 
         self.snapshot = snapshot.clone();
@@ -117,7 +107,7 @@ impl<S: StorageProvider> Engine<S> {
         &self,
         key: StoreKey,
         record: StreamRecord,
-    ) -> Result<EvaluateOutcome, anyhow::Error> {
+    ) -> Result<StepOutcome, anyhow::Error> {
         let mut next_state = self.snapshot.state.clone();
         let mut append = Vec::new();
 
@@ -132,27 +122,20 @@ impl<S: StorageProvider> Engine<S> {
                 append.extend(commands.into_iter().map(StreamItem::Command));
             }
             StreamItem::Command(command) => {
-                match self
+                let result = self
                     .executor
                     .execute(command, &self.result_cache, &next_state)
-                    .await?
-                {
-                    ExecuteOutcome::Completed(result) => {
-                        append.extend(result.next_events.into_iter().map(StreamItem::Event));
-                        next_state = result.next_state;
-                    }
-                    ExecuteOutcome::WorkerPoolCapacityRequired => {
-                        return Ok(EvaluateOutcome::WorkerPoolCapacityRequired);
-                    }
-                }
+                    .await?;
+                append.extend(result.next_events.into_iter().map(StreamItem::Event));
+                next_state = result.next_state;
             }
         }
 
-        Ok(EvaluateOutcome::Completed(StepOutcome {
+        Ok(StepOutcome {
             processed_id: record.id,
             next_state,
             append,
-        }))
+        })
     }
 
     async fn commit(

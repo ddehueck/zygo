@@ -22,21 +22,14 @@ pub struct WorkflowRunView<'a> {
     summary: &'a WorkflowRunSummary,
     target: &'a str,
     input_uri: &'a str,
-    can_quit: bool,
 }
 
 impl<'a> WorkflowRunView<'a> {
-    pub fn new(
-        summary: &'a WorkflowRunSummary,
-        target: &'a str,
-        input_uri: &'a str,
-        can_quit: bool,
-    ) -> Self {
+    pub fn new(summary: &'a WorkflowRunSummary, target: &'a str, input_uri: &'a str) -> Self {
         Self {
             summary,
             target,
             input_uri,
-            can_quit,
         }
     }
 }
@@ -96,11 +89,7 @@ impl StatefulWidget for WorkflowRunView<'_> {
             Constraint::Length(14),
             Constraint::Length(16),
         ];
-        let footer = if self.can_quit {
-            " ↑/↓ select • Enter open logs • q quit "
-        } else {
-            " ↑/↓ select • Enter open logs "
-        };
+        let footer = " ↑/↓ select • Enter open logs • q/Ctrl-C cancel ";
         let jobs_block = Block::default()
             .title(Line::from(Span::styled(
                 format!(" Job Runs  ({}) ", self.summary.job_runs.len()),
@@ -165,7 +154,7 @@ impl Widget for JobLogView<'_> {
                     .add_modifier(Modifier::BOLD),
             )))
             .title_bottom(Line::from(Span::styled(
-                " Esc back ",
+                " Esc back • q/Ctrl-C cancel ",
                 Style::default().fg(Color::DarkGray),
             )))
             .borders(Borders::ALL)

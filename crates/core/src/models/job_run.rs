@@ -10,6 +10,7 @@ pub struct JobRun {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum JobRunStatus {
+    Queued,
     Running,
     Succeeded,
     Failed,

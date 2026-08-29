@@ -16,6 +16,10 @@ class Channel[T]:
     def value_type(self) -> type[T]:
         return self.codec.value_type
 
+    @property
+    def is_scalar(self) -> bool:
+        return self.codec.value_type is not list
+
     @override
     def __repr__(self) -> str:
         return f"Channel(id={self.id!s}, codec={self.codec!r})"

@@ -21,9 +21,9 @@ use ratatui::{
 };
 use zygo_core::{
     ZygoConfig,
-    engine::RunCursor,
+    engine::{EngineSnapshot, RunCursor},
     ipc::v0::PythonCli,
-    models::{DataReference, JobRunId, StreamItem},
+    models::{DataReference, Event, JobRunId, StreamItem},
     workers::WorkerLogReader,
 };
 
@@ -34,6 +34,7 @@ use super::{JobRunSummary, WorkflowRunSummary};
 const ZYGO_PKG_INTERNAL_CLI_MODULE: &str = "zygo._internal.ipc.v0";
 const INPUT_POLL_INTERVAL: Duration = Duration::from_millis(50);
 const LOG_REFRESH_INTERVAL: Duration = Duration::from_millis(200);
+const STREAM_RECORD_BATCH_SIZE: usize = 64;
 
 struct TerminalInput {
     alternate_screen: bool,
@@ -83,16 +84,18 @@ enum Screen {
 struct LogViewState {
     job_id: String,
     job_run_id: JobRunId,
+    cwd: PathBuf,
     reader: Option<WorkerLogReader>,
     error: Option<String>,
     is_running: bool,
 }
 
 impl LogViewState {
-    fn new(job_run: &JobRunSummary) -> anyhow::Result<Self> {
+    fn new(job_run: &JobRunSummary, cwd: impl Into<PathBuf>) -> anyhow::Result<Self> {
         Ok(Self {
             job_id: job_run.job_id.clone(),
             job_run_id: JobRunId::try_from(job_run.job_run_id.clone())?,
+            cwd: cwd.into(),
             reader: None,
             error: None,
             is_running: job_run.status == "running",
@@ -101,27 +104,52 @@ impl LogViewState {
 
     async fn refresh(&mut self) {
         if self.reader.is_none() {
-            match WorkerLogReader::new(self.job_run_id.clone()).await {
-                Ok(reader) => {
+            let job_run_id = self.job_run_id.clone();
+            let cwd = self.cwd.clone();
+            match tokio::task::spawn_blocking(move || WorkerLogReader::new_sync_in(job_run_id, cwd))
+                .await
+            {
+                Ok(Ok(reader)) => {
                     self.reader = Some(reader);
                     self.error = None;
                     return;
                 }
-                Err(error) if error.kind() == ErrorKind::NotFound && self.is_running => {
+                Ok(Err(error)) if error.kind() == ErrorKind::NotFound && self.is_running => {
                     self.error = None;
                     return;
                 }
-                Err(error) => {
+                Ok(Err(error)) => {
                     self.error = Some(format!("Could not open log file: {error}"));
+                    return;
+                }
+                Err(error) => {
+                    self.error = Some(format!("Could not open log file in worker thread: {error}"));
                     return;
                 }
             }
         }
 
-        if let Some(reader) = &mut self.reader {
-            match reader.refresh().await {
-                Ok(()) => self.error = None,
-                Err(error) => self.error = Some(format!("Could not read log file: {error}")),
+        let Some(reader) = self.reader.take() else {
+            return;
+        };
+        let refresh = tokio::task::spawn_blocking(move || {
+            let mut reader = reader;
+            let result = reader.refresh_sync();
+            (reader, result)
+        })
+        .await;
+
+        match refresh {
+            Ok((reader, Ok(()))) => {
+                self.reader = Some(reader);
+                self.error = None;
+            }
+            Ok((reader, Err(error))) => {
+                self.reader = Some(reader);
+                self.error = Some(format!("Could not read log file: {error}"));
+            }
+            Err(error) => {
+                self.error = Some(format!("Could not read log file in worker thread: {error}"));
             }
         }
     }
@@ -152,8 +180,19 @@ impl LogViewState {
     }
 }
 
+struct StreamUpdate {
+    snapshot: EngineSnapshot,
+    events: Vec<Event>,
+}
+
+enum StreamMessage {
+    Update(StreamUpdate),
+    Error(anyhow::Error),
+}
+
 enum LoopEvent {
-    SnapshotChanged,
+    StreamUpdate(StreamUpdate),
+    StreamError(anyhow::Error),
     Redraw,
     Input(Option<TerminalEvent>),
     RefreshLogs,
@@ -216,7 +255,7 @@ pub async fn run_workflow(
     // println!("metadata: {metadata}");
 
     // 3.5 Parse the metadata into a structured format
-    let python_cli = PythonCli::new(python.clone(), cwd, target.to_owned());
+    let python_cli = PythonCli::new(python.clone(), cwd.clone(), target.to_owned());
     let metadata = PythonCli::parse_metadata_response(&metadata)?;
     // println!("parsed metadata: {metadata:?}");
 
@@ -252,12 +291,74 @@ pub async fn run_workflow(
         },
     )?;
 
-    // Clients read the workflow run state by subscribing to a watch channel
-    // that notifies when the engine has made a meaningful update and then
-    // advancing the local stream processor.
-    let mut rx = service.base.subscribe(&run_id).await?;
+    // Keep stream projection and database work off the UI task. Updates are
+    // delivered in bounded batches so a large backlog cannot starve input or
+    // redraws.
+    let mut snapshot_rx = service.base.subscribe(&run_id).await?;
     let mut stream_processor = service.stream_processor(&run_id);
-    let mut cursor = RunCursor::default();
+    let (stream_updates_tx, mut stream_updates_rx) = tokio::sync::mpsc::channel(1);
+    let stream_task = tokio::spawn(async move {
+        let mut cursor = RunCursor::default();
+        let mut pending_records = false;
+        snapshot_rx.mark_changed();
+
+        loop {
+            let snapshot = if pending_records {
+                snapshot_rx.borrow().clone()
+            } else {
+                if snapshot_rx.changed().await.is_err() {
+                    let _ = stream_updates_tx
+                        .send(StreamMessage::Error(anyhow::anyhow!(
+                            "workflow actor stopped before reaching a terminal state"
+                        )))
+                        .await;
+                    return;
+                }
+                snapshot_rx.borrow_and_update().clone()
+            };
+
+            let mut events = Vec::with_capacity(STREAM_RECORD_BATCH_SIZE);
+            let mut reached_end = false;
+            for _ in 0..STREAM_RECORD_BATCH_SIZE {
+                let read = match stream_processor.process_next(cursor.clone()).await {
+                    Ok(read) => read,
+                    Err(error) => {
+                        let _ = stream_updates_tx.send(StreamMessage::Error(error)).await;
+                        return;
+                    }
+                };
+                cursor = read.next_cursor;
+
+                let Some(record) = read.record else {
+                    reached_end = true;
+                    break;
+                };
+
+                if let StreamItem::Event(event) = record.item {
+                    events.push(event);
+                }
+            }
+            pending_records = !reached_end;
+            let is_complete = reached_end && snapshot.state.status.is_terminal();
+
+            if stream_updates_tx
+                .send(StreamMessage::Update(StreamUpdate { snapshot, events }))
+                .await
+                .is_err()
+            {
+                return;
+            }
+
+            if is_complete {
+                // Keep the sender alive while the terminal summary remains open. Otherwise the UI
+                // would interpret normal stream closure as an actor failure before q/Ctrl-C.
+                stream_updates_tx.closed().await;
+                return;
+            }
+
+            tokio::task::yield_now().await;
+        }
+    });
 
     let mut summary = WorkflowRunSummary::new(metadata.id.clone());
     let mut summary_refresh = tokio::time::interval(Duration::from_secs(1));
@@ -268,21 +369,20 @@ pub async fn run_workflow(
     log_refresh.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
     let mut has_snapshot = false;
-    let mut is_terminal = false;
     let mut screen = Screen::Summary;
     let mut table_state = TableState::default();
     let mut last_area = ratatui::layout::Rect::default();
 
-    // Let the TUI loop consume the current snapshot immediately.
-    rx.mark_changed();
-
     loop {
         let loop_event = tokio::select! {
-            result = rx.changed(), if !is_terminal => {
-                result.map_err(|_| {
-                    anyhow::anyhow!("workflow actor stopped before reaching a terminal state")
-                })?;
-                LoopEvent::SnapshotChanged
+            message = stream_updates_rx.recv() => {
+                match message {
+                    Some(StreamMessage::Update(update)) => LoopEvent::StreamUpdate(update),
+                    Some(StreamMessage::Error(error)) => LoopEvent::StreamError(error),
+                    None => LoopEvent::StreamError(anyhow::anyhow!(
+                        "workflow stream processor stopped unexpectedly"
+                    )),
+                }
             }
             _ = summary_refresh.tick() => LoopEvent::Redraw,
             _ = input_poll.tick() => {
@@ -299,28 +399,17 @@ pub async fn run_workflow(
         };
 
         let mut open_job_index = None;
-        let mut should_quit = false;
+        let mut should_cancel = false;
+        let mut should_redraw = true;
 
         match loop_event {
-            LoopEvent::SnapshotChanged => {
-                let snapshot = rx.borrow_and_update().clone();
-
-                loop {
-                    let read = stream_processor.process_next(cursor).await?;
-                    cursor = read.next_cursor;
-
-                    let Some(record) = read.record else {
-                        break;
-                    };
-
-                    if let StreamItem::Event(event) = record.item {
-                        summary.update_by_event(event);
-                    }
+            LoopEvent::StreamUpdate(update) => {
+                for event in update.events {
+                    summary.update_by_event(event);
                 }
 
-                summary.update_by_snapshot(&snapshot);
+                summary.update_by_snapshot(&update.snapshot);
                 has_snapshot = true;
-                is_terminal = snapshot.state.status.is_terminal();
 
                 if let Screen::Logs(log) = &mut screen {
                     let was_running = log.is_running;
@@ -339,9 +428,11 @@ pub async fn run_workflow(
             LoopEvent::Input(Some(TerminalEvent::Key(key)))
                 if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) =>
             {
-                if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
-                    // TODO: Send a kill signal to active workflow child processes.
-                    should_quit = true;
+                let cancel_key = key.code == KeyCode::Char('q')
+                    || (key.code == KeyCode::Char('c')
+                        && key.modifiers.contains(KeyModifiers::CONTROL));
+                if cancel_key {
+                    should_cancel = true;
                 } else {
                     match &screen {
                         Screen::Summary => match key.code {
@@ -350,7 +441,6 @@ pub async fn run_workflow(
                             }
                             KeyCode::Down => select_next(&mut table_state, summary.job_runs.len()),
                             KeyCode::Enter => open_job_index = table_state.selected(),
-                            KeyCode::Char('q') if is_terminal => should_quit = true,
                             _ => {}
                         },
                         Screen::Logs(_) if key.code == KeyCode::Esc => screen = Screen::Summary,
@@ -378,10 +468,18 @@ pub async fn run_workflow(
                     log.refresh().await;
                 }
             }
-            LoopEvent::Redraw | LoopEvent::Input(_) => {}
+            LoopEvent::StreamError(error) => {
+                stream_task.abort();
+                service.cancel(&run_id).await?;
+                return Err(error);
+            }
+            LoopEvent::Redraw | LoopEvent::Input(Some(_)) => {}
+            LoopEvent::Input(None) => should_redraw = false,
         }
 
-        if should_quit {
+        if should_cancel {
+            stream_task.abort();
+            service.cancel(&run_id).await?;
             break;
         }
 
@@ -397,12 +495,12 @@ pub async fn run_workflow(
         if let Some(index) = open_job_index
             && let Some(job_run) = summary.job_runs.get(index)
         {
-            let mut log = LogViewState::new(job_run)?;
+            let mut log = LogViewState::new(job_run, cwd.clone())?;
             log.refresh().await;
             screen = Screen::Logs(log);
         }
 
-        if !has_snapshot {
+        if !has_snapshot || !should_redraw {
             continue;
         }
 
@@ -411,7 +509,7 @@ pub async fn run_workflow(
                 terminal.draw(|frame| {
                     last_area = frame.area();
                     frame.render_stateful_widget(
-                        WorkflowRunView::new(&summary, target, fsspec_uri, is_terminal),
+                        WorkflowRunView::new(&summary, target, fsspec_uri),
                         frame.area(),
                         &mut table_state,
                     );
@@ -434,6 +532,7 @@ pub async fn run_workflow(
         }
     }
 
+    stream_task.abort();
     drop(terminal);
 
     Ok(())

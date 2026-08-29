@@ -1,7 +1,7 @@
 [workspace]
 members = [
     "core",
-    "cli", "testing", "desktop", "local",
+    "cli", "testing", "desktop-gpui", "local",
 ]
 resolver = "2"
 

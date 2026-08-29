@@ -42,6 +42,9 @@ def _partition(partition_key: PartitionKey, value: str) -> str:
 def _contains_any_partition_key(key: str, partition_keys: list[PartitionKey]) -> bool:
     return any(f"{pk}=" in key for pk in partition_keys)
 
+def _is_global_uri(value: str) -> bool:
+    return "store/global" in value
+
 
 def _normalize_key(key: str) -> str:
     # This regex replaces any character that is not alphanumeric, underscore, hyphen, or period with an underscore.
@@ -75,7 +78,9 @@ class StoreImpl(StoreProtocol):
         Useful for allowing URIs to be free passed around.
         """
         # TODO: This should really just check for a protocol prefix.
-        return _contains_any_partition_key(value, ["job_run_id", "workflow_run_id"])
+        if _contains_any_partition_key(value, ["job_run_id", "workflow_run_id"]):
+            return True
+        return _is_global_uri(value)
 
     def _prefix(self, scope: Scope) -> str:
         """

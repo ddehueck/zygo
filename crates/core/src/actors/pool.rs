@@ -1,5 +1,6 @@
 use crate::{
-    actors::actor::{ActorHandle, ActorMessage},
+    CancellationGroup,
+    actors::actor::ActorHandle,
     context::{RunContext, ServiceContext},
     engine::EngineSnapshot,
     models::{
@@ -10,8 +11,6 @@ use crate::{
 };
 use std::{collections::HashMap, time::SystemTime};
 use tokio::sync::Mutex;
-
-const DEFAULT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1);
 
 pub struct ActorPool<S: StorageProvider> {
     context: ServiceContext<S>,
@@ -53,10 +52,6 @@ impl<S: StorageProvider> ActorPool<S> {
             return Ok(());
         }
 
-        let actor_handle = self.create_actor(&id, &schema).await?;
-        registry.insert(id.clone(), actor_handle.clone());
-        drop(registry); // Release lock after actor handle is inserted
-
         let input_events = inputs
             .into_iter()
             .map(|input| Event {
@@ -72,9 +67,25 @@ impl<S: StorageProvider> ActorPool<S> {
             })
             .collect();
 
-        self.send_events(&actor_handle, input_events).await?;
+        let actor_handle = self.create_actor(&id, &schema, input_events).await?;
+        registry.insert(id.clone(), actor_handle);
 
         Ok(())
+    }
+
+    pub async fn cancel(&self, workflow_run_id: &WorkflowRunId) {
+        let actor_handle = {
+            let registry = self.registry.lock().await;
+            registry.get(workflow_run_id).cloned()
+        };
+
+        if let Some(actor_handle) = actor_handle {
+            actor_handle.signal_cancel();
+            if let Err(error) = self.context.worker_pool.cancel_run(workflow_run_id) {
+                eprintln!("failed to remove queued jobs for run {workflow_run_id}: {error}");
+            }
+            actor_handle.cancel().await;
+        }
     }
 
     pub async fn subscribe(
@@ -96,6 +107,7 @@ impl<S: StorageProvider> ActorPool<S> {
         &self,
         workflow_run_id: &WorkflowRunId,
         schema: &WorkflowSchema,
+        initial_events: Vec<Event>,
     ) -> Result<ActorHandle, anyhow::Error> {
         let schema_key = KeySpace::run(workflow_run_id).schema();
         let schema_value = serde_json::to_value(schema)?;
@@ -104,26 +116,8 @@ impl<S: StorageProvider> ActorPool<S> {
             .put(&[(schema_key, schema_value)])
             .await?;
 
-        let run_context = RunContext::new(&self.context, workflow_run_id);
-        ActorHandle::spawn(&run_context).await
-    }
-
-    async fn send_events(
-        &self,
-        actor_handle: &ActorHandle,
-        events: Vec<Event>,
-    ) -> Result<(), anyhow::Error> {
-        let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
-        actor_handle
-            .tx
-            .send_timeout(ActorMessage { events, reply_tx }, DEFAULT_TIMEOUT)
-            .await
-            .map_err(|error| anyhow::anyhow!("failed to send events to workflow actor: {error}"))?;
-
-        reply_rx
-            .await
-            .map_err(|_| anyhow::anyhow!("workflow actor dropped the events response"))??;
-
-        Ok(())
+        let cancellation = CancellationGroup::new();
+        let run_context = RunContext::new(&self.context, workflow_run_id, cancellation);
+        ActorHandle::spawn(&run_context, initial_events).await
     }
 }
