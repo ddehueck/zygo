@@ -29,7 +29,7 @@ def square_values(input: int, *, ctx: JobContext) -> int:
 
     return input * input
 
-a
+
 @workflow.job(input=squared, output=output)
 def last_step(squared_value: int) -> str | None:
     print(f"[last_step] Received: {squared_value}")  # ruff: ignore[print]
@@ -40,7 +40,7 @@ def last_step(squared_value: int) -> str | None:
         time.sleep(1)
 
     if rand_wait % 2 == 0:
-        print(f"[last_step] Even wait received: {squared_value}. Skipping...")  # ruff: ignore[print]
+        print(f"[last_step] Even wait received - {squared_value}. Skipping...")  # ruff: ignore[print]
         return None
 
     print(f"[last_step] Squared received: {squared_value}")  # ruff: ignore[print]

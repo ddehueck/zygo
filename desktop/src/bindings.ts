@@ -6,9 +6,25 @@ import { invoke as __TAURI_INVOKE } from "@tauri-apps/api/core";
 export const commands = {
 	greet: (name: string, title: string) => __TAURI_INVOKE<string>("greet", { name, title }),
 	listWorkflowRunSummaries: (request: ListWorkflowRunSummariesRequest) => typedError<ListWorkflowRunSummariesResponse, string>(__TAURI_INVOKE("list_workflow_run_summaries", { request })),
+	getSyncDeltas: (request: GetSyncDeltasRequest) => typedError<GetSyncDeltasResponse, string>(__TAURI_INVOKE("get_sync_deltas", { request })),
+	confirmSync: (request: ConfirmSyncRequest) => typedError<null, string>(__TAURI_INVOKE("confirm_sync", { request })),
 };
 
 /* Types */
+export type ConfirmSyncRequest = {
+	change_id: number,
+};
+
+export type GetSyncDeltasRequest = {
+	since: number,
+	max_deltas: number,
+};
+
+export type GetSyncDeltasResponse = {
+	deltas: SyncDelta[],
+	next_change_id: number | null,
+};
+
 export type ListWorkflowRunSummariesRequest = {
 	cursor: string | null,
 	limit: number,
@@ -18,6 +34,10 @@ export type ListWorkflowRunSummariesResponse = {
 	summaries: WorkflowRunSummary[],
 	next_cursor: string | null,
 };
+
+export type SyncDelta = { operation: "resync" } | { operation: "delete"; entity: SyncEntityKind } | { operation: "upsert"; entity: SyncEntityKind; data: unknown };
+
+export type SyncEntityKind = "workflow_run_summary" | "workflow_run";
 
 export type WorkflowRunSummary = {
 	workflow_run_id: string,

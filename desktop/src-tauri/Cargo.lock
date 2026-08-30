@@ -1211,6 +1211,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-opener",
  "tauri-specta",
+ "tokio",
  "zygo-core",
 ]
 

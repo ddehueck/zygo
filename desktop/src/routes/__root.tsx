@@ -1,13 +1,13 @@
 import type { ReactNode } from "react";
-import {
-  HeadContent,
-  Outlet,
-  Scripts,
-  createRootRoute,
-} from "@tanstack/react-router";
+import { DbClient, DbProvider } from "@tanstack/react-db";
+import { QueryClient } from "@tanstack/query-core";
+import { HeadContent, Outlet, Scripts, createRootRoute } from "@tanstack/react-router";
 import "../App.css";
+import { SyncWorkflowUpdates } from "../sync/SyncWorkflowUpdates";
 
 export const Route = createRootRoute({
+  ssr: false,
+  shellComponent: RootShell,
   head: () => ({
     meta: [
       { charSet: "utf-8" },
@@ -21,11 +21,19 @@ export const Route = createRootRoute({
   component: RootComponent,
 });
 
+const queryClient = new QueryClient();
+const dbClient = new DbClient({ queryClient });
+
+function RootShell({ children }: Readonly<{ children: ReactNode }>) {
+  return <RootDocument>{children}</RootDocument>;
+}
+
 function RootComponent() {
   return (
-    <RootDocument>
+    <DbProvider client={dbClient}>
+      <SyncWorkflowUpdates />
       <Outlet />
-    </RootDocument>
+    </DbProvider>
   );
 }
 

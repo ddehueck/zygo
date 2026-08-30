@@ -11,6 +11,15 @@ importers:
       '@react-aria/optimize-locales-plugin':
         specifier: ^2.0.1
         version: 2.0.1
+      '@tanstack/db':
+        specifier: ^0.8.6
+        version: 0.8.6(typescript@7.0.2)
+      '@tanstack/query-core':
+        specifier: ^5.102.8
+        version: 5.102.8
+      '@tanstack/query-db-collection':
+        specifier: ^1.2.11
+        version: 1.2.11(@tanstack/query-core@5.102.8)(typescript@7.0.2)
       '@tanstack/react-db':
         specifier: ^0.3.6
         version: 0.3.6(react@19.2.8)(typescript@7.0.2)
@@ -658,6 +667,15 @@ packages:
   '@tanstack/pacer-lite@0.2.2':
     resolution: {integrity: sha512-eQ1MyLKCHyXiH7NbdmB80W77OhiMgGBUb+qDx/8WMGbwg5Lf/NlfD0TfNYAqY77i8V3AxoDoYdICrQE5ADw4Yw==}
     engines: {node: '>=18'}
+
+  '@tanstack/query-core@5.102.8':
+    resolution: {integrity: sha512-ZNjkJ33CqvPNec/6lZBnHqLc3EVGPZ9ySLhYahU9TcuRFdmwXewuj0c4hwSWcGHqEUwcSrKeZ+oGcvPBqXcQcg==}
+
+  '@tanstack/query-db-collection@1.2.11':
+    resolution: {integrity: sha512-18aoJd9lFeOxH8LNBJuJm28gdNJabiB6Oj3aW2ZWb3/Cj//knOEwvTLKdlpJM1fFf/e8nGkEka13iW5TgSQ2rg==}
+    peerDependencies:
+      '@tanstack/query-core': ^5.0.0
+      typescript: '>=4.7'
 
   '@tanstack/react-db@0.3.6':
     resolution: {integrity: sha512-jBBqrFOpbaZR7qhjOBhOcxZi+hM/Q1jn0CistWvg1V3qJJtN9k1AiA04hXnN4hWk86wMFbcreKvoEaXDAxX+Ww==}
@@ -2017,6 +2035,15 @@ snapshots:
   '@tanstack/history@1.162.1': {}
 
   '@tanstack/pacer-lite@0.2.2': {}
+
+  '@tanstack/query-core@5.102.8': {}
+
+  '@tanstack/query-db-collection@1.2.11(@tanstack/query-core@5.102.8)(typescript@7.0.2)':
+    dependencies:
+      '@standard-schema/spec': 1.1.0
+      '@tanstack/db': 0.8.6(typescript@7.0.2)
+      '@tanstack/query-core': 5.102.8
+      typescript: 7.0.2
 
   '@tanstack/react-db@0.3.6(react@19.2.8)(typescript@7.0.2)':
     dependencies:
