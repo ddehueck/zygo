@@ -12,3 +12,5 @@ __pycache__/
 .idea/
 .DS_Store
 **/*.egg-info/
+zygo_logs/
+zygo_workflow_results/

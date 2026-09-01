@@ -1,3 +1,4 @@
+mod cdc;
 mod database;
 mod db_models;
 mod error;
@@ -7,9 +8,11 @@ mod migrations;
 mod workflow_run;
 mod workflow_run_summary;
 
+pub use cdc::CdcRepository;
 pub use database::Db;
 pub use db_models::{
-    JobRunSummaryCounts, JobRunSummaryRow, TagRow, WorkflowRunRow, WorkflowRunSummaryRow,
+    CdcChangeType, CdcRow, JobRunSummaryCounts, JobRunSummaryRow, TagRow, WorkflowRunRow,
+    WorkflowRunSummaryRow,
 };
 pub use error::{Error as DbError, Result as DbResult};
 

@@ -8,8 +8,9 @@ license.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 directories = "6.0.0"
+serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["time"] }
 turso = "=0.7.2"
 zygo-core = { path = "../core" }

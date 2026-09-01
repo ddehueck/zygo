@@ -28,6 +28,8 @@ required-features = ["codegen"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+local = { path = "../../crates/local" }
+zygo-core = { path = "../../crates/core" }
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
@@ -35,3 +37,4 @@ serde_json = "1"
 specta = { version = "=2.0.0-rc.25", features = ["derive"] }
 specta-typescript = "=0.0.12"
 tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
+tokio = { version = "1.41.0", features = ["time"] }

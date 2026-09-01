@@ -1,0 +1,55 @@
+import { Channel } from "@tauri-apps/api/core";
+import { commands, type SyncDelta, type SyncEntityKind, type SyncUpsert } from "../bindings";
+import { workflowRuns } from "../db/workflow-run-summaries";
+import { jobRuns } from "../db/job-run-summaries";
+import { assertNever } from "../utils";
+
+type CollectionsByEntity = {
+  workflow_run_summary: typeof workflowRuns;
+  job_run_summary: typeof jobRuns;
+};
+
+const collections: CollectionsByEntity = {
+  workflow_run_summary: workflowRuns,
+  job_run_summary: jobRuns,
+};
+
+const SyncChannel = new Channel<SyncDelta>();
+
+SyncChannel.onmessage = (message) => {
+  console.log("got sync event", message);
+  switch (message.operation) {
+    case "resync":
+      // TODO
+      break;
+    case "delete":
+      applyDelete(message.entity, message.id);
+      break;
+    case "upsert":
+      applyUpsert(message.payload);
+      break;
+    default:
+      assertNever(message);
+  }
+};
+
+function applyDelete(entity: SyncEntityKind, id: string) {
+  collections[entity].utils.writeDelete(id);
+}
+
+type SyncUpsertFor<K extends SyncEntityKind> = Extract<SyncUpsert, { entity: K }>;
+
+function applyUpsert<K extends SyncEntityKind>(payload: SyncUpsertFor<K>) {
+  collections[payload.entity].utils.writeUpsert(payload.data);
+}
+
+export async function startSync() {
+  try {
+    const result = await commands.sync(SyncChannel);
+    if (result.status === "error") {
+      console.error("sync command failed", result.error);
+    }
+  } catch (error) {
+    console.error("sync connection failed", error);
+  }
+}

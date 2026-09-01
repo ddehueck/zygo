@@ -1,5 +1,6 @@
 use crate::db::{
-    JobRunSummaryRepository, KvRepository, WorkflowRunRepository, WorkflowRunSummaryRepository,
+    CdcRepository, JobRunSummaryRepository, KvRepository, WorkflowRunRepository,
+    WorkflowRunSummaryRepository,
 };
 
 /// Repositories owned by a [`ZygoLocalService`](crate::ZygoLocalService).
@@ -7,6 +8,7 @@ use crate::db::{
 /// All repositories share the service's database connection.
 #[derive(Clone)]
 pub struct Repos {
+    pub cdc: CdcRepository,
     pub kv: KvRepository,
     pub workflow_runs: WorkflowRunRepository,
     pub workflow_run_summaries: WorkflowRunSummaryRepository,

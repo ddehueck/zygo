@@ -138,11 +138,53 @@ impl WorkflowRunSummaryRepository {
         let mut rows = connection
             .query(
                 &format!(
-                    "SELECT {SELECT_COLUMNS} FROM workflow_run_summary ORDER BY created_at ASC, rowid ASC"
+                    "SELECT {SELECT_COLUMNS} FROM workflow_run_summary ORDER BY created_at DESC, rowid DESC"
                 ),
                 (),
             )
             .await?;
+
+        let mut summaries = Vec::new();
+        while let Some(row) = rows.next().await? {
+            summaries.push(WorkflowRunSummaryRow::from_row(&row, &rows)?);
+        }
+
+        Ok(summaries)
+    }
+
+    /// Lists summaries after the supplied workflow-run ID in lexicographic ID order.
+    ///
+    /// The caller can request one more row than it intends to return to determine
+    /// whether another page exists.
+    pub async fn list_after_id(
+        &self,
+        cursor: Option<&str>,
+        limit: u32,
+    ) -> Result<Vec<WorkflowRunSummaryRow>> {
+        let connection = self.database.connection.lock().await;
+        let limit = i64::from(limit);
+        let mut rows = match cursor {
+            Some(cursor) => {
+                connection
+                    .query(
+                        &format!(
+                            "SELECT {SELECT_COLUMNS} FROM workflow_run_summary WHERE workflow_run_id > ?1 ORDER BY workflow_run_id ASC LIMIT ?2"
+                        ),
+                        turso::params![cursor, limit],
+                    )
+                    .await?
+            }
+            None => {
+                connection
+                    .query(
+                        &format!(
+                            "SELECT {SELECT_COLUMNS} FROM workflow_run_summary ORDER BY workflow_run_id ASC LIMIT ?1"
+                        ),
+                        [limit],
+                    )
+                    .await?
+            }
+        };
 
         let mut summaries = Vec::new();
         while let Some(row) = rows.next().await? {

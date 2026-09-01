@@ -1907,7 +1907,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "desktop"
+name = "desktop-gpui"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -4176,6 +4176,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "directories",
+ "serde",
  "serde_json",
  "thiserror 2.0.20",
  "tokio",

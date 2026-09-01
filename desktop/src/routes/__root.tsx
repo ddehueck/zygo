@@ -1,44 +1,16 @@
-import type { ReactNode } from "react";
-import {
-  HeadContent,
-  Outlet,
-  Scripts,
-  createRootRoute,
-} from "@tanstack/react-router";
+import { DbProvider } from "@tanstack/react-db";
+import { Outlet, createRootRoute } from "@tanstack/react-router";
 import "../App.css";
+import { tdb } from "../db/shared";
 
 export const Route = createRootRoute({
-  head: () => ({
-    meta: [
-      { charSet: "utf-8" },
-      {
-        name: "viewport",
-        content: "width=device-width, initial-scale=1",
-      },
-      { title: "Zygo" },
-    ],
-  }),
   component: RootComponent,
 });
 
 function RootComponent() {
   return (
-    <RootDocument>
+    <DbProvider client={tdb}>
       <Outlet />
-    </RootDocument>
-  );
-}
-
-function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
-  return (
-    <html>
-      <head>
-        <HeadContent />
-      </head>
-      <body>
-        {children}
-        <Scripts />
-      </body>
-    </html>
+    </DbProvider>
   );
 }
