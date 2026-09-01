@@ -1,26 +1,14 @@
-use local::{Delta, SyncEntity, SyncSubscription};
-use serde::{Deserialize, Serialize};
+use local::{Delta, SyncEntity, SyncSubscription, ZygoLocalService};
+use serde::Serialize;
 use specta::Type;
 use tauri::State;
 
-#[derive(Debug, Deserialize, Type)]
-pub struct ConfirmSyncRequest {
-    #[specta(type = specta_typescript::Number)]
-    pub change_id: i64,
-}
-
-#[derive(Debug, Deserialize, Type)]
-pub struct GetSyncDeltasRequest {
-    #[specta(type = specta_typescript::Number)]
-    pub since: i64,
-    pub max_deltas: u32,
-}
+use crate::error::{CommandError, CommandResult};
 
 #[derive(Debug, Serialize, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum SyncEntityKind {
     WorkflowRunSummary,
-    WorkflowRun,
 }
 
 #[derive(Debug, Serialize, Type)]
@@ -29,25 +17,19 @@ pub enum SyncDelta {
     Resync,
     Delete {
         entity: SyncEntityKind,
+        id: String,
     },
     Upsert {
         entity: SyncEntityKind,
+        id: String,
         #[specta(type = specta_typescript::Unknown)]
         data: serde_json::Value,
     },
 }
 
-#[derive(Debug, Serialize, Type)]
-pub struct GetSyncDeltasResponse {
-    pub deltas: Vec<SyncDelta>,
-    #[specta(type = Option<specta_typescript::Number>)]
-    pub next_change_id: Option<i64>,
-}
-
 fn entity_kind(entity: SyncEntity) -> SyncEntityKind {
     match entity {
         SyncEntity::WorkflowRunSummary => SyncEntityKind::WorkflowRunSummary,
-        SyncEntity::WorkflowRun => SyncEntityKind::WorkflowRun,
     }
 }
 
@@ -55,11 +37,13 @@ impl From<Delta> for SyncDelta {
     fn from(delta: Delta) -> Self {
         match delta {
             Delta::Resync => Self::Resync,
-            Delta::Delete { entity } => Self::Delete {
+            Delta::Delete { entity, id } => Self::Delete {
                 entity: entity_kind(entity),
+                id,
             },
-            Delta::Upsert { entity, data } => Self::Upsert {
+            Delta::Upsert { entity, id, data } => Self::Upsert {
                 entity: entity_kind(entity),
+                id,
                 data,
             },
         }
@@ -68,41 +52,35 @@ impl From<Delta> for SyncDelta {
 
 #[tauri::command]
 #[specta::specta]
-pub async fn get_sync_deltas(
-    state: State<'_, SyncSubscription>,
-    request: GetSyncDeltasRequest,
-) -> Result<GetSyncDeltasResponse, String> {
-    const MAX_DELTAS: u32 = 1000;
+pub async fn sync(
+    state: State<'_, ZygoLocalService>,
+    on_event: tauri::ipc::Channel<SyncDelta>,
+) -> CommandResult<()> {
+    const MAX_DELTAS: usize = 1000;
 
-    if request.since < 0 {
-        return Err("sync change ID cannot be negative".to_owned());
+    let subscription = SyncSubscription::new(state.repos.clone());
+    subscription.load_last_change_id().await;
+    // todo: we don't really need need to spawn. the polling can just run here.
+    subscription.spawn().await;
+
+    loop {
+        subscription.wait_for_changes().await;
+
+        // Get the delta payload and send each delta to the tauri channel.
+        // The high-water mark is confirmed only after the whole batch has
+        // been delivered, so a failed channel send can be retried safely.
+        let batch = subscription
+            .next_delta_batch(MAX_DELTAS)
+            .await
+            .map_err(|error| CommandError::internal("sync_deltas_failed", error.to_string()))?;
+        let max_change_id = batch.max_change_id;
+
+        for delta in batch.deltas {
+            on_event.send(delta.into()).map_err(|error| {
+                CommandError::internal("sync_channel_failed", error.to_string())
+            })?;
+        }
+
+        subscription.set_last_confirmed_change_id(max_change_id);
     }
-    if request.max_deltas == 0 || request.max_deltas > MAX_DELTAS {
-        return Err(format!("max_deltas must be between 1 and {MAX_DELTAS}"));
-    }
-
-    let deltas = state
-        .get_deltas(request.since, request.max_deltas as usize)
-        .await
-        .map_err(|error| error.to_string())?;
-    let needs_resync = deltas.iter().any(|delta| matches!(delta, Delta::Resync));
-
-    Ok(GetSyncDeltasResponse {
-        deltas: deltas.into_iter().map(SyncDelta::from).collect(),
-        next_change_id: (!needs_resync).then_some(request.since + i64::from(request.max_deltas)),
-    })
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn confirm_sync(
-    state: State<'_, SyncSubscription>,
-    request: ConfirmSyncRequest,
-) -> Result<(), String> {
-    if request.change_id < 0 {
-        return Err("sync change ID cannot be negative".to_owned());
-    }
-
-    state.set_last_confirmed_change_id(request.change_id);
-    Ok(())
 }

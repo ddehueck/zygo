@@ -26,7 +26,8 @@ const workflowRunsCollection = collectionOptions("workflow_runs", (client) =>
       });
 
       if (result.status === "error") {
-        throw new Error(result.error);
+        console.log(result.error);
+        throw new Error(result.error.message);
       }
 
       return result.data;

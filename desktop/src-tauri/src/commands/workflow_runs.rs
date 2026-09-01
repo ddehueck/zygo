@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 use tauri::State;
 
+use crate::error::{CommandError, CommandResult};
+
 const MAX_PAGE_SIZE: u32 = 1000;
 
 #[derive(Debug, Deserialize, Type)]
@@ -56,19 +58,27 @@ impl From<local::WorkflowRunSummaryRow> for WorkflowRunSummary {
 pub async fn list_workflow_run_summaries(
     state: State<'_, ZygoLocalService>,
     request: ListWorkflowRunSummariesRequest,
-) -> Result<ListWorkflowRunSummariesResponse, String> {
+) -> CommandResult<ListWorkflowRunSummariesResponse> {
     if request.limit == 0 {
-        return Err("limit must be greater than zero".to_owned());
+        return Err(CommandError::invalid_input(
+            "limit",
+            "must be greater than zero",
+        ));
     }
     if request.limit > MAX_PAGE_SIZE {
-        return Err(format!("limit must not be greater than {MAX_PAGE_SIZE}"));
+        return Err(CommandError::invalid_input(
+            "limit",
+            format!("must not be greater than {MAX_PAGE_SIZE}"),
+        ));
     }
 
     let limit = request.limit;
     let mut summaries = state
         .list_workflow_run_summaries(request.cursor.as_deref(), limit + 1)
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| {
+            CommandError::internal("list_workflow_run_summaries_failed", error.to_string())
+        })?;
 
     let has_more = summaries.len() > limit as usize;
     if has_more {

@@ -24,6 +24,19 @@ impl CdcRepository {
         Self { database }
     }
 
+    /// Returns the highest change ID currently recorded by CDC.
+    pub async fn last_change_id(&self) -> Result<i64> {
+        let connection = self.database.connection.lock().await;
+        let mut rows = connection
+            .query("SELECT COALESCE(MAX(change_id), 0) FROM turso_cdc", ())
+            .await?;
+        let Some(row) = rows.next().await? else {
+            return Ok(0);
+        };
+
+        Ok(row.get(0)?)
+    }
+
     /// Lists changes after `after_change_id` and through `through_change_id`.
     ///
     /// The lower bound is exclusive because it represents the caller's last
@@ -121,6 +134,7 @@ mod tests {
             .await?;
         drop(connection);
 
+        assert!(repository.last_change_id().await? > before_change_id);
         let changes = repository.list_between(before_change_id, i64::MAX).await?;
         let change = changes
             .iter()

@@ -18,4 +18,4 @@ pub use db::{
     WorkflowRunRow, WorkflowRunSummaryRepository, WorkflowRunSummaryRow,
 };
 pub use repos::Repos;
-pub use sync::{Delta, SyncEntity, SyncSubscription};
+pub use sync::{Delta, DeltaBatch, SyncEntity, SyncSubscription};
