@@ -138,7 +138,7 @@ impl WorkflowRunSummaryRepository {
         let mut rows = connection
             .query(
                 &format!(
-                    "SELECT {SELECT_COLUMNS} FROM workflow_run_summary ORDER BY created_at ASC, rowid ASC"
+                    "SELECT {SELECT_COLUMNS} FROM workflow_run_summary ORDER BY created_at DESC, rowid DESC"
                 ),
                 (),
             )

@@ -47,14 +47,15 @@ impl Render for RunDetailView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let colors = cx.global::<Theme>().colors;
         let navigate = dependencies::use_navigation(cx);
-        let list_navigation = navigate.clone();
+
         let new_run_navigation = navigate.clone();
         let run_id = self
             .run_id
             .as_ref()
             .expect("detail view must have a run ID before rendering")
             .clone();
-        let workflow_run_input = self.workflow_run_input.clone();
+        let new_run_id = run_id.clone();
+
         let details = dependencies::use_run_details(cx);
         let detail_store = details.read(cx);
         let job_runs = detail_store.summaries_for(&run_id).unwrap_or(&[]);
@@ -75,74 +76,21 @@ impl Render for RunDetailView {
             .gap_5()
             .child(
                 div()
-                    .text_2xl()
-                    .font_weight(gpui::FontWeight::BOLD)
-                    .child("Workflow run detail"),
-            )
-            .child(
-                div()
-                    .text_color(colors.text_secondary)
-                    .child(format!("Run ID: {run_id}")),
-            )
-            .child(
-                div()
                     .flex()
-                    .flex_col()
-                    .gap_2()
+                    .w_full()
+                    .items_center()
+                    .justify_between()
                     .child(
                         div()
-                            .text_sm()
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .child("Workflow input"),
+                            .text_2xl()
+                            .font_weight(gpui::FontWeight::BOLD)
+                            .child("Workflow Run"),
                     )
-                    .child(
-                        div()
-                            .id("workflow-run-input")
-                            .flex()
-                            .items_center()
-                            .w_full()
-                            .h(px(44.0))
-                            .px_3()
-                            .rounded_md()
-                            .border_1()
-                            .border_color(colors.border_muted)
-                            .bg(colors.surface_input)
-                            .child(
-                                input(&workflow_run_input, cx)
-                                    .size_full()
-                                    .text_base()
-                                    .text_color(colors.text_primary)
-                                    .placeholder("Enter a value for this workflow run…"),
-                            ),
-                    ),
-            )
-            .child(tags_section(run_tags, tags_loading, tags_error, colors))
-            .child(job_runs_section(
-                job_runs,
-                jobs_loading,
-                jobs_error,
-                colors,
-                run_id.clone(),
-                navigate,
-            ))
-            .child(
-                div()
-                    .flex()
-                    .gap_3()
-                    .child(Button::new("detail-runs", "Workflow runs").on_click(
-                        move |_, window, cx| {
-                            list_navigation(
-                                &Routes::WorkflowRuns(WorkflowRunsRoutes::Index),
-                                window,
-                                cx,
-                            );
-                        },
-                    ))
                     .child(Button::new("detail-new", "New workflow run").on_click(
                         move |_, window, cx| {
                             new_run_navigation(
                                 &Routes::WorkflowRuns(WorkflowRunsRoutes::Run {
-                                    id: run_id.clone(),
+                                    id: new_run_id.clone(),
                                     routes: WorkflowRunRoutes::New,
                                 }),
                                 window,
@@ -151,6 +99,15 @@ impl Render for RunDetailView {
                         },
                     )),
             )
+            .child(job_runs_section(
+                job_runs,
+                jobs_loading,
+                jobs_error,
+                colors,
+                run_id.clone(),
+                navigate,
+            ))
+            .child(tags_section(run_tags, tags_loading, tags_error, colors))
     }
 }
 
@@ -266,8 +223,6 @@ fn job_runs_section(
     } else {
         div()
             .id("workflow-run-jobs-table")
-            .flex_1()
-            .min_h_0()
             .overflow_scroll()
             .w_full()
             .border_1()
@@ -294,8 +249,6 @@ fn job_runs_section(
         .flex()
         .flex_col()
         .gap_2()
-        .flex_1()
-        .min_h_0()
         .child(
             div().flex().items_center().justify_between().child(
                 div()
