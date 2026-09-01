@@ -5,6 +5,7 @@ import { invoke as __TAURI_INVOKE, Channel } from "@tauri-apps/api/core";
 /** Commands */
 export const commands = {
 	greet: (name: string, title: string) => __TAURI_INVOKE<string>("greet", { name, title }),
+	listJobRunSummaries: (request: ListJobRunSummariesRequest) => typedError<ListJobRunSummariesResponse, CommandError>(__TAURI_INVOKE("list_job_run_summaries", { request })),
 	listWorkflowRunSummaries: (request: ListWorkflowRunSummariesRequest) => typedError<ListWorkflowRunSummariesResponse, CommandError>(__TAURI_INVOKE("list_workflow_run_summaries", { request })),
 	sync: (onEvent: Channel<SyncDelta>) => typedError<null, CommandError>(__TAURI_INVOKE("sync", { onEvent })),
 };
@@ -12,6 +13,28 @@ export const commands = {
 /* Types */
 /**  The error contract exposed by Tauri commands to the frontend. */
 export type CommandError = { kind: "invalid_input"; field: string; message: string } | { kind: "internal"; code: string; message: string };
+
+export type JobRunSummary = {
+	id: string,
+	workflow_run_id: string,
+	job_run_id: string,
+	job_id: string,
+	status: string,
+	duration_ms: number | null,
+	retry_count: number,
+	created_at: string,
+	updated_at: string,
+};
+
+export type ListJobRunSummariesRequest = {
+	cursor: string | null,
+	limit: number,
+};
+
+export type ListJobRunSummariesResponse = {
+	summaries: JobRunSummary[],
+	next_cursor: string | null,
+};
 
 export type ListWorkflowRunSummariesRequest = {
 	cursor: string | null,
@@ -23,9 +46,11 @@ export type ListWorkflowRunSummariesResponse = {
 	next_cursor: string | null,
 };
 
-export type SyncDelta = { operation: "resync" } | { operation: "delete"; entity: SyncEntityKind; id: string } | { operation: "upsert"; entity: SyncEntityKind; id: string; data: unknown };
+export type SyncDelta = { operation: "resync" } | { operation: "delete"; entity: SyncEntityKind; id: string } | { operation: "upsert"; payload: SyncUpsert };
 
-export type SyncEntityKind = "workflow_run_summary";
+export type SyncEntityKind = "workflow_run_summary" | "job_run_summary";
+
+export type SyncUpsert = { entity: "workflow_run_summary"; id: string; data: WorkflowRunSummary } | { entity: "job_run_summary"; id: string; data: JobRunSummary };
 
 export type WorkflowRunSummary = {
 	workflow_run_id: string,

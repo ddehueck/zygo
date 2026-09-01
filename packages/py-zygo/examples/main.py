@@ -15,7 +15,7 @@ workflow = Workflow(id="my_workflow", input=raw, output=output)
 def square_values(input: int, *, ctx: JobContext) -> int:
     tags, store = ctx.tags, ctx.store
 
-    print(f"[reads_to_qc_reports] GOIN TO SQUARE: {input}")  # ruff: ignore[print]
+    print(f"[reads_to_qc_reports] GOING TO SQUARE: {input}")  # ruff: ignore[print]
 
     rand_wait = random.randint(1, 15)
     if rand_wait % 2 == 0:

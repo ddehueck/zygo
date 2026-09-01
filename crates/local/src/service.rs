@@ -134,17 +134,4 @@ impl ZygoLocalService {
             None => Ok(self.repos.workflow_runs.list_all().await?),
         }
     }
-
-    // todo: remvoe this
-    pub async fn list_workflow_run_summaries(
-        &self,
-        cursor: Option<&str>,
-        limit: u32,
-    ) -> Result<Vec<crate::WorkflowRunSummaryRow>> {
-        Ok(self
-            .repos
-            .workflow_run_summaries
-            .list_after_id(cursor, limit)
-            .await?)
-    }
 }

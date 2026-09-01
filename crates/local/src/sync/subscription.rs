@@ -9,7 +9,7 @@ use crate::sync::batch::DeltaBatch;
 use crate::sync::error::Result;
 use crate::sync::schema::Delta;
 
-const SYNC_TABLES: [&str; 1] = ["workflow_run_summary"];
+const SYNC_TABLES: [&str; 2] = ["workflow_run_summary", "job_run_summary"];
 
 #[derive(Clone)]
 pub struct SyncSubscription {
@@ -43,13 +43,21 @@ impl SyncSubscription {
 
     pub async fn next_delta_batch(&self, max_deltas: usize) -> Result<DeltaBatch> {
         let last_confirmed_change_id = self.last_confirmed_change_id.load(Ordering::Acquire);
-        let max_change_id = last_confirmed_change_id + max_deltas as i64;
+        let through_change_id = last_confirmed_change_id + max_deltas as i64;
 
         let cdc_rows = self
             .repos
             .cdc
-            .list_between(last_confirmed_change_id, max_change_id)
+            .list_between(last_confirmed_change_id, through_change_id)
             .await?;
+
+        // The query boundary is only a batching limit. Confirm the highest CDC
+        // row actually fetched so a sparse CDC range cannot skip later rows.
+        let max_change_id = cdc_rows
+            .iter()
+            .map(|row| row.change_id)
+            .max()
+            .unwrap_or(last_confirmed_change_id);
 
         let deltas = cdc_rows
             .into_iter()

@@ -7,16 +7,16 @@ import { syncEntityRefreshOptions, tdb } from "./shared";
 const DEFAULT_LIMIT = 100;
 
 // Define a stable collection descriptor that loads data using TanStack Query
-const options = collectionOptions("workflow_runs", (client) =>
+const options = collectionOptions("job_runs", (client) =>
   queryCollectionOptions({
-    id: "workflow_runs",
-    queryKey: ["workflow_runs"],
+    id: "job_runs",
+    queryKey: ["job_runs"],
     queryClient: client.requireDependency<QueryClient>("queryClient"),
     ...syncEntityRefreshOptions,
     queryFn: async (ctx) => {
       const options = parseLoadSubsetOptions(ctx.meta?.loadSubsetOptions);
 
-      const result = await commands.listWorkflowRunSummaries({
+      const result = await commands.listJobRunSummaries({
         cursor: null,
         limit: options.limit ?? DEFAULT_LIMIT,
       });
@@ -30,8 +30,8 @@ const options = collectionOptions("workflow_runs", (client) =>
     },
     // https://tanstack.com/db/latest/docs/collections/query-collection#selecting-rows-from-wrapped-responses
     select: (response) => response.summaries,
-    getKey: (item) => item.workflow_run_id,
+    getKey: (item) => item.id,
   }),
 );
 
-export const workflowRuns = tdb.collection(options);
+export const jobRuns = tdb.collection(options);

@@ -104,6 +104,7 @@ impl WorkflowRunSummaryRow {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct JobRunSummaryRow {
+    pub row_id: i64,
     pub workflow_run_id: String,
     pub job_run_id: String,
     pub job_id: String,
@@ -124,6 +125,7 @@ pub struct JobRunSummaryCounts {
 impl JobRunSummaryRow {
     pub fn from_row(row: &Row, rows: &Rows) -> Result<Self> {
         Ok(Self {
+            row_id: row.get(rows.column_index("row_id")?)?,
             workflow_run_id: row.get(rows.column_index("workflow_run_id")?)?,
             job_run_id: row.get(rows.column_index("job_run_id")?)?,
             job_id: row.get(rows.column_index("job_id")?)?,

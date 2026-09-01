@@ -24,6 +24,7 @@ const UPSERT_SQL: &str = "
 ";
 
 const SELECT_COLUMNS: &str = "
+    rowid AS row_id,
     workflow_run_id,
     job_run_id,
     job_id,
@@ -188,6 +189,48 @@ impl JobRunSummaryRepository {
         };
 
         Ok(Some(JobRunSummaryRow::from_row(&row, &rows)?))
+    }
+
+    /// Lists summaries after the supplied row ID in ascending row-ID order.
+    ///
+    /// The caller can request one more row than it intends to return to determine
+    /// whether another page exists.
+    pub async fn list_after_id(
+        &self,
+        cursor: Option<&str>,
+        limit: u32,
+    ) -> Result<Vec<JobRunSummaryRow>> {
+        let connection = self.database.connection.lock().await;
+        let limit = i64::from(limit);
+        let mut rows = match cursor {
+            Some(cursor) => {
+                connection
+                    .query(
+                        &format!(
+                            "SELECT {SELECT_COLUMNS} FROM job_run_summary WHERE rowid > ?1 ORDER BY rowid ASC LIMIT ?2"
+                        ),
+                        turso::params![cursor, limit],
+                    )
+                    .await?
+            }
+            None => {
+                connection
+                    .query(
+                        &format!(
+                            "SELECT {SELECT_COLUMNS} FROM job_run_summary ORDER BY rowid ASC LIMIT ?1"
+                        ),
+                        [limit],
+                    )
+                    .await?
+            }
+        };
+
+        let mut summaries = Vec::new();
+        while let Some(row) = rows.next().await? {
+            summaries.push(JobRunSummaryRow::from_row(&row, &rows)?);
+        }
+
+        Ok(summaries)
     }
 
     pub async fn list_by_workflow_run_id(

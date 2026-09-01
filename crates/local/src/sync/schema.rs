@@ -7,6 +7,7 @@ use super::{Error, Result};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SyncEntity {
     WorkflowRunSummary,
+    JobRunSummary,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -29,6 +30,7 @@ impl TryFrom<CdcRow> for Delta {
     fn try_from(row: CdcRow) -> Result<Self> {
         let entity = match row.table_name.as_str() {
             "workflow_run_summary" => SyncEntity::WorkflowRunSummary,
+            "job_run_summary" => SyncEntity::JobRunSummary,
             table_name => return Err(Error::UnsupportedTable(table_name.to_owned())),
         };
 

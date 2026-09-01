@@ -5,47 +5,63 @@ use tauri::State;
 
 use crate::error::{CommandError, CommandResult};
 
+use super::SyncUpsert;
+
 #[derive(Debug, Serialize, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum SyncEntityKind {
     WorkflowRunSummary,
+    JobRunSummary,
 }
 
 #[derive(Debug, Serialize, Type)]
 #[serde(tag = "operation", rename_all = "snake_case")]
 pub enum SyncDelta {
     Resync,
-    Delete {
-        entity: SyncEntityKind,
-        id: String,
-    },
-    Upsert {
-        entity: SyncEntityKind,
-        id: String,
-        #[specta(type = specta_typescript::Unknown)]
-        data: serde_json::Value,
-    },
+    Delete { entity: SyncEntityKind, id: String },
+    Upsert { payload: SyncUpsert },
 }
 
 fn entity_kind(entity: SyncEntity) -> SyncEntityKind {
     match entity {
         SyncEntity::WorkflowRunSummary => SyncEntityKind::WorkflowRunSummary,
+        SyncEntity::JobRunSummary => SyncEntityKind::JobRunSummary,
     }
 }
 
-impl From<Delta> for SyncDelta {
-    fn from(delta: Delta) -> Self {
+impl TryFrom<Delta> for SyncDelta {
+    type Error = serde_json::Error;
+
+    fn try_from(delta: Delta) -> Result<Self, Self::Error> {
         match delta {
-            Delta::Resync => Self::Resync,
-            Delta::Delete { entity, id } => Self::Delete {
+            Delta::Resync => Ok(Self::Resync),
+            Delta::Delete { entity, id } => Ok(Self::Delete {
                 entity: entity_kind(entity),
                 id,
-            },
-            Delta::Upsert { entity, id, data } => Self::Upsert {
-                entity: entity_kind(entity),
-                id,
-                data,
-            },
+            }),
+            Delta::Upsert { entity, id, data } => {
+                let payload = match entity {
+                    SyncEntity::WorkflowRunSummary => SyncUpsert::WorkflowRunSummary {
+                        id,
+                        data: serde_json::from_value(data)?,
+                    },
+                    SyncEntity::JobRunSummary => {
+                        let data = match data {
+                            serde_json::Value::Object(mut data) => {
+                                data.insert("id".to_owned(), serde_json::Value::String(id.clone()));
+                                serde_json::Value::Object(data)
+                            }
+                            data => data,
+                        };
+                        SyncUpsert::JobRunSummary {
+                            id,
+                            data: serde_json::from_value(data)?,
+                        }
+                    }
+                };
+
+                Ok(Self::Upsert { payload })
+            }
         }
     }
 }
@@ -76,7 +92,14 @@ pub async fn sync(
         let max_change_id = batch.max_change_id;
 
         for delta in batch.deltas {
-            on_event.send(delta.into()).map_err(|error| {
+            let delta = SyncDelta::try_from(delta).map_err(|error| {
+                CommandError::internal(
+                    "invalid_sync_delta",
+                    format!("failed to parse sync payload: {error}"),
+                )
+            })?;
+
+            on_event.send(delta).map_err(|error| {
                 CommandError::internal("sync_channel_failed", error.to_string())
             })?;
         }
