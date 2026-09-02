@@ -1,11 +1,12 @@
 import { useLiveQuery } from "@tanstack/react-db";
 import { useEffect, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import type { WorkflowRunSummary } from "../bindings";
 import { Button } from "../components/Button";
 import { Cell, Column, Row, Table, TableBody, TableHeader } from "../components/Table";
 import { workflowRuns } from "../db/workflow-run-summaries";
 import { useTheme } from "../hooks/use-theme";
+import { MainContentLayout } from "../components/layout/MainContentLayout";
 
 export const Route = createFileRoute("/")({
   beforeLoad: () => ({
@@ -46,7 +47,10 @@ function IndexRoute() {
   const [theme, toggleTheme] = useTheme();
 
   return (
-    <main className="mx-auto flex min-h-[calc(100vh-2rem)] w-full max-w-7xl flex-col gap-6 px-6 py-10">
+    <MainContentLayout
+      titleContent={<p></p>}
+    >
+    <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-6 py-10">
       <header className="flex items-start justify-between gap-4">
         <div>
           <p className="mb-2 text-sm font-medium uppercase tracking-wide text-app-foreground-muted">Runs</p>
@@ -94,7 +98,8 @@ function IndexRoute() {
           </p>
         )
       )}
-    </main>
+      </main>
+      </MainContentLayout>
   );
 }
 
@@ -108,7 +113,13 @@ function WorkflowRunRow({ workflowRun, now }: { workflowRun: WorkflowRunSummary;
       textValue={`${workflowRun.workflow_run_id} ${statusLabel(workflowRun.status)}`}
     >
       <Cell className="min-w-56 font-mono text-xs" textValue={workflowRun.workflow_run_id}>
-        {workflowRun.workflow_run_id}
+        <Link
+          to="/runs/$workflowRunId"
+          params={{ workflowRunId: workflowRun.workflow_run_id }}
+          className="rounded-sm text-app-accent underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-app-accent"
+        >
+          {workflowRun.workflow_run_id}
+        </Link>
       </Cell>
       <Cell textValue={statusLabel(workflowRun.status)}>
         <StatusBadge status={workflowRun.status} />
