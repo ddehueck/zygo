@@ -8,6 +8,12 @@ import { workflowRuns } from "../db/workflow-run-summaries";
 import { useTheme } from "../hooks/use-theme";
 
 export const Route = createFileRoute("/")({
+  beforeLoad: () => ({
+    breadcrumb: {
+      label: "Workflow runs",
+      link: "/",
+    },
+  }),
   component: IndexRoute,
 });
 
