@@ -1,10 +1,11 @@
 import { useLiveQuery } from "@tanstack/react-db";
 import { useEffect, useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import type { WorkflowRunSummary } from "../bindings";
 import { Cell, Column, Row, Table, TableBody, TableHeader } from "../components/Table";
-import { workflowRuns } from "../db/workflow-run-summaries";
+import { Icons } from "../components/icons";
 import { MainContentLayout } from "../components/layout/MainContentLayout";
+import { workflowRuns } from "../db/workflow-run-summaries";
 
 export const Route = createFileRoute("/")({
   beforeLoad: () => ({
@@ -17,16 +18,9 @@ export const Route = createFileRoute("/")({
 });
 
 const columns = [
-  { id: "workflowRunId", name: "Workflow run" },
-  { id: "status", name: "Status" },
-  { id: "created", name: "Created" },
-  { id: "started", name: "Started" },
-  { id: "completed", name: "Completed" },
+  { id: "run", name: "Workflow run" },
+  { id: "jobs", name: "Jobs" },
   { id: "duration", name: "Duration" },
-  { id: "totalJobs", name: "Total jobs" },
-  { id: "succeededJobs", name: "Succeeded" },
-  { id: "activeJobs", name: "Running" },
-  { id: "erroredJobs", name: "Failed" },
 ] as const;
 
 function IndexRoute() {
@@ -36,135 +30,256 @@ function IndexRoute() {
     isError,
     status,
   } = useLiveQuery({
-    query: (q) => q.from({ workflowRun: workflowRuns }).orderBy(({ workflowRun }) => workflowRun.created_at, "desc"),
+    query: (q) =>
+      q
+        .from({ workflowRun: workflowRuns })
+        .orderBy(({ workflowRun }) => workflowRun.created_at, "desc"),
   });
+  const navigate = useNavigate();
   const hasActiveWork = runs.some(
     (workflowRun) => workflowRun.status === "running" || workflowRun.active_job_count > 0,
   );
   const now = useLiveClock(hasActiveWork);
 
   return (
-    <MainContentLayout
-      titleContent={<p></p>}
-    >
-    <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-6 py-10">
-      <header className="flex items-start justify-between gap-4">
-        <div>
-          <p className="mb-2 text-sm font-medium uppercase tracking-wide text-app-foreground-muted">Runs</p>
-          <h1 className="text-3xl font-semibold tracking-tight text-app-foreground">Workflow runs</h1>
-          <p className="mt-2 text-app-foreground-muted">
-            Status, job counts, and basic metadata for each workflow run.
-          </p>
-        </div>
-      </header>
+    <MainContentLayout titleContent={null}>
+      <main className="flex w-full flex-col gap-6 py-10">
+        <header className="flex items-end justify-between gap-4 px-6">
+          <div>
+            <p className="mb-2 text-sm font-medium uppercase tracking-wide text-app-foreground-muted">
+              Runs
+            </p>
+            <h1 className="text-3xl font-semibold tracking-tight text-app-foreground">
+              Workflow runs
+            </h1>
+            <p className="mt-2 text-app-foreground-muted">
+              Monitor workflow status and job progress at a glance.
+            </p>
+          </div>
+          {!isLoading && !isError && (
+            <div className="shrink-0 text-right">
+              <p className="text-2xl font-semibold tabular-nums text-app-foreground">
+                {runs.length}
+              </p>
+              <p className="text-xs font-medium uppercase tracking-wide text-app-foreground-muted">
+                Total runs
+              </p>
+            </div>
+          )}
+        </header>
 
-      {isLoading && <p className="text-app-foreground-muted">Loading workflow runs…</p>}
-      {isError && (
-        <p className="rounded-md border border-app-danger/30 bg-app-danger/10 p-4 text-app-danger" role="alert">
-          Unable to load workflow runs (status: {status}).
-        </p>
-      )}
-
-      {runs.length > 0 ? (
-        <Table aria-label="Workflow runs" className="max-h-[calc(100vh-18rem)] min-h-0 flex-1">
-          <TableHeader columns={columns}>
-            {(column) => (
-              <Column id={column.id} isRowHeader={column.id === "workflowRunId"}>
-                {column.name}
-              </Column>
-            )}
-          </TableHeader>
-          <TableBody items={runs}>
-            {(workflowRun) => <WorkflowRunRow workflowRun={workflowRun} now={now} />}
-          </TableBody>
-        </Table>
-      ) : (
-        !isLoading &&
-        !isError && (
-          <p className="rounded-md border border-dashed border-app-border p-8 text-center text-app-foreground-muted">
-            No workflow runs loaded.
+        {isLoading && <p className="px-6 text-app-foreground-muted">Loading workflow runs…</p>}
+        {isError && (
+          <p
+            className="mx-6 rounded-md border border-app-danger/30 bg-app-danger/10 p-4 text-app-danger"
+            role="alert"
+          >
+            Unable to load workflow runs (status: {status}).
           </p>
-        )
-      )}
+        )}
+
+        {runs.length > 0 ? (
+          <Table
+            aria-label="Workflow runs"
+            onRowAction={(key) =>
+              navigate({
+                to: "/runs/$workflowRunId",
+                params: { workflowRunId: String(key) },
+              })
+            }
+
+          >
+            <TableHeader
+              columns={columns}
+              className="h-0 overflow-hidden [&>tr]:h-0 [&>tr>th]:h-0 [&>tr>th]:border-0 [&>tr>th]:p-0 [&>tr>th>*]:hidden"
+            >
+              {(column) => (
+                <Column id={column.id} isRowHeader={column.id === "run"}>
+                  {column.name}
+                </Column>
+              )}
+            </TableHeader>
+            <TableBody items={runs}>
+              {(workflowRun) => <WorkflowRunRow workflowRun={workflowRun} now={now} />}
+            </TableBody>
+          </Table>
+        ) : (
+          !isLoading &&
+          !isError && (
+            <p className="mx-6 rounded-md border border-dashed border-app-border p-8 text-center text-app-foreground-muted">
+              No workflow runs loaded.
+            </p>
+          )
+        )}
       </main>
-      </MainContentLayout>
+    </MainContentLayout>
   );
 }
 
 function WorkflowRunRow({ workflowRun, now }: { workflowRun: WorkflowRunSummary; now: number }) {
   const totalJobs =
     workflowRun.active_job_count + workflowRun.succeeded_job_count + workflowRun.errored_job_count;
+  const duration = formatWorkflowDuration(workflowRun.started_at, workflowRun.completed_at, now);
 
   return (
     <Row
       id={workflowRun.workflow_run_id}
-      textValue={`${workflowRun.workflow_run_id} ${statusLabel(workflowRun.status)}`}
+      textValue={`${workflowRun.workflow_run_id} ${statusLabel(workflowRun.status)} ${totalJobs} jobs`}
     >
-      <Cell className="min-w-56 font-mono text-xs" textValue={workflowRun.workflow_run_id}>
-        <Link
-          to="/runs/$workflowRunId"
-          params={{ workflowRunId: workflowRun.workflow_run_id }}
-          className="rounded-sm text-app-accent underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-app-accent"
-        >
-          {workflowRun.workflow_run_id}
-        </Link>
+      <Cell textValue={workflowRun.workflow_run_id}>
+        <div className="flex min-w-64 items-center gap-3 py-1">
+          <StatusIcon status={workflowRun.status} />
+          <div className="min-w-0">
+            <p
+              className="truncate font-mono text-base font-semibold tracking-tight text-app-foreground"
+            >
+              …{shortRunId(workflowRun.workflow_run_id)}
+            </p>
+
+          </div>
+        </div>
       </Cell>
-      <Cell textValue={statusLabel(workflowRun.status)}>
-        <StatusBadge status={workflowRun.status} />
+      <Cell textValue={`${totalJobs} total jobs`}>
+        <JobCounts
+          running={workflowRun.active_job_count}
+          completed={workflowRun.succeeded_job_count}
+          errored={workflowRun.errored_job_count}
+          total={totalJobs}
+        />
       </Cell>
-      <Cell textValue={formatDate(workflowRun.created_at)}>{formatDate(workflowRun.created_at)}</Cell>
-      <Cell textValue={formatDate(workflowRun.started_at)}>{formatDate(workflowRun.started_at)}</Cell>
-      <Cell textValue={formatDate(workflowRun.completed_at)}>{formatDate(workflowRun.completed_at)}</Cell>
-      <Cell textValue={formatWorkflowDuration(workflowRun.started_at, workflowRun.completed_at, now)}>
-        {formatWorkflowDuration(workflowRun.started_at, workflowRun.completed_at, now)}
+      <Cell textValue={duration}>
+        <div className="py-1">
+          <p className="font-mono text-sm text-app-foreground">{duration}</p>
+
+        </div>
       </Cell>
-      <Cell textValue={String(totalJobs)}>{totalJobs}</Cell>
-      <Cell textValue={String(workflowRun.succeeded_job_count)}>{workflowRun.succeeded_job_count}</Cell>
-      <Cell textValue={String(workflowRun.active_job_count)}>{workflowRun.active_job_count}</Cell>
-      <Cell textValue={String(workflowRun.errored_job_count)}>{workflowRun.errored_job_count}</Cell>
+
     </Row>
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
+function StatusIcon({ status }: { status: string }) {
   return (
-    <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${statusClasses(status)}`}>
-      {statusLabel(status)}
+    <span
+      role="img"
+      aria-label={statusLabel(status)}
+      className="flex size-5 shrink-0 items-center justify-center"
+    >
+      <StatusGlyph status={status} className={`size-5 ${statusIconColor(status)}`} />
     </span>
   );
+}
+
+function StatusGlyph({ status, className }: { status: string; className: string }) {
+  const iconProps = { "aria-hidden": true, className, strokeWidth: 2.25 } as const;
+
+  switch (status) {
+    case "succeeded":
+      return <Icons.Completed {...iconProps} />;
+    case "running":
+      return <Icons.InProgress {...iconProps} />;
+    case "failed":
+    case "errored":
+      return <Icons.Errored {...iconProps} />;
+    default:
+      return null;
+  }
+}
+
+function JobCounts({
+  running,
+  completed,
+  errored,
+  total,
+}: {
+  running: number;
+  completed: number;
+  errored: number;
+  total: number;
+}) {
+  return (
+    <div
+      className="flex items-center gap-3 whitespace-nowrap py-1"
+      aria-label={`${total} total jobs`}
+    >
+      <JobCount kind="running" value={running} label="running jobs" colorClass="text-app-warning" />
+      <JobCount
+        kind="completed"
+        value={completed}
+        label="completed jobs"
+        colorClass="text-app-success"
+      />
+      <JobCount kind="errored" value={errored} label="errored jobs" colorClass="text-app-danger" />
+
+    </div>
+  );
+}
+
+function JobCount({
+  kind,
+  value,
+  label,
+  colorClass,
+}: {
+  kind: "running" | "completed" | "errored";
+  value: number;
+  label: string;
+  colorClass: string;
+}) {
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-xs font-medium text-app-foreground"
+      aria-label={`${value} ${label}`}
+    >
+      <JobGlyph kind={kind} className={`size-3.5 ${colorClass}`} />
+      <span className="tabular-nums">{value}</span>
+    </span>
+  );
+}
+
+function JobGlyph({
+  kind,
+  className,
+}: {
+  kind: "running" | "completed" | "errored";
+  className: string;
+}) {
+  const iconProps = { "aria-hidden": true, className, strokeWidth: 2.25 } as const;
+
+  switch (kind) {
+    case "running":
+      return <Icons.InProgress {...iconProps} />;
+    case "completed":
+      return <Icons.Completed {...iconProps} />;
+    case "errored":
+      return <Icons.Errored {...iconProps} />;
+  }
+}
+
+function shortRunId(workflowRunId: string): string {
+  return workflowRunId.slice(-4);
 }
 
 function statusLabel(status: string): string {
   return status.replace(/_/g, " ");
 }
 
-function statusClasses(status: string): string {
+
+function statusIconColor(status: string): string {
   switch (status) {
     case "succeeded":
-      return "bg-app-success/15 text-app-success";
+      return "text-app-success";
     case "running":
-      return "bg-app-warning/15 text-app-warning";
+      return "text-app-warning";
     case "failed":
     case "errored":
-      return "bg-app-danger/15 text-app-danger";
+      return "text-app-danger";
     default:
-      return "bg-app-border/50 text-app-foreground-muted";
+      return "text-app-foreground-muted";
   }
 }
 
-function formatDate(value: string | number | null): string {
-  if (value === null) {
-    return "—";
-  }
 
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? String(value)
-    : new Intl.DateTimeFormat(undefined, {
-        dateStyle: "medium",
-        timeStyle: "short",
-      }).format(date);
-}
 
 function useLiveClock(enabled: boolean): number {
   const [now, setNow] = useState(() => Date.now());
@@ -174,7 +289,6 @@ function useLiveClock(enabled: boolean): number {
       return;
     }
 
-    setNow(Date.now());
     const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
   }, [enabled]);
@@ -194,11 +308,7 @@ function formatWorkflowDuration(
   return formatDuration(Math.max(0, (completedAt ?? now) - startedAt));
 }
 
-function formatDuration(durationMs: number | null): string {
-  if (durationMs === null) {
-    return "—";
-  }
-
+function formatDuration(durationMs: number): string {
   const totalSeconds = Math.floor(durationMs / 1000);
   if (totalSeconds < 60) {
     return `${totalSeconds}s`;

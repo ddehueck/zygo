@@ -19,11 +19,11 @@ const button = tv({
       primary:
         "bg-app-accent text-app-accent-foreground hover:bg-app-accent/90 data-pressed:bg-app-accent/80",
       secondary:
-        "border-app-border bg-app-background-tertiary text-app-foreground-secondary hover:bg-app-background-tertiary/80 data-pressed:bg-app-background-tertiary/70",
+        "border-app-border bg-app-bg-elevated text-app-foreground-secondary hover:bg-app-interaction-hover data-pressed:bg-app-interaction-pressed",
       outline:
-        "border-app-border bg-transparent text-app-foreground hover:bg-app-background-secondary data-pressed:bg-app-background-tertiary",
+        "border-app-border bg-transparent text-app-foreground hover:bg-app-interaction-hover data-pressed:bg-app-interaction-pressed",
       ghost:
-        "border-transparent bg-transparent text-app-foreground-muted hover:bg-app-background-tertiary data-pressed:bg-app-background-tertiary/80",
+        "border-transparent bg-transparent text-app-foreground-muted hover:bg-app-interaction-hover data-pressed:bg-app-interaction-pressed",
       destructive:
         "bg-app-danger text-app-danger-foreground hover:bg-app-danger/90 data-pressed:bg-app-danger/80",
     },

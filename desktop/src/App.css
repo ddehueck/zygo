@@ -22,7 +22,7 @@ body {
 }
 
 body {
-  background-color: var(--app-background);
+  background-color: var(--app-bg-base);
   color: var(--app-foreground);
 }
 

@@ -94,7 +94,7 @@ function RunDetails({
         <p className="mt-2 text-app-foreground-muted">General information and job counts for this workflow run.</p>
       </header>
 
-      <section className="rounded-lg border border-app-border bg-app-background-secondary p-5" aria-labelledby="run-information-heading">
+      <section className="rounded-lg border border-app-border bg-app-bg-elevated p-5" aria-labelledby="run-information-heading">
         <h2 id="run-information-heading" className="text-lg font-semibold text-app-foreground">General information</h2>
         <dl className="mt-5 grid gap-5 sm:grid-cols-2">
           <InfoItem label="Workflow run ID" value={workflowRun.workflow_run_id} mono />
@@ -132,7 +132,7 @@ function InfoItem({ label, value, mono = false }: { label: string; value: string
 
 function SummaryItem({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg border border-app-border bg-app-background-secondary p-4">
+    <div className="rounded-lg border border-app-border bg-app-bg-elevated p-4">
       <p className="text-sm text-app-foreground-muted">{label}</p>
       <p className="mt-2 text-2xl font-semibold text-app-foreground">{value}</p>
     </div>

@@ -29,7 +29,7 @@ export function useTheme() {
     }
 
     const backgroundColor = getComputedStyle(document.documentElement)
-      .getPropertyValue("--app-background")
+      .getPropertyValue("--app-bg-base")
       .trim();
     const nativeWindow = getCurrentWindow();
 

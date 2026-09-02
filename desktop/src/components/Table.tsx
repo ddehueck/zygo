@@ -25,7 +25,7 @@ import {composeRenderProps} from 'react-aria-components/composeRenderProps';
 import {twMerge} from 'tailwind-merge';
 import {tv} from 'tailwind-variants';
 import {Checkbox} from './Checkbox';
-import {scrollAreaClassName} from './ScrollArea';
+
 import {composeTailwindRenderProps, focusRing} from './utils';
 
 interface TableProps extends Omit<AriaTableProps, 'className'> {
@@ -38,8 +38,7 @@ export function Table(props: TableProps) {
     <ResizableTableContainer
       onScroll={props.onScroll}
       className={twMerge(
-        scrollAreaClassName,
-        'w-full max-h-[320px] scroll-pt-[2.281rem] relative bg-app-background-secondary box-border border border-app-border rounded-lg font-sans',
+        'w-full relative box-border font-sans',
         props.className
       )}>
       <AriaTable
@@ -101,7 +100,7 @@ export function TableHeader<T>(props: TableHeaderProps<T>) {
       {...props}
       className={composeTailwindRenderProps(
         props.className,
-        'sticky top-0 z-10 bg-app-background-tertiary/60 backdrop-blur-md supports-[-moz-appearance:none]:bg-app-background-tertiary forced-colors:bg-system-canvas rounded-t-lg border-b border-b-app-border'
+        'sticky top-0 z-10 bg-app-bg-elevated/60 backdrop-blur-md supports-[-moz-appearance:none]:bg-app-bg-elevated forced-colors:bg-system-canvas border-b border-b-app-border'
       )}>
       {/* Add extra columns for drag and drop and selection. */}
       {allowsDragging && <Column />}
@@ -123,12 +122,12 @@ export function TableBody<T>(props: TableBodyProps<T>) {
 }
 
 export function TableFooter<T>(props: TableFooterProps<T>) {
-  return <AriaTableFooter {...props} className="bg-app-background-tertiary font-bold" />;
+  return <AriaTableFooter {...props} className="bg-app-bg-elevated font-bold" />;
 }
 
 const rowStyles = tv({
   extend: focusRing,
-  base: 'group/row relative cursor-default select-none -outline-offset-2 text-app-foreground disabled:text-app-foreground-muted text-sm hover:bg-app-background-tertiary pressed:bg-app-background-tertiary selected:bg-app-accent/10 selected:hover:bg-app-accent/20 selected:pressed:bg-app-accent/20 last:rounded-b-lg'
+  base: 'group/row relative cursor-pointer select-none -outline-offset-2 text-app-foreground disabled:text-app-foreground-muted text-sm hover:bg-app-interaction-hover pressed:bg-app-interaction-pressed focus-visible:bg-app-interaction-hover selected:bg-app-accent/10 selected:hover:bg-app-accent/20 selected:pressed:bg-app-accent/20'
 });
 
 export function Row<T>({id, columns, children, ...otherProps}: RowProps<T>) {
@@ -153,7 +152,7 @@ export function Row<T>({id, columns, children, ...otherProps}: RowProps<T>) {
 
 const cellStyles = tv({
   extend: focusRing,
-  base: 'box-border [-webkit-tap-highlight-color:transparent] border-b border-b-app-border group-last/row:border-b-0 group-selected/row:border-app-accent [:is(:has(+[data-selected])_*)]:border-app-accent p-2 truncate -outline-offset-2 group-last/row:first:rounded-bl-lg group-last/row:last:rounded-br-lg'
+  base: 'box-border [-webkit-tap-highlight-color:transparent] border-b border-b-app-border group-last/row:border-b-0 group-selected/row:border-app-accent [:is(:has(+[data-selected])_*)]:border-app-accent p-2 truncate -outline-offset-2'
 });
 
 const expandButton = tv({

@@ -9,9 +9,13 @@
     monospace;
 
   /* Backgrounds */
-  --color-app-background: var(--app-background);
-  --color-app-background-secondary: var(--app-background-secondary);
-  --color-app-background-tertiary: var(--app-background-tertiary);
+  --color-app-bg-base: var(--app-bg-base);
+  --color-app-bg-surface: var(--app-bg-surface);
+  --color-app-bg-elevated: var(--app-bg-elevated);
+
+  /* Neutral interaction states */
+  --color-app-interaction-hover: var(--app-interaction-hover);
+  --color-app-interaction-pressed: var(--app-interaction-pressed);
 
   /* Foregrounds */
   --color-app-foreground: var(--app-foreground);
@@ -49,11 +53,13 @@
 :root {
   color-scheme: light;
 
-  --app-background: #fdfdfd;
-  --app-background-secondary: #ffffff;
-  --app-background-tertiary: #f1f3f5;
-  --app-border: #e1e5e9;
-  --app-border-secondary: #cbd5e1;
+  --app-bg-base: #f4f4f5;
+  --app-bg-surface: #fafafa;
+  --app-bg-elevated: #ffffff;
+  --app-interaction-hover: rgb(0 0 0 / 6%);
+  --app-interaction-pressed: rgb(0 0 0 / 10%);
+  --app-border: #e4e4e7;
+  --app-border-secondary: #d4d4d8;
   --app-foreground: #333333;
   --app-foreground-secondary: #333333;
   --app-foreground-muted: #666666;
@@ -70,9 +76,11 @@
 html[data-theme="dark"] {
   color-scheme: dark;
 
-  --app-background: #0f0f0f;
-  --app-background-secondary: #18181b;
-  --app-background-tertiary: #27272a;
+  --app-bg-base: #0f0f0f;
+  --app-bg-surface: #18181b;
+  --app-bg-elevated: #27272a;
+  --app-interaction-hover: rgb(255 255 255 / 7%);
+  --app-interaction-pressed: rgb(255 255 255 / 11%);
   --app-border: #3f3f46;
   --app-border-secondary: #52525b;
   --app-foreground: #e4e4e7;
