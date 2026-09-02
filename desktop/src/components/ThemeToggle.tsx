@@ -1,5 +1,5 @@
 import { Moon, Sun } from "lucide-react";
-import { Button } from "./Button";
+import { IconButton } from "./IconButton";
 import { useTheme } from "../hooks/use-theme";
 
 export function ThemeToggle({ size = 16 }: { size?: number }) {
@@ -7,10 +7,8 @@ export function ThemeToggle({ size = 16 }: { size?: number }) {
   const nextTheme = theme === "light" ? "dark" : "light";
 
   return (
-    <Button
-      variant="icon"
-      className="h-auto w-auto"
-      style={{ padding: size / 4 }}
+    <IconButton
+      size={size}
       type="button"
       onClick={toggleTheme}
       aria-label={`Switch to ${nextTheme} theme`}
@@ -23,6 +21,6 @@ export function ThemeToggle({ size = 16 }: { size?: number }) {
           <Sun size={size} aria-hidden />
         </span>
       </span>
-    </Button>
+    </IconButton>
   );
 }
