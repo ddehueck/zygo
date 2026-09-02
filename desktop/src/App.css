@@ -1,1 +1,8 @@
-@import "tailwindcss";
+@import url("./styles/theme.css");
+@import url("@fontsource-variable/inter");
+
+*,
+*::before,
+*::after {
+  cursor: default;
+}

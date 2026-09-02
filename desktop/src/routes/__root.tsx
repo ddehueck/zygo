@@ -1,6 +1,7 @@
 import { DbProvider } from "@tanstack/react-db";
 import { Outlet, createRootRoute } from "@tanstack/react-router";
 import "../App.css";
+import { Titlebar } from "../components/Titlebar";
 import { tdb } from "../db/shared";
 
 export const Route = createRootRoute({
@@ -10,7 +11,10 @@ export const Route = createRootRoute({
 function RootComponent() {
   return (
     <DbProvider client={tdb}>
-      <Outlet />
+      <div className="min-h-screen">
+        <Titlebar />
+        <Outlet />
+      </div>
     </DbProvider>
   );
 }

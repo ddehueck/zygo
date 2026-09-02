@@ -11,6 +11,9 @@ lint:
 fmt:
     oxfmt
 
+check:
+    pnpm check
+
 typecheck:
     pnpm tsc
 
