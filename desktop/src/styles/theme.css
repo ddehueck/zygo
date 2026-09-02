@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-*: initial;
+
+  --font-sans: "Inter Variable", Inter, sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
+
+  --color-app-background: var(--app-background);
+  --color-app-surface: var(--app-surface);
+  --color-app-secondary: var(--app-secondary);
+  --color-app-foreground: var(--app-foreground);
+  --color-app-foreground-muted: var(--app-muted);
+  --color-app-secondary-foreground: var(--app-secondary-foreground);
+  --color-app-accent-foreground: var(--app-accent-foreground);
+  --color-app-danger-foreground: var(--app-danger-foreground);
+  --color-app-border: var(--app-border);
+  --color-app-accent: var(--app-accent);
+  --color-app-success: var(--app-success);
+  --color-app-warning: var(--app-warning);
+  --color-app-danger: var(--app-danger);
+
+  /* Forced-colors system palette */
+  --color-system-button-border: ButtonBorder;
+  --color-system-button-text: ButtonText;
+  --color-system-canvas: Canvas;
+  --color-system-field: Field;
+  --color-system-gray-text: GrayText;
+  --color-system-highlight: Highlight;
+  --color-system-highlight-text: HighlightText;
+  --color-system-mark: Mark;
+}
+
+:root {
+  color-scheme: light;
+
+  --app-background: #fdfdfd;
+  --app-surface: #ffffff;
+  --app-secondary: #f1f3f5;
+  --app-border: #e1e5e9;
+  --app-foreground: #333333;
+  --app-muted: #666666;
+  --app-secondary-foreground: #333333;
+  --app-accent-foreground: #ffffff;
+  --app-danger-foreground: #ffffff;
+  --app-accent: #3b82f6;
+  --app-success: #10b981;
+  --app-warning: #f59e0b;
+  --app-danger: #ef4444;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+
+  --app-background: #0f0f0f;
+  --app-surface: #18181b;
+  --app-secondary: #27272a;
+  --app-border: #3f3f46;
+  --app-foreground: #e4e4e7;
+  --app-muted: #a1a1aa;
+  --app-secondary-foreground: #e4e4e7;
+  --app-accent-foreground: #ffffff;
+  --app-danger-foreground: #450a0a;
+  --app-accent: #60a5fa;
+  --app-success: #34d399;
+  --app-warning: #fbbf24;
+  --app-danger: #f87171;
+}

@@ -1,0 +1,9 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "react", "import"],
+  "jsPlugins": ["./tools/theme-color-plugin.mjs"],
+  "rules": {
+    "theme-colors/no-raw-colors": "error"
+  },
+  "ignorePatterns": ["node_modules/", "dist/", "src/routeTree.gen.ts", "src/bindings.ts"]
+}
