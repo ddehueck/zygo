@@ -1,9 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 export type Theme = "light" | "dark";
 
+const THEME_TRANSITION_CLASS = "is-theme-transitioning";
+
 export function useTheme() {
+  const transitionTimeoutRef = useRef<number | null>(null);
   const [theme, setTheme] = useState<Theme>(() => {
     if (typeof window === "undefined") {
       return "light";
@@ -17,7 +20,7 @@ export function useTheme() {
     return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   });
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     document.documentElement.dataset.theme = theme;
     window.localStorage.setItem("zygo-theme", theme);
 
@@ -38,5 +41,41 @@ export function useTheme() {
     });
   }, [theme]);
 
-  return [theme, () => setTheme((current) => (current === "light" ? "dark" : "light"))] as const;
+  useEffect(() => {
+    return () => {
+      if (transitionTimeoutRef.current !== null) {
+        window.clearTimeout(transitionTimeoutRef.current);
+      }
+      document.documentElement.classList.remove(THEME_TRANSITION_CLASS);
+    };
+  }, []);
+
+  const toggleTheme = () => {
+    const root = document.documentElement;
+
+    if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      if (transitionTimeoutRef.current !== null) {
+        window.clearTimeout(transitionTimeoutRef.current);
+      }
+
+      root.classList.remove(THEME_TRANSITION_CLASS);
+      void root.offsetWidth;
+      root.classList.add(THEME_TRANSITION_CLASS);
+
+      const duration = Number.parseFloat(
+        getComputedStyle(root).getPropertyValue("--theme-transition-dur"),
+      );
+      transitionTimeoutRef.current = window.setTimeout(
+        () => {
+          root.classList.remove(THEME_TRANSITION_CLASS);
+          transitionTimeoutRef.current = null;
+        },
+        Number.isFinite(duration) ? duration : 250,
+      );
+    }
+
+    setTheme((current) => (current === "light" ? "dark" : "light"));
+  };
+
+  return [theme, toggleTheme] as const;
 }

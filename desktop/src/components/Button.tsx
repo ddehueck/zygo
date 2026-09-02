@@ -19,13 +19,13 @@ const button = tv({
       primary:
         "bg-app-accent text-app-accent-foreground hover:bg-app-accent/90 data-pressed:bg-app-accent/80",
       secondary:
-        "border-app-border bg-app-secondary text-app-secondary-foreground hover:bg-app-secondary/80 data-pressed:bg-app-secondary/70",
+        "border-app-border bg-app-background-tertiary text-app-foreground-secondary hover:bg-app-background-tertiary/80 data-pressed:bg-app-background-tertiary/70",
       outline:
-        "border-app-border bg-transparent text-app-foreground hover:bg-app-surface data-pressed:bg-app-secondary",
+        "border-app-border bg-transparent text-app-foreground hover:bg-app-background-secondary data-pressed:bg-app-background-tertiary",
       ghost:
-        "border-transparent bg-transparent text-app-foreground-muted hover:bg-app-secondary data-pressed:bg-app-secondary/80",
+        "border-transparent bg-transparent text-app-foreground-muted hover:bg-app-background-tertiary data-pressed:bg-app-background-tertiary/80",
       icon:
-        "h-8 w-8 px-0 border-transparent bg-transparent text-app-foreground-muted hover:bg-app-secondary data-pressed:bg-app-secondary/80",
+        "h-8 w-8 px-0 border-transparent bg-transparent text-app-foreground-muted hover:bg-app-background-tertiary data-pressed:bg-app-background-tertiary/80",
       destructive:
         "bg-app-danger text-app-danger-foreground hover:bg-app-danger/90 data-pressed:bg-app-danger/80",
     },
@@ -75,7 +75,7 @@ export function Button({ variant, className, children, ...props }: ButtonProps) 
                     : resolvedVariant === "destructive"
                       ? "text-app-danger-foreground"
                       : resolvedVariant === "secondary"
-                        ? "text-app-secondary-foreground"
+                        ? "text-app-foreground-secondary"
                         : "text-app-foreground"
                 }`}
                 viewBox="0 0 24 24"

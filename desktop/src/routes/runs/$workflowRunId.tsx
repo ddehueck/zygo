@@ -57,7 +57,7 @@ function RunRoute() {
 
 function RunPageShell({ children }: { children: ReactNode }) {
   return (
-    <main className="mx-auto flex min-h-[calc(100vh-2rem)] w-full max-w-4xl flex-col gap-6 px-6 py-10">
+    <main className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-6">
       <Link to="/" className="w-fit text-sm font-medium text-app-foreground-muted hover:text-app-foreground">
         ← Back to workflow runs
       </Link>
@@ -80,7 +80,7 @@ function RunDetails({
   const duration = formatWorkflowDuration(workflowRun.started_at, workflowRun.completed_at, now);
 
   return (
-    <main className="mx-auto flex min-h-[calc(100vh-2rem)] w-full max-w-4xl flex-col gap-6 px-6 py-10">
+    <main className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-6 py-10">
       <Link to="/" className="w-fit text-sm font-medium text-app-foreground-muted hover:text-app-foreground">
         ← Back to workflow runs
       </Link>
@@ -94,7 +94,7 @@ function RunDetails({
         <p className="mt-2 text-app-foreground-muted">General information and job counts for this workflow run.</p>
       </header>
 
-      <section className="rounded-lg border border-app-border bg-app-surface p-5" aria-labelledby="run-information-heading">
+      <section className="rounded-lg border border-app-border bg-app-background-secondary p-5" aria-labelledby="run-information-heading">
         <h2 id="run-information-heading" className="text-lg font-semibold text-app-foreground">General information</h2>
         <dl className="mt-5 grid gap-5 sm:grid-cols-2">
           <InfoItem label="Workflow run ID" value={workflowRun.workflow_run_id} mono />
@@ -132,7 +132,7 @@ function InfoItem({ label, value, mono = false }: { label: string; value: string
 
 function SummaryItem({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg border border-app-border bg-app-surface p-4">
+    <div className="rounded-lg border border-app-border bg-app-background-secondary p-4">
       <p className="text-sm text-app-foreground-muted">{label}</p>
       <p className="mt-2 text-2xl font-semibold text-app-foreground">{value}</p>
     </div>

@@ -2,10 +2,8 @@ import { useLiveQuery } from "@tanstack/react-db";
 import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import type { WorkflowRunSummary } from "../bindings";
-import { Button } from "../components/Button";
 import { Cell, Column, Row, Table, TableBody, TableHeader } from "../components/Table";
 import { workflowRuns } from "../db/workflow-run-summaries";
-import { useTheme } from "../hooks/use-theme";
 import { MainContentLayout } from "../components/layout/MainContentLayout";
 
 export const Route = createFileRoute("/")({
@@ -44,7 +42,6 @@ function IndexRoute() {
     (workflowRun) => workflowRun.status === "running" || workflowRun.active_job_count > 0,
   );
   const now = useLiveClock(hasActiveWork);
-  const [theme, toggleTheme] = useTheme();
 
   return (
     <MainContentLayout
@@ -59,15 +56,6 @@ function IndexRoute() {
             Status, job counts, and basic metadata for each workflow run.
           </p>
         </div>
-        <Button
-          variant="outline"
-          className="shrink-0"
-          type="button"
-          onClick={toggleTheme}
-          aria-label={`Switch to ${theme === "light" ? "dark" : "light"} theme`}
-        >
-          {theme === "light" ? "Dark mode" : "Light mode"}
-        </Button>
       </header>
 
       {isLoading && <p className="text-app-foreground-muted">Loading workflow runs…</p>}

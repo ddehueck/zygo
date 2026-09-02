@@ -28,7 +28,7 @@ const boxStyles = tv({
   variants: {
     isSelected: {
       false:
-        'bg-app-surface border-app-border group-pressed:border-app-foreground-muted forced-colors:bg-system-canvas forced-colors:border-system-button-border',
+        'bg-app-background-secondary border-app-border group-pressed:border-app-foreground-muted forced-colors:bg-system-canvas forced-colors:border-system-button-border',
       true: 'bg-app-accent border-app-accent group-pressed:bg-app-accent/80 group-pressed:border-app-accent/80 forced-colors:bg-system-highlight! forced-colors:border-system-highlight!'
     },
     isInvalid: {
