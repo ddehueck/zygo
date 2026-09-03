@@ -1,17 +1,7 @@
-import { useLiveQuery } from "@tanstack/react-db";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import type { WorkflowRun } from "../bindings";
-import { GridList, GridListItem } from "../components/GridList";
-import { Icons } from "../components/icons";
-import { useDuration } from "../hooks/use-duration";
-import { sum } from "../lib/math";
-import { workflowRuns } from "../db/collections";
-import { JobCountsBadge } from "../features/workflow-runs/components/JobCountsBadge";
-import { shortRunId } from "../features/workflow-runs/lib/id";
+import { createFileRoute } from "@tanstack/react-router";
 import { BreadcrumbHeaderLayout } from "../components/layout/BreadcrumbHeaderLayout";
-import { useHotkey } from "@tanstack/react-hotkeys";
-import { useRef } from "react";
 import { WorkflowRunList } from "../features/workflow-runs/components/WorkflowRunList";
+import { useWorkflowRunsListData } from "../features/workflow-runs/hooks/use-workflow-runs-list-data";
 
 export const Route = createFileRoute("/")({
   beforeLoad: () => ({
@@ -24,17 +14,7 @@ export const Route = createFileRoute("/")({
 });
 
 function IndexRoute() {
-  const {
-    data: runs,
-    isLoading,
-    isError,
-    status,
-  } = useLiveQuery({
-    query: (q) =>
-      q
-        .from({ workflowRun: workflowRuns })
-        .orderBy(({ workflowRun }) => workflowRun.created_at, "desc"),
-  });
+  const { data: runs, isLoading, isError, status } = useWorkflowRunsListData();
 
   return (
     <BreadcrumbHeaderLayout>

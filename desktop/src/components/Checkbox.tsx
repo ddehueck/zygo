@@ -13,7 +13,7 @@ import { focusRing } from "./utils";
 import { Description, FieldError } from "./Field";
 
 const checkboxStyles = tv({
-  base: "flex gap-2 items-center group font-sans text-sm transition relative [-webkit-tap-highlight-color:transparent]",
+  base: "group relative flex items-center gap-2 font-sans text-sm transition [-webkit-tap-highlight-color:transparent]",
   variants: {
     isDisabled: {
       false: "text-app-foreground",
@@ -24,18 +24,18 @@ const checkboxStyles = tv({
 
 const boxStyles = tv({
   extend: focusRing,
-  base: "w-4.5 h-4.5 box-border shrink-0 rounded-sm flex items-center justify-center border transition",
+  base: "box-border flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-sm border transition",
   variants: {
     isSelected: {
       false:
-        "bg-app-bg-surface border-app-border group-pressed:border-app-foreground-muted forced-colors:bg-system-canvas forced-colors:border-system-button-border",
-      true: "bg-app-accent border-app-accent group-pressed:bg-app-accent/80 group-pressed:border-app-accent/80 forced-colors:bg-system-highlight! forced-colors:border-system-highlight!",
+        "group-pressed:border-app-foreground-muted border-app-border bg-app-bg-surface forced-colors:border-system-button-border forced-colors:bg-system-canvas",
+      true: "group-pressed:bg-app-accent/80 group-pressed:border-app-accent/80 border-app-accent bg-app-accent forced-colors:border-system-highlight! forced-colors:bg-system-highlight!",
     },
     isInvalid: {
-      true: "border-app-danger group-pressed:border-app-danger/80 forced-colors:bg-system-mark! forced-colors:border-system-mark!",
+      true: "group-pressed:border-app-danger/80 border-app-danger forced-colors:border-system-mark! forced-colors:bg-system-mark!",
     },
     isDisabled: {
-      true: "bg-app-border/50 border-app-border forced-colors:bg-system-canvas! forced-colors:border-system-gray-text!",
+      true: "border-app-border bg-app-border/50 forced-colors:border-system-gray-text! forced-colors:bg-system-canvas!",
     },
   },
   compoundVariants: [
@@ -43,7 +43,7 @@ const boxStyles = tv({
       isSelected: true,
       isInvalid: true,
       class:
-        "bg-app-danger border-app-danger group-pressed:bg-app-danger/80 group-pressed:border-app-danger/80",
+        "group-pressed:bg-app-danger/80 group-pressed:border-app-danger/80 border-app-danger bg-app-danger",
     },
   ],
 });
@@ -59,7 +59,7 @@ interface CheckboxProps extends CheckboxFieldProps {
 
 export function Checkbox(props: CheckboxProps) {
   return (
-    <CheckboxField {...props} className="flex flex-col gap-1 group">
+    <CheckboxField {...props} className="group flex flex-col gap-1">
       <CheckboxButton
         className={composeRenderProps(props.className, (className, renderProps) =>
           checkboxStyles({ ...renderProps, className }),

@@ -67,7 +67,7 @@ export const fieldBorderStyles = tv({
 
 export const fieldGroupStyles = tv({
   extend: focusRing,
-  base: "group flex items-center h-9 box-border bg-app-bg-surface forced-colors:bg-system-field border rounded-lg overflow-hidden transition",
+  base: "group box-border flex h-9 items-center overflow-hidden rounded-lg border bg-app-bg-surface transition forced-colors:bg-system-field",
   variants: fieldBorderStyles.variants,
 });
 
