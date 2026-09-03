@@ -5,44 +5,45 @@ use tauri::State;
 
 use crate::error::{CommandError, CommandResult};
 
-use super::WorkflowRunSummary;
+use super::WorkflowRun;
 
 const MAX_PAGE_SIZE: u32 = 1000;
 
 #[derive(Debug, Deserialize, Type)]
-pub struct ListWorkflowRunSummariesRequest {
+pub struct ListWorkflowRunsRequest {
     pub cursor: Option<String>,
     pub limit: u32,
 }
 
 #[derive(Debug, Serialize, Type)]
-pub struct ListWorkflowRunSummariesResponse {
-    pub summaries: Vec<WorkflowRunSummary>,
+pub struct ListWorkflowRunsResponse {
+    pub runs: Vec<WorkflowRun>,
     pub next_cursor: Option<String>,
 }
 
-impl From<local::WorkflowRunSummaryRow> for WorkflowRunSummary {
-    fn from(summary: local::WorkflowRunSummaryRow) -> Self {
+impl From<local::WorkflowRunRow> for WorkflowRun {
+    fn from(run: local::WorkflowRunRow) -> Self {
         Self {
-            workflow_run_id: summary.workflow_run_id,
-            status: summary.status,
-            started_at: summary.started_at,
-            completed_at: summary.completed_at,
-            active_job_count: summary.active_job_count,
-            succeeded_job_count: summary.succeeded_job_count,
-            errored_job_count: summary.errored_job_count,
-            created_at: summary.created_at,
-            updated_at: summary.updated_at,
+            id: run.id,
+            workflow_id: run.workflow_id,
+            status: run.status,
+            started_at: run.started_at,
+            completed_at: run.completed_at,
+            active_job_count: run.active_job_count,
+            succeeded_job_count: run.succeeded_job_count,
+            errored_job_count: run.errored_job_count,
+            created_at: run.created_at,
+            updated_at: run.updated_at,
         }
     }
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn list_workflow_run_summaries(
+pub async fn list_workflow_runs(
     state: State<'_, ZygoLocalService>,
-    request: ListWorkflowRunSummariesRequest,
-) -> CommandResult<ListWorkflowRunSummariesResponse> {
+    request: ListWorkflowRunsRequest,
+) -> CommandResult<ListWorkflowRunsResponse> {
     if request.limit == 0 {
         return Err(CommandError::invalid_input(
             "limit",
@@ -57,33 +58,24 @@ pub async fn list_workflow_run_summaries(
     }
 
     let limit = request.limit;
-    let mut summaries = state
+    let mut runs = state
         .repos
-        .workflow_run_summaries
+        .workflow_runs
         .list_after_id(request.cursor.as_deref(), limit + 1)
         .await
-        .map_err(|error| {
-            CommandError::internal("list_workflow_run_summaries_failed", error.to_string())
-        })?;
+        .map_err(|error| CommandError::internal("list_workflow_runs_failed", error.to_string()))?;
 
-    let has_more = summaries.len() > limit as usize;
+    let has_more = runs.len() > limit as usize;
     if has_more {
-        summaries.pop();
+        runs.pop();
     }
 
     let next_cursor = has_more
-        .then(|| {
-            summaries
-                .last()
-                .map(|summary| summary.workflow_run_id.clone())
-        })
+        .then(|| runs.last().map(|run| run.id.clone()))
         .flatten();
 
-    Ok(ListWorkflowRunSummariesResponse {
-        summaries: summaries
-            .into_iter()
-            .map(WorkflowRunSummary::from)
-            .collect(),
+    Ok(ListWorkflowRunsResponse {
+        runs: runs.into_iter().map(WorkflowRun::from).collect(),
         next_cursor,
     })
 }

@@ -7,7 +7,7 @@ use zygo_core::ZygoConfig;
 mod commands;
 mod error;
 
-use commands::{list_job_run_summaries, list_workflow_run_summaries, sync};
+use commands::{list_job_runs, list_workflow_runs, sync};
 
 const TYPESCRIPT_BINDINGS_PATH: &str = "../src/bindings.ts";
 
@@ -21,8 +21,8 @@ fn greet(name: &str, title: &str) -> String {
 fn specta_builder() -> Builder<tauri::Wry> {
     Builder::<tauri::Wry>::new().commands(collect_commands![
         greet,
-        list_job_run_summaries,
-        list_workflow_run_summaries,
+        list_job_runs,
+        list_workflow_runs,
         sync
     ])
 }

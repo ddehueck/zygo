@@ -14,7 +14,15 @@
       {
         "title": "desktop",
         "width": 800,
-        "height": 600
+        "height": 600,
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "backgroundColor": "#eeeeee",
+        "trafficLightPosition": {
+                  "x": 18.0,
+                  "y": 18.0
+                }
       }
     ],
     "security": {

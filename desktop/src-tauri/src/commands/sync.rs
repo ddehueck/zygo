@@ -10,8 +10,8 @@ use super::SyncUpsert;
 #[derive(Debug, Serialize, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum SyncEntityKind {
-    WorkflowRunSummary,
-    JobRunSummary,
+    WorkflowRun,
+    JobRun,
 }
 
 #[derive(Debug, Serialize, Type)]
@@ -24,8 +24,8 @@ pub enum SyncDelta {
 
 fn entity_kind(entity: SyncEntity) -> SyncEntityKind {
     match entity {
-        SyncEntity::WorkflowRunSummary => SyncEntityKind::WorkflowRunSummary,
-        SyncEntity::JobRunSummary => SyncEntityKind::JobRunSummary,
+        SyncEntity::WorkflowRun => SyncEntityKind::WorkflowRun,
+        SyncEntity::JobRun => SyncEntityKind::JobRun,
     }
 }
 
@@ -41,11 +41,11 @@ impl TryFrom<Delta> for SyncDelta {
             }),
             Delta::Upsert { entity, id, data } => {
                 let payload = match entity {
-                    SyncEntity::WorkflowRunSummary => SyncUpsert::WorkflowRunSummary {
+                    SyncEntity::WorkflowRun => SyncUpsert::WorkflowRun {
                         id,
                         data: serde_json::from_value(data)?,
                     },
-                    SyncEntity::JobRunSummary => {
+                    SyncEntity::JobRun => {
                         let data = match data {
                             serde_json::Value::Object(mut data) => {
                                 data.insert("id".to_owned(), serde_json::Value::String(id.clone()));
@@ -53,7 +53,7 @@ impl TryFrom<Delta> for SyncDelta {
                             }
                             data => data,
                         };
-                        SyncUpsert::JobRunSummary {
+                        SyncUpsert::JobRun {
                             id,
                             data: serde_json::from_value(data)?,
                         }

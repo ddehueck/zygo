@@ -1,1 +1,85 @@
-@import "tailwindcss";
+@import url("@fontsource-variable/inter");
+
+*,
+*::before,
+*::after {
+  cursor: default;
+}
+
+
+:root {
+  --icon-swap-dur: 250ms;
+  --icon-swap-blur: 2px;
+  --icon-swap-start-scale: 0.25;
+  --icon-swap-ease: ease-in-out;
+  --theme-transition-dur: 250ms;
+  --theme-transition-ease: ease-in-out;
+}
+
+html,
+body {
+  overscroll-behavior: none;
+}
+
+body {
+  background-color: var(--app-bg-base);
+  color: var(--app-foreground);
+}
+
+html.is-theme-transitioning,
+html.is-theme-transitioning body,
+html.is-theme-transitioning #root,
+html.is-theme-transitioning #root * {
+  transition-property:
+    color, background-color, border-color, outline-color, text-decoration-color, fill, stroke,
+    box-shadow, caret-color, accent-color;
+  transition-duration: var(--theme-transition-dur);
+  transition-timing-function: var(--theme-transition-ease);
+}
+
+.t-icon-swap {
+  position: relative;
+  display: inline-grid;
+}
+
+.t-icon-swap .t-icon {
+  grid-area: 1 / 1;
+  transition:
+    opacity var(--icon-swap-dur) var(--icon-swap-ease),
+    filter var(--icon-swap-dur) var(--icon-swap-ease),
+    transform var(--icon-swap-dur) var(--icon-swap-ease);
+  will-change: opacity, filter, transform;
+}
+
+.t-icon-swap[data-state="a"] .t-icon[data-icon="a"],
+.t-icon-swap[data-state="b"] .t-icon[data-icon="b"] {
+  opacity: 1;
+  filter: blur(0);
+  transform: scale(1);
+}
+
+.t-icon-swap[data-state="a"] .t-icon[data-icon="b"],
+.t-icon-swap[data-state="b"] .t-icon[data-icon="a"] {
+  opacity: 0;
+  filter: blur(var(--icon-swap-blur));
+  transform: scale(var(--icon-swap-start-scale));
+}
+
+html.is-theme-transitioning #root .t-icon-swap .t-icon {
+  transition-property: opacity, filter, transform;
+  transition-duration: var(--icon-swap-dur);
+  transition-timing-function: var(--icon-swap-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.is-theme-transitioning,
+  html.is-theme-transitioning body,
+  html.is-theme-transitioning #root,
+  html.is-theme-transitioning #root * {
+    transition: none !important;
+  }
+
+  .t-icon-swap .t-icon {
+    transition: none !important;
+  }
+}

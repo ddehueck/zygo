@@ -1,22 +1,20 @@
 use turso::{params, transaction::TransactionBehavior};
 
-use super::{
-    Db,
-    db_models::{JobRunSummaryCounts, JobRunSummaryRow},
-    error::Result,
-};
+use super::Db;
+use super::db_models::{JobRunRow, WorkflowRunJobCounts};
+use super::error::Result;
 
 const UPSERT_SQL: &str = "
-    INSERT INTO job_run_summary (
+    INSERT INTO job_runs (
+        id,
         workflow_run_id,
-        job_run_id,
         job_id,
         status,
         duration_ms,
         retry_count
     )
     VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-    ON CONFLICT(workflow_run_id, job_run_id) DO UPDATE SET
+    ON CONFLICT(id) DO UPDATE SET
         job_id = excluded.job_id,
         status = excluded.status,
         duration_ms = excluded.duration_ms,
@@ -25,8 +23,8 @@ const UPSERT_SQL: &str = "
 
 const SELECT_COLUMNS: &str = "
     rowid AS row_id,
+    id,
     workflow_run_id,
-    job_run_id,
     job_id,
     status,
     duration_ms,
@@ -36,48 +34,48 @@ const SELECT_COLUMNS: &str = "
 ";
 
 const RECORD_STARTED_SQL: &str = "
-    INSERT INTO job_run_summary (
+    INSERT INTO job_runs (
+        id,
         workflow_run_id,
-        job_run_id,
         job_id,
         status,
         duration_ms,
         retry_count
     )
     VALUES (?1, ?2, ?3, 'running', NULL, 0)
-    ON CONFLICT(workflow_run_id, job_run_id) DO UPDATE SET
+    ON CONFLICT(id) DO UPDATE SET
         job_id = excluded.job_id,
         status = excluded.status,
         duration_ms = NULL
 ";
 
 const RECORD_COMPLETED_SQL: &str = "
-    INSERT INTO job_run_summary (
+    INSERT INTO job_runs (
+        id,
         workflow_run_id,
-        job_run_id,
         job_id,
         status,
         duration_ms,
         retry_count
     )
     VALUES (?1, ?2, ?3, ?4, ?5, 0)
-    ON CONFLICT(workflow_run_id, job_run_id) DO UPDATE SET
+    ON CONFLICT(id) DO UPDATE SET
         job_id = excluded.job_id,
         status = excluded.status,
-        duration_ms = COALESCE(excluded.duration_ms, job_run_summary.duration_ms)
+        duration_ms = COALESCE(excluded.duration_ms, job_runs.duration_ms)
 ";
 
 #[derive(Clone)]
-pub struct JobRunSummaryRepository {
+pub struct JobRunRepository {
     database: Db,
 }
 
-impl JobRunSummaryRepository {
+impl JobRunRepository {
     pub fn new(database: Db) -> Self {
         Self { database }
     }
 
-    pub async fn upsert(&self, summary: &JobRunSummaryRow) -> Result<()> {
+    pub async fn upsert(&self, run: &JobRunRow) -> Result<()> {
         let mut connection = self.database.connection.lock().await;
         let tx = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
@@ -86,12 +84,12 @@ impl JobRunSummaryRepository {
         tx.execute(
             UPSERT_SQL,
             params![
-                summary.workflow_run_id.as_str(),
-                summary.job_run_id.as_str(),
-                summary.job_id.as_str(),
-                summary.status.as_str(),
-                summary.duration_ms,
-                summary.retry_count,
+                run.id.as_str(),
+                run.workflow_run_id.as_str(),
+                run.job_id.as_str(),
+                run.status.as_str(),
+                run.duration_ms,
+                run.retry_count,
             ],
         )
         .await?;
@@ -111,7 +109,7 @@ impl JobRunSummaryRepository {
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .await?;
 
-        tx.execute(RECORD_STARTED_SQL, [workflow_run_id, job_run_id, job_id])
+        tx.execute(RECORD_STARTED_SQL, [job_run_id, workflow_run_id, job_id])
             .await?;
         tx.commit().await?;
         Ok(())
@@ -132,7 +130,7 @@ impl JobRunSummaryRepository {
 
         tx.execute(
             RECORD_COMPLETED_SQL,
-            turso::params![workflow_run_id, job_run_id, job_id, status, duration_ms],
+            params![job_run_id, workflow_run_id, job_id, status, duration_ms],
         )
         .await?;
         tx.commit().await?;
@@ -142,7 +140,7 @@ impl JobRunSummaryRepository {
     pub async fn counts_by_workflow_run_id(
         &self,
         workflow_run_id: &str,
-    ) -> Result<JobRunSummaryCounts> {
+    ) -> Result<WorkflowRunJobCounts> {
         let connection = self.database.connection.lock().await;
         let mut rows = connection
             .query(
@@ -151,7 +149,7 @@ impl JobRunSummaryRepository {
                         COALESCE(SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END), 0),
                         COALESCE(SUM(CASE WHEN status = 'succeeded' THEN 1 ELSE 0 END), 0),
                         COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0)
-                    FROM job_run_summary
+                    FROM job_runs
                     WHERE workflow_run_id = ?1
                 ",
                 [workflow_run_id],
@@ -162,25 +160,19 @@ impl JobRunSummaryRepository {
             .next()
             .await?
             .ok_or(turso::Error::QueryReturnedNoRows)?;
-        Ok(JobRunSummaryCounts {
+        Ok(WorkflowRunJobCounts {
             active_job_count: row.get(0)?,
             succeeded_job_count: row.get(1)?,
             errored_job_count: row.get(2)?,
         })
     }
 
-    pub async fn get_by_id(
-        &self,
-        workflow_run_id: &str,
-        job_run_id: &str,
-    ) -> Result<Option<JobRunSummaryRow>> {
+    pub async fn get_by_id(&self, job_run_id: &str) -> Result<Option<JobRunRow>> {
         let connection = self.database.connection.lock().await;
         let mut rows = connection
             .query(
-                &format!(
-                    "SELECT {SELECT_COLUMNS} FROM job_run_summary WHERE workflow_run_id = ?1 AND job_run_id = ?2"
-                ),
-                [workflow_run_id, job_run_id],
+                &format!("SELECT {SELECT_COLUMNS} FROM job_runs WHERE id = ?1"),
+                [job_run_id],
             )
             .await?;
 
@@ -188,18 +180,14 @@ impl JobRunSummaryRepository {
             return Ok(None);
         };
 
-        Ok(Some(JobRunSummaryRow::from_row(&row, &rows)?))
+        Ok(Some(JobRunRow::from_row(&row, &rows)?))
     }
 
-    /// Lists summaries after the supplied row ID in ascending row-ID order.
+    /// Lists job runs after the supplied job-run ID in lexicographic ID order.
     ///
     /// The caller can request one more row than it intends to return to determine
     /// whether another page exists.
-    pub async fn list_after_id(
-        &self,
-        cursor: Option<&str>,
-        limit: u32,
-    ) -> Result<Vec<JobRunSummaryRow>> {
+    pub async fn list_after_id(&self, cursor: Option<&str>, limit: u32) -> Result<Vec<JobRunRow>> {
         let connection = self.database.connection.lock().await;
         let limit = i64::from(limit);
         let mut rows = match cursor {
@@ -207,9 +195,9 @@ impl JobRunSummaryRepository {
                 connection
                     .query(
                         &format!(
-                            "SELECT {SELECT_COLUMNS} FROM job_run_summary WHERE rowid > ?1 ORDER BY rowid ASC LIMIT ?2"
+                            "SELECT {SELECT_COLUMNS} FROM job_runs WHERE id > ?1 ORDER BY id ASC LIMIT ?2"
                         ),
-                        turso::params![cursor, limit],
+                        params![cursor, limit],
                     )
                     .await?
             }
@@ -217,7 +205,7 @@ impl JobRunSummaryRepository {
                 connection
                     .query(
                         &format!(
-                            "SELECT {SELECT_COLUMNS} FROM job_run_summary ORDER BY rowid ASC LIMIT ?1"
+                            "SELECT {SELECT_COLUMNS} FROM job_runs ORDER BY id ASC LIMIT ?1"
                         ),
                         [limit],
                     )
@@ -225,33 +213,30 @@ impl JobRunSummaryRepository {
             }
         };
 
-        let mut summaries = Vec::new();
+        let mut job_runs = Vec::new();
         while let Some(row) = rows.next().await? {
-            summaries.push(JobRunSummaryRow::from_row(&row, &rows)?);
+            job_runs.push(JobRunRow::from_row(&row, &rows)?);
         }
 
-        Ok(summaries)
+        Ok(job_runs)
     }
 
-    pub async fn list_by_workflow_run_id(
-        &self,
-        workflow_run_id: &str,
-    ) -> Result<Vec<JobRunSummaryRow>> {
+    pub async fn list_by_workflow_run_id(&self, workflow_run_id: &str) -> Result<Vec<JobRunRow>> {
         let connection = self.database.connection.lock().await;
         let mut rows = connection
             .query(
                 &format!(
-                    "SELECT {SELECT_COLUMNS} FROM job_run_summary WHERE workflow_run_id = ?1 ORDER BY created_at ASC, rowid ASC"
+                    "SELECT {SELECT_COLUMNS} FROM job_runs WHERE workflow_run_id = ?1 ORDER BY created_at ASC, rowid ASC"
                 ),
                 [workflow_run_id],
             )
             .await?;
 
-        let mut summaries = Vec::new();
+        let mut job_runs = Vec::new();
         while let Some(row) = rows.next().await? {
-            summaries.push(JobRunSummaryRow::from_row(&row, &rows)?);
+            job_runs.push(JobRunRow::from_row(&row, &rows)?);
         }
 
-        Ok(summaries)
+        Ok(job_runs)
     }
 }

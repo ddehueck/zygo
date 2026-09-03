@@ -28,7 +28,7 @@ impl Db {
         connection.busy_timeout(busy_timeout)?;
         connection.pragma_update("foreign_keys", 1).await?;
 
-        // Conditionally enabled so only stream processing which builds the summary
+        // Conditionally enabled so only stream processing which projects run state
         // tables write to the cdc table.
         if enable_cdc {
             connection

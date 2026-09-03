@@ -8,23 +8,27 @@ import { focusRing } from "./utils";
 
 export interface ButtonProps extends RACButtonProps {
   /** @default "primary" */
-  variant?: "primary" | "secondary" | "destructive" | "quiet";
+  variant?: "primary" | "secondary" | "outline" | "ghost" | "destructive";
 }
 
 const button = tv({
   extend: focusRing,
-  base: "relative inline-flex items-center justify-center gap-2 border border-transparent dark:border-white/10 h-9 box-border px-3.5 py-0 [&:has(>svg:only-child)]:px-0 [&:has(>svg:only-child)]:h-8 [&:has(>svg:only-child)]:w-8 font-sans text-sm text-center transition rounded-lg cursor-default [-webkit-tap-highlight-color:transparent]",
+  base: "relative inline-flex items-center justify-center gap-2 border border-transparent h-9 box-border px-3.5 py-0 font-sans text-sm text-center transition rounded-full cursor-default [-webkit-tap-highlight-color:transparent]",
   variants: {
     variant: {
-      primary: "bg-blue-600 hover:bg-blue-700 data-pressed:bg-blue-800 text-white",
+      primary:
+        "bg-app-accent text-app-accent-foreground hover:bg-app-accent/90 data-pressed:bg-app-accent/80",
       secondary:
-        "border-black/10 bg-neutral-50 hover:bg-neutral-100 data-pressed:bg-neutral-200 text-neutral-800 dark:bg-neutral-700 dark:hover:bg-neutral-600 dark:data-pressed:bg-neutral-500 dark:text-neutral-100",
-      destructive: "bg-red-700 hover:bg-red-800 data-pressed:bg-red-900 text-white",
-      quiet:
-        "border-0 bg-transparent hover:bg-neutral-200 data-pressed:bg-neutral-300 text-neutral-800 dark:hover:bg-neutral-700 dark:data-pressed:bg-neutral-600 dark:text-neutral-100",
+        "border-app-border bg-app-bg-elevated text-app-foreground-secondary hover:bg-app-interaction-hover data-pressed:bg-app-interaction-pressed",
+      outline:
+        "border-app-border bg-transparent text-app-foreground hover:bg-app-interaction-hover data-pressed:bg-app-interaction-pressed",
+      ghost:
+        "border-transparent bg-transparent text-app-foreground-muted hover:bg-app-interaction-hover data-pressed:bg-app-interaction-pressed",
+      destructive:
+        "bg-app-danger text-app-danger-foreground hover:bg-app-danger/90 data-pressed:bg-app-danger/80",
     },
     isDisabled: {
-      true: "border-transparent dark:border-transparent bg-neutral-100 dark:bg-neutral-800 text-neutral-300 dark:text-neutral-600 forced-colors:text-[GrayText]",
+      true: "border-transparent bg-app-border/50 text-app-foreground-muted forced-colors:text-system-gray-text",
     },
     isPending: {
       true: "text-transparent",
@@ -35,19 +39,21 @@ const button = tv({
   },
   compoundVariants: [
     {
-      variant: "quiet",
+      variant: "ghost",
       isDisabled: true,
-      class: "bg-transparent dark:bg-transparent",
+      class: "bg-transparent",
     },
   ],
 });
 
 export function Button({ variant, className, children, ...props }: ButtonProps) {
+  const resolvedVariant = variant ?? "primary";
+
   return (
     <RACButton
       {...props}
       className={composeRenderProps(className, (className, renderProps) =>
-        button({ ...renderProps, variant, className }),
+        button({ ...renderProps, variant: resolvedVariant, className }),
       )}
     >
       {composeRenderProps(children, (children, { isPending }) => (
@@ -56,13 +62,17 @@ export function Button({ variant, className, children, ...props }: ButtonProps) 
           {isPending && (
             <span aria-hidden className="absolute inset-0 flex items-center justify-center">
               <svg
-                className="h-4 w-4 animate-spin text-white"
+                className={`h-4 w-4 animate-spin ${
+                  resolvedVariant === "primary"
+                    ? "text-app-accent-foreground"
+                    : resolvedVariant === "destructive"
+                      ? "text-app-danger-foreground"
+                      : resolvedVariant === "secondary"
+                        ? "text-app-foreground-secondary"
+                        : "text-app-foreground"
+                }`}
                 viewBox="0 0 24 24"
-                stroke={
-                  variant === "secondary" || variant === "quiet"
-                    ? "light-dark(black, white)"
-                    : "white"
-                }
+                stroke="currentColor"
               >
                 <circle cx="12" cy="12" r="10" strokeWidth="4" fill="none" className="opacity-25" />
                 <circle

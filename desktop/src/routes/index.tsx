@@ -1,28 +1,31 @@
-import { eq } from "@tanstack/db";
 import { useLiveQuery } from "@tanstack/react-db";
-import { useEffect, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
-import type { JobRunSummary, WorkflowRunSummary } from "../bindings";
-import { jobRuns } from "../db/job-run-summaries";
-import { workflowRuns } from "../db/workflow-run-summaries";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import type { WorkflowRun } from "../bindings";
+import { Cell, Column, Row, Table, TableBody, TableHeader } from "../components/Table";
+import { Icons } from "../components/icons";
+import { MainContentLayout } from "../components/layout/MainContentLayout";
+import { useDuration } from "../hooks/use-duration";
+import { workflowRuns } from "../db/workflow-runs";
 
 export const Route = createFileRoute("/")({
+  beforeLoad: () => ({
+    breadcrumb: {
+      label: "Workflow runs",
+      link: "/",
+    },
+  }),
   component: IndexRoute,
 });
 
-type JoinedRun = {
-  workflowRun: WorkflowRunSummary;
-  jobRun: JobRunSummary | undefined;
-};
-
-type WorkflowRunWithJobs = {
-  workflowRun: WorkflowRunSummary;
-  jobRuns: JobRunSummary[];
-};
+const columns = [
+  { id: "run", name: "Workflow run" },
+  { id: "jobs", name: "Jobs" },
+  { id: "duration", name: "Duration" },
+] as const;
 
 function IndexRoute() {
   const {
-    data: joinedRuns,
+    data: runs,
     isLoading,
     isError,
     status,
@@ -30,258 +33,230 @@ function IndexRoute() {
     query: (q) =>
       q
         .from({ workflowRun: workflowRuns })
-        .leftJoin({ jobRun: jobRuns }, ({ workflowRun, jobRun }) =>
-          eq(workflowRun.workflow_run_id, jobRun.workflow_run_id),
-        )
         .orderBy(({ workflowRun }) => workflowRun.created_at, "desc"),
   });
-
-  const runs = groupRuns(joinedRuns);
-  const hasActiveWork = runs.some(
-    ({ workflowRun, jobRuns }) =>
-      workflowRun.status === "running" ||
-      workflowRun.active_job_count > 0 ||
-      jobRuns.some((jobRun) => jobRun.status === "running"),
-  );
-  const now = useLiveClock(hasActiveWork);
+  const navigate = useNavigate();
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-6 px-6 py-10">
-      <header>
-        <p className="mb-2 text-sm font-medium uppercase tracking-wide text-slate-500">Runs</p>
-        <h1 className="text-3xl font-semibold tracking-tight text-slate-950">Workflow runs</h1>
-        <p className="mt-2 text-slate-600">
-          A quick summary of each workflow and the jobs it contains.
-        </p>
-      </header>
-
-      {isLoading && <p className="text-slate-600">Loading workflow runs…</p>}
-      {isError && (
-        <p className="rounded-md border border-red-200 bg-red-50 p-4 text-red-700" role="alert">
-          Unable to load workflow runs (status: {status}).
-        </p>
-      )}
-
-      {runs.length > 0 ? (
-        <ul className="flex flex-col gap-4">
-          {runs.map(({ workflowRun, jobRuns }) => (
-            <li key={workflowRun.workflow_run_id}>
-              <WorkflowRunCard workflowRun={workflowRun} jobRuns={jobRuns} now={now} />
-            </li>
-          ))}
-        </ul>
-      ) : (
-        !isLoading &&
-        !isError && (
-          <p className="rounded-md border border-dashed border-slate-300 p-8 text-center text-slate-600">
-            No workflow runs loaded.
-          </p>
-        )
-      )}
-    </main>
-  );
-}
-
-function groupRuns(joinedRuns: JoinedRun[]): WorkflowRunWithJobs[] {
-  const groupedRuns = new Map<string, WorkflowRunWithJobs>();
-
-  for (const { workflowRun, jobRun } of joinedRuns) {
-    let groupedRun = groupedRuns.get(workflowRun.workflow_run_id);
-
-    if (!groupedRun) {
-      groupedRun = { workflowRun, jobRuns: [] };
-      groupedRuns.set(workflowRun.workflow_run_id, groupedRun);
-    }
-
-    if (jobRun) {
-      groupedRun.jobRuns.push(jobRun);
-    }
-  }
-
-  return Array.from(groupedRuns.values());
-}
-
-function WorkflowRunCard({ workflowRun, jobRuns, now }: WorkflowRunWithJobs & { now: number }) {
-  const totalJobs =
-    workflowRun.active_job_count + workflowRun.succeeded_job_count + workflowRun.errored_job_count;
-
-  return (
-    <article className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-3">
-            <h2 className="font-mono text-sm font-semibold text-slate-900">
-              {workflowRun.workflow_run_id}
-            </h2>
-            <StatusBadge status={workflowRun.status} />
+    <MainContentLayout titleContent={null}>
+      <main className="flex w-full flex-col gap-6 py-10">
+        <header className="flex items-end justify-between gap-4 px-6">
+          <div>
+            <p className="mb-2 text-sm font-medium uppercase tracking-wide text-app-foreground-muted">
+              Runs
+            </p>
+            <h1 className="text-3xl font-semibold tracking-tight text-app-foreground">
+              Workflow runs
+            </h1>
+            <p className="mt-2 text-app-foreground-muted">
+              Monitor workflow status and job progress at a glance.
+            </p>
           </div>
-          <p className="mt-2 text-sm text-slate-500">
-            Created {formatDate(workflowRun.created_at)}
-          </p>
-        </div>
-        <div className="text-left text-sm sm:text-right">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Duration</p>
-          <p className="mt-1 font-medium text-slate-900">
-            {formatWorkflowDuration(workflowRun.started_at, workflowRun.completed_at, now)}
-          </p>
-        </div>
-      </div>
+          {!isLoading && !isError && (
+            <div className="shrink-0 text-right">
+              <p className="text-2xl font-semibold tabular-nums text-app-foreground">
+                {runs.length}
+              </p>
+              <p className="text-xs font-medium uppercase tracking-wide text-app-foreground-muted">
+                Total runs
+              </p>
+            </div>
+          )}
+        </header>
 
-      <dl className="grid grid-cols-2 gap-4 border-b border-slate-200 px-5 py-4 sm:grid-cols-4">
-        <SummaryStat label="Total jobs" value={totalJobs} />
-        <SummaryStat label="Succeeded" value={workflowRun.succeeded_job_count} />
-        <SummaryStat label="Running" value={workflowRun.active_job_count} />
-        <SummaryStat label="Failed" value={workflowRun.errored_job_count} />
-      </dl>
-
-      <div className="px-5 py-4">
-        <h3 className="text-sm font-semibold text-slate-900">Jobs ({jobRuns.length})</h3>
-        {jobRuns.length > 0 ? (
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full min-w-120 text-left text-sm">
-              <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-2 py-2 font-medium">Job</th>
-                  <th className="px-2 py-2 font-medium">Status</th>
-                  <th className="px-2 py-2 font-medium">Duration</th>
-                  <th className="px-2 py-2 text-right font-medium">Retries</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {jobRuns.map((jobRun) => (
-                  <tr key={jobRun.id}>
-                    <td className="px-2 py-3 font-mono text-xs text-slate-700">{jobRun.job_id}</td>
-                    <td className="px-2 py-3">
-                      <StatusBadge status={jobRun.status} />
-                    </td>
-                    <td className="px-2 py-3 text-slate-600">{formatJobDuration(jobRun, now)}</td>
-                    <td className="px-2 py-3 text-right text-slate-600">{jobRun.retry_count}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p className="mt-3 text-sm text-slate-500">
-            {totalJobs > 0
-              ? "No job run details are currently loaded."
-              : "No jobs recorded for this workflow run."}
+        {isLoading && <p className="px-6 text-app-foreground-muted">Loading workflow runs…</p>}
+        {isError && (
+          <p
+            className="mx-6 rounded-md border border-app-danger/30 bg-app-danger/10 p-4 text-app-danger"
+            role="alert"
+          >
+            Unable to load workflow runs (status: {status}).
           </p>
         )}
-      </div>
-    </article>
+
+        {runs.length > 0 ? (
+          <Table
+            aria-label="Workflow runs"
+            onRowAction={(key) =>
+              navigate({
+                to: "/runs/$workflowRunId",
+                params: { workflowRunId: String(key) },
+              })
+            }
+
+          >
+            <TableHeader
+              columns={columns}
+              className="h-0 overflow-hidden [&>tr]:h-0 [&>tr>th]:h-0 [&>tr>th]:border-0 [&>tr>th]:p-0 [&>tr>th>*]:hidden"
+            >
+              {(column) => (
+                <Column id={column.id} isRowHeader={column.id === "run"}>
+                  {column.name}
+                </Column>
+              )}
+            </TableHeader>
+            <TableBody items={runs}>
+              {(workflowRun) => (
+                <WorkflowRunRow
+                  id={workflowRun.id}
+                  workflowRun={workflowRun}
+                />
+              )}
+            </TableBody>
+          </Table>
+        ) : (
+          !isLoading &&
+          !isError && (
+            <p className="mx-6 rounded-md border border-dashed border-app-border p-8 text-center text-app-foreground-muted">
+              No workflow runs loaded.
+            </p>
+          )
+        )}
+      </main>
+    </MainContentLayout>
   );
 }
 
-function SummaryStat({ label, value }: { label: string; value: number }) {
+function WorkflowRunRow({
+  id,
+  workflowRun,
+}: {
+  id: string;
+  workflowRun: WorkflowRun;
+}) {
+  const totalJobs =
+    workflowRun.active_job_count + workflowRun.succeeded_job_count + workflowRun.errored_job_count;
+  const duration = useDuration({
+    startedAt: workflowRun.started_at,
+    completedAt: workflowRun.completed_at,
+  });
+
   return (
-    <div>
-      <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</dt>
-      <dd className="mt-1 text-xl font-semibold text-slate-950">{value}</dd>
-    </div>
+    <Row
+      id={id}
+      textValue={`${workflowRun.id} ${statusLabel(workflowRun.status)} ${totalJobs} jobs`}
+    >
+      <Cell textValue={workflowRun.id}>
+        <div className="flex min-w-64 items-center gap-3 py-1">
+          <StatusIcon status={workflowRun.status} />
+          <div className="min-w-0">
+            <p
+              className="truncate font-mono text-base font-semibold tracking-tight text-app-foreground"
+            >
+              {workflowRun.workflow_id} <span className="text-app font-normal -foreground-muted">({shortRunId(workflowRun.id)})</span>
+            </p>
+
+          </div>
+        </div>
+      </Cell>
+      <Cell textValue={`${totalJobs} total jobs`}>
+        <JobCounts
+          running={workflowRun.active_job_count}
+          completed={workflowRun.succeeded_job_count}
+          errored={workflowRun.errored_job_count}
+          total={totalJobs}
+        />
+      </Cell>
+      <Cell textValue={duration ?? ""}>
+        <div className="py-1">
+          <p className="font-mono text-sm text-app-foreground">{duration ?? "—"}</p>
+
+        </div>
+      </Cell>
+
+    </Row>
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
+function StatusIcon({ status }: { status: string }) {
   return (
     <span
-      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${statusClasses(status)}`}
+      role="img"
+      aria-label={statusLabel(status)}
+      className="flex size-5 shrink-0 items-center justify-center"
     >
-      {statusLabel(status)}
+      <StatusGlyph status={status} className="size-5" />
     </span>
   );
 }
 
-function statusLabel(status: string): string {
-  return status.replace(/_/g, " ");
-}
+function StatusGlyph({ status, className }: { status: string; className: string }) {
+  const iconProps = { "aria-hidden": true, className, strokeWidth: 2.25 } as const;
 
-function statusClasses(status: string): string {
   switch (status) {
     case "succeeded":
-      return "bg-emerald-100 text-emerald-700";
+      return <Icons.Completed {...iconProps} />;
     case "running":
-      return "bg-amber-100 text-amber-700";
+      return <Icons.InProgress {...iconProps} />;
     case "failed":
     case "errored":
-      return "bg-red-100 text-red-700";
+      return <Icons.Errored {...iconProps} />;
     default:
-      return "bg-slate-100 text-slate-700";
+      return null;
   }
 }
 
-function formatDate(value: string | number | null): string {
-  if (value === null) {
-    return "—";
-  }
+function JobCounts({
+  running,
+  completed,
+  errored,
+  total,
+}: {
+  running: number;
+  completed: number;
+  errored: number;
+  total: number;
+}) {
+  return (
+    <div
+      className="flex items-center gap-3 whitespace-nowrap py-1"
+      aria-label={`${total} total jobs`}
+    >
+      <JobCount kind="running" value={running} label="running jobs" />
+      <JobCount kind="completed" value={completed} label="completed jobs" />
+      <JobCount kind="errored" value={errored} label="errored jobs" />
 
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? String(value)
-    : new Intl.DateTimeFormat(undefined, {
-        dateStyle: "medium",
-        timeStyle: "short",
-      }).format(date);
+    </div>
+  );
 }
 
-function useLiveClock(enabled: boolean): number {
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    if (!enabled) {
-      return;
-    }
-
-    setNow(Date.now());
-    const interval = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(interval);
-  }, [enabled]);
-
-  return now;
+function JobCount({
+  kind,
+  value,
+  label,
+}: {
+  kind: "running" | "completed" | "errored";
+  value: number;
+  label: string;
+}) {
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-xs font-medium text-app-foreground"
+      aria-label={`${value} ${label}`}
+    >
+      <JobGlyph kind={kind} />
+      <span className="tabular-nums">{value}</span>
+    </span>
+  );
 }
 
-function formatWorkflowDuration(
-  startedAt: number | null,
-  completedAt: number | null,
-  now: number,
-): string {
-  if (startedAt === null) {
-    return "—";
-  }
+function JobGlyph({ kind }: { kind: "running" | "completed" | "errored" }) {
+  const iconProps = { "aria-hidden": true, className: "size-3.5", strokeWidth: 2.25 } as const;
 
-  return formatDuration(Math.max(0, (completedAt ?? now) - startedAt));
+  switch (kind) {
+    case "running":
+      return <Icons.InProgress {...iconProps} />;
+    case "completed":
+      return <Icons.Completed {...iconProps} />;
+    case "errored":
+      return <Icons.Errored {...iconProps} />;
+  }
 }
 
-function formatJobDuration(jobRun: JobRunSummary, now: number): string {
-  if (jobRun.status !== "running") {
-    return formatDuration(jobRun.duration_ms);
-  }
-
-  const startedAt = parseTimestamp(jobRun.updated_at) ?? parseTimestamp(jobRun.created_at);
-  return startedAt === null ? "—" : formatDuration(Math.max(0, now - startedAt));
+function shortRunId(workflowRunId: string): string {
+  return workflowRunId.slice(-4);
 }
 
-function parseTimestamp(value: string): number | null {
-  const timestamp = new Date(value).getTime();
-  return Number.isNaN(timestamp) ? null : timestamp;
-}
-
-function formatDuration(durationMs: number | null): string {
-  if (durationMs === null) {
-    return "—";
-  }
-
-  const totalSeconds = Math.floor(durationMs / 1000);
-  if (totalSeconds < 60) {
-    return `${totalSeconds}s`;
-  }
-
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  if (minutes < 60) {
-    return `${minutes}m ${seconds}s`;
-  }
-
-  const hours = Math.floor(minutes / 60);
-  return `${hours}h ${minutes % 60}m`;
+function statusLabel(status: string): string {
+  return status.replace(/_/g, " ");
 }

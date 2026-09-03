@@ -5,7 +5,6 @@ use super::error::Result;
 const MIGRATIONS: &[(i64, &str)] = &[
     (1, include_str!("0001_initial.sql")),
     (2, include_str!("0002_kv.sql")),
-    (3, include_str!("0003_run_summaries.sql")),
 ];
 
 pub async fn migrate(connection: &mut Connection) -> Result<()> {

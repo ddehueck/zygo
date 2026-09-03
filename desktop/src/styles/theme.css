@@ -1,0 +1,97 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-*: initial;
+
+  --font-sans: "Inter Variable", Inter, sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
+
+  /* Backgrounds */
+  --color-app-bg-base: var(--app-bg-base);
+  --color-app-bg-surface: var(--app-bg-surface);
+  --color-app-bg-elevated: var(--app-bg-elevated);
+
+  /* Neutral interaction states */
+  --color-app-interaction-hover: var(--app-interaction-hover);
+  --color-app-interaction-pressed: var(--app-interaction-pressed);
+
+  /* Foregrounds */
+  --color-app-foreground: var(--app-foreground);
+  --color-app-foreground-secondary: var(--app-foreground-secondary);
+  --color-app-foreground-muted: var(--app-foreground-muted);
+
+  /* Border colors */
+  --color-app-border: var(--app-border);
+  --color-app-border-secondary: var(--app-border-secondary);
+
+  /* Accent colors (with foregrounds) */
+  --color-app-accent: var(--app-accent);
+  --color-app-accent-foreground: var(--app-accent-foreground);
+
+  --color-app-success: var(--app-success);
+  --color-app-success-foreground: var(--app-success-foreground);
+
+  --color-app-warning: var(--app-warning);
+  --color-app-warning-foreground: var(--app-warning-foreground);
+
+  --color-app-danger: var(--app-danger);
+  --color-app-danger-foreground: var(--app-danger-foreground);
+
+  /* Forced-colors system palette */
+  --color-system-button-border: ButtonBorder;
+  --color-system-button-text: ButtonText;
+  --color-system-canvas: Canvas;
+  --color-system-field: Field;
+  --color-system-gray-text: GrayText;
+  --color-system-highlight: Highlight;
+  --color-system-highlight-text: HighlightText;
+  --color-system-mark: Mark;
+}
+
+:root {
+  color-scheme: light;
+
+  --app-bg-base: #f4f4f5;
+  --app-bg-surface: #fafafa;
+  --app-bg-elevated: #ffffff;
+  --app-interaction-hover: rgb(0 0 0 / 6%);
+  --app-interaction-pressed: rgb(0 0 0 / 10%);
+  --app-border: #e4e4e7;
+  --app-border-secondary: #d4d4d8;
+  --app-foreground: #333333;
+  --app-foreground-secondary: #333333;
+  --app-foreground-muted: #666666;
+  --app-accent: #3b82f6;
+  --app-accent-foreground: #ffffff;
+  --app-success: #10b981;
+  --app-success-foreground: #052e16;
+  --app-warning: #f59e0b;
+  --app-warning-foreground: #451a03;
+  --app-danger: #ef4444;
+  --app-danger-foreground: #ffffff;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+
+  --app-bg-base: #0f0f0f;
+  --app-bg-surface: #18181b;
+  --app-bg-elevated: #27272a;
+  --app-interaction-hover: rgb(255 255 255 / 7%);
+  --app-interaction-pressed: rgb(255 255 255 / 11%);
+  --app-border: #3f3f46;
+  --app-border-secondary: #52525b;
+  --app-foreground: #e4e4e7;
+  --app-foreground-secondary: #e4e4e7;
+  --app-foreground-muted: #a1a1aa;
+  --app-accent: #60a5fa;
+  --app-accent-foreground: #ffffff;
+  --app-success: #34d399;
+  --app-success-foreground: #052e16;
+  --app-warning: #fbbf24;
+  --app-warning-foreground: #451a03;
+  --app-danger: #f87171;
+  --app-danger-foreground: #450a0a;
+}

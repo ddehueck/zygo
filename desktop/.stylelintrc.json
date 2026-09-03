@@ -1,0 +1,22 @@
+{
+  "extends": ["stylelint-config-standard"],
+  "ignoreFiles": ["src/styles/theme.css"],
+  "rules": {
+    "at-rule-no-unknown": [true, { "ignoreAtRules": ["apply", "theme"] }],
+    "color-no-hex": true,
+    "color-named": "never",
+    "function-disallowed-list": [
+      "rgb",
+      "rgba",
+      "hsl",
+      "hsla",
+      "hwb",
+      "oklch",
+      "oklab",
+      "lab",
+      "lch",
+      "color",
+      "color-mix"
+    ]
+  }
+}
