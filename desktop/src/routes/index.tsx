@@ -6,11 +6,14 @@ import { Icons } from "../components/icons";
 import { MainContentLayout } from "../components/layout/MainContentLayout";
 import { useDuration } from "../hooks/use-duration";
 import { workflowRuns } from "../db/workflow-runs";
+import { JobCountsBadge } from "../features/workflow-runs/components/JobCountsBadge";
+import { shortRunId } from "../features/workflow-runs/lib/id";
+import { BreadcrumbHeaderLayout } from "../components/layout/BreadcrumbHeaderLayout";
 
 export const Route = createFileRoute("/")({
   beforeLoad: () => ({
     breadcrumb: {
-      label: "Workflow runs",
+      label: "Workflow Runs",
       link: "/",
     },
   }),
@@ -38,31 +41,8 @@ function IndexRoute() {
   const navigate = useNavigate();
 
   return (
-    <MainContentLayout titleContent={null}>
-      <main className="flex w-full flex-col gap-6 py-10">
-        <header className="flex items-end justify-between gap-4 px-6">
-          <div>
-            <p className="mb-2 text-sm font-medium uppercase tracking-wide text-app-foreground-muted">
-              Runs
-            </p>
-            <h1 className="text-3xl font-semibold tracking-tight text-app-foreground">
-              Workflow runs
-            </h1>
-            <p className="mt-2 text-app-foreground-muted">
-              Monitor workflow status and job progress at a glance.
-            </p>
-          </div>
-          {!isLoading && !isError && (
-            <div className="shrink-0 text-right">
-              <p className="text-2xl font-semibold tabular-nums text-app-foreground">
-                {runs.length}
-              </p>
-              <p className="text-xs font-medium uppercase tracking-wide text-app-foreground-muted">
-                Total runs
-              </p>
-            </div>
-          )}
-        </header>
+    <BreadcrumbHeaderLayout>
+      <main className="flex w-full flex-col gap-6">
 
         {isLoading && <p className="px-6 text-app-foreground-muted">Loading workflow runs…</p>}
         {isError && (
@@ -83,7 +63,6 @@ function IndexRoute() {
                 params: { workflowRunId: String(key) },
               })
             }
-
           >
             <TableHeader
               columns={columns}
@@ -96,12 +75,7 @@ function IndexRoute() {
               )}
             </TableHeader>
             <TableBody items={runs}>
-              {(workflowRun) => (
-                <WorkflowRunRow
-                  id={workflowRun.id}
-                  workflowRun={workflowRun}
-                />
-              )}
+              {(workflowRun) => <WorkflowRunRow id={workflowRun.id} workflowRun={workflowRun} />}
             </TableBody>
           </Table>
         ) : (
@@ -113,17 +87,11 @@ function IndexRoute() {
           )
         )}
       </main>
-    </MainContentLayout>
+    </BreadcrumbHeaderLayout>
   );
 }
 
-function WorkflowRunRow({
-  id,
-  workflowRun,
-}: {
-  id: string;
-  workflowRun: WorkflowRun;
-}) {
+function WorkflowRunRow({ id, workflowRun }: { id: string; workflowRun: WorkflowRun }) {
   const totalJobs =
     workflowRun.active_job_count + workflowRun.succeeded_job_count + workflowRun.errored_job_count;
   const duration = useDuration({
@@ -140,30 +108,27 @@ function WorkflowRunRow({
         <div className="flex min-w-64 items-center gap-3 py-1">
           <StatusIcon status={workflowRun.status} />
           <div className="min-w-0">
-            <p
-              className="truncate font-mono text-base font-semibold tracking-tight text-app-foreground"
-            >
-              {workflowRun.workflow_id} <span className="text-app font-normal -foreground-muted">({shortRunId(workflowRun.id)})</span>
+            <p className="truncate font-mono text-base font-semibold tracking-tight text-app-foreground">
+              {workflowRun.workflow_id}{" "}
+              <span className="text-app font-normal -foreground-muted">
+                ({shortRunId(workflowRun.id)})
+              </span>
             </p>
-
           </div>
         </div>
       </Cell>
       <Cell textValue={`${totalJobs} total jobs`}>
-        <JobCounts
-          running={workflowRun.active_job_count}
-          completed={workflowRun.succeeded_job_count}
-          errored={workflowRun.errored_job_count}
-          total={totalJobs}
+        <JobCountsBadge
+          activeJobCount={workflowRun.active_job_count}
+          succeededJobCount={workflowRun.succeeded_job_count}
+          erroredJobCount={workflowRun.errored_job_count}
         />
       </Cell>
       <Cell textValue={duration ?? ""}>
         <div className="py-1">
           <p className="font-mono text-sm text-app-foreground">{duration ?? "—"}</p>
-
         </div>
       </Cell>
-
     </Row>
   );
 }
@@ -196,66 +161,7 @@ function StatusGlyph({ status, className }: { status: string; className: string 
   }
 }
 
-function JobCounts({
-  running,
-  completed,
-  errored,
-  total,
-}: {
-  running: number;
-  completed: number;
-  errored: number;
-  total: number;
-}) {
-  return (
-    <div
-      className="flex items-center gap-3 whitespace-nowrap py-1"
-      aria-label={`${total} total jobs`}
-    >
-      <JobCount kind="running" value={running} label="running jobs" />
-      <JobCount kind="completed" value={completed} label="completed jobs" />
-      <JobCount kind="errored" value={errored} label="errored jobs" />
 
-    </div>
-  );
-}
-
-function JobCount({
-  kind,
-  value,
-  label,
-}: {
-  kind: "running" | "completed" | "errored";
-  value: number;
-  label: string;
-}) {
-  return (
-    <span
-      className="inline-flex items-center gap-1 text-xs font-medium text-app-foreground"
-      aria-label={`${value} ${label}`}
-    >
-      <JobGlyph kind={kind} />
-      <span className="tabular-nums">{value}</span>
-    </span>
-  );
-}
-
-function JobGlyph({ kind }: { kind: "running" | "completed" | "errored" }) {
-  const iconProps = { "aria-hidden": true, className: "size-3.5", strokeWidth: 2.25 } as const;
-
-  switch (kind) {
-    case "running":
-      return <Icons.InProgress {...iconProps} />;
-    case "completed":
-      return <Icons.Completed {...iconProps} />;
-    case "errored":
-      return <Icons.Errored {...iconProps} />;
-  }
-}
-
-function shortRunId(workflowRunId: string): string {
-  return workflowRunId.slice(-4);
-}
 
 function statusLabel(status: string): string {
   return status.replace(/_/g, " ");

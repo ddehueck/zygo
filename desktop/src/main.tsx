@@ -2,7 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { RouterProvider } from "@tanstack/react-router";
 import { getRouter } from "./router";
-import { startSync } from "./sync/sync-ipc";
+import { startSync } from "./features/sync/sync-ipc";
 
 const router = getRouter();
 

@@ -1,4 +1,4 @@
-import { type LucideProps } from "lucide-react";
+import { Tag, type LucideProps } from "lucide-react";
 import { StatusIcon, type StatusIconProps } from "./StatusIcon";
 
 const statusIcon = (status: StatusIconProps["status"]) => (props: LucideProps) => (
@@ -9,6 +9,7 @@ export const Icons = {
   Completed: statusIcon("completed"),
   InProgress: statusIcon("in-progress"),
   Errored: statusIcon("errored"),
+  Tag: Tag
 };
 
 export { StatusIcon };

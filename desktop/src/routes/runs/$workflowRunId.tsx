@@ -4,11 +4,12 @@ import { useEffect, useState, type ReactNode } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import type { WorkflowRun } from "../../bindings";
 import { workflowRuns } from "../../db/workflow-runs";
+import { shortRunId } from "../../features/workflow-runs/lib/id";
 
 export const Route = createFileRoute("/runs/$workflowRunId")({
   beforeLoad: ({ params }) => ({
     breadcrumb: {
-      label: "Run details",
+      label: `Run (${shortRunId(params.workflowRunId)})`,
       link: `/runs/${params.workflowRunId}`,
     },
   }),
@@ -59,9 +60,6 @@ function RunRoute() {
 function RunPageShell({ children }: { children: ReactNode }) {
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-6">
-      <Link to="/" className="w-fit text-sm font-medium text-app-foreground-muted hover:text-app-foreground">
-        ← Back to workflow runs
-      </Link>
       {children}
     </main>
   );
@@ -82,9 +80,6 @@ function RunDetails({
 
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-6 py-10">
-      <Link to="/" className="w-fit text-sm font-medium text-app-foreground-muted hover:text-app-foreground">
-        ← Back to workflow runs
-      </Link>
 
       <header>
         <p className="mb-2 text-sm font-medium uppercase tracking-wide text-app-foreground-muted">Run details</p>
