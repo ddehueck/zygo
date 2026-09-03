@@ -45,6 +45,16 @@ function applyUpsert<K extends SyncEntityKind>(payload: SyncUpsertFor<K>) {
 
 export async function startSync() {
   try {
+    // Manual writes require each collection's sync context to be initialized.
+    // Start the eager collections before connecting to CDC so the first delta
+    // cannot arrive while a collection is still in its idle/loading state.
+    await Promise.all(Object.values(collections).map((collection) => collection.preload()));
+  } catch (error) {
+    console.error("sync initialization failed", error);
+    return;
+  }
+
+  try {
     const result = await commands.sync(SyncChannel);
     if (result.status === "error") {
       console.error("sync command failed", result.error);

@@ -1,10 +1,10 @@
 import { useLiveQuery } from "@tanstack/react-db";
-import { useEffect, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import type { WorkflowRunSummary } from "../bindings";
 import { Cell, Column, Row, Table, TableBody, TableHeader } from "../components/Table";
 import { Icons } from "../components/icons";
 import { MainContentLayout } from "../components/layout/MainContentLayout";
+import { useDuration } from "../hooks/use-duration";
 import { workflowRuns } from "../db/workflow-run-summaries";
 
 export const Route = createFileRoute("/")({
@@ -36,10 +36,6 @@ function IndexRoute() {
         .orderBy(({ workflowRun }) => workflowRun.created_at, "desc"),
   });
   const navigate = useNavigate();
-  const hasActiveWork = runs.some(
-    (workflowRun) => workflowRun.status === "running" || workflowRun.active_job_count > 0,
-  );
-  const now = useLiveClock(hasActiveWork);
 
   return (
     <MainContentLayout titleContent={null}>
@@ -100,7 +96,12 @@ function IndexRoute() {
               )}
             </TableHeader>
             <TableBody items={runs}>
-              {(workflowRun) => <WorkflowRunRow workflowRun={workflowRun} now={now} />}
+              {(workflowRun) => (
+                <WorkflowRunRow
+                  id={workflowRun.workflow_run_id}
+                  workflowRun={workflowRun}
+                />
+              )}
             </TableBody>
           </Table>
         ) : (
@@ -116,14 +117,23 @@ function IndexRoute() {
   );
 }
 
-function WorkflowRunRow({ workflowRun, now }: { workflowRun: WorkflowRunSummary; now: number }) {
+function WorkflowRunRow({
+  id,
+  workflowRun,
+}: {
+  id: string;
+  workflowRun: WorkflowRunSummary;
+}) {
   const totalJobs =
     workflowRun.active_job_count + workflowRun.succeeded_job_count + workflowRun.errored_job_count;
-  const duration = formatWorkflowDuration(workflowRun.started_at, workflowRun.completed_at, now);
+  const duration = useDuration({
+    startedAt: workflowRun.started_at,
+    completedAt: workflowRun.completed_at,
+  });
 
   return (
     <Row
-      id={workflowRun.workflow_run_id}
+      id={id}
       textValue={`${workflowRun.workflow_run_id} ${statusLabel(workflowRun.status)} ${totalJobs} jobs`}
     >
       <Cell textValue={workflowRun.workflow_run_id}>
@@ -147,9 +157,9 @@ function WorkflowRunRow({ workflowRun, now }: { workflowRun: WorkflowRunSummary;
           total={totalJobs}
         />
       </Cell>
-      <Cell textValue={duration}>
+      <Cell textValue={duration ?? ""}>
         <div className="py-1">
-          <p className="font-mono text-sm text-app-foreground">{duration}</p>
+          <p className="font-mono text-sm text-app-foreground">{duration ?? "—"}</p>
 
         </div>
       </Cell>
@@ -165,7 +175,7 @@ function StatusIcon({ status }: { status: string }) {
       aria-label={statusLabel(status)}
       className="flex size-5 shrink-0 items-center justify-center"
     >
-      <StatusGlyph status={status} className={`size-5 ${statusIconColor(status)}`} />
+      <StatusGlyph status={status} className="size-5" />
     </span>
   );
 }
@@ -202,14 +212,9 @@ function JobCounts({
       className="flex items-center gap-3 whitespace-nowrap py-1"
       aria-label={`${total} total jobs`}
     >
-      <JobCount kind="running" value={running} label="running jobs" colorClass="text-app-warning" />
-      <JobCount
-        kind="completed"
-        value={completed}
-        label="completed jobs"
-        colorClass="text-app-success"
-      />
-      <JobCount kind="errored" value={errored} label="errored jobs" colorClass="text-app-danger" />
+      <JobCount kind="running" value={running} label="running jobs" />
+      <JobCount kind="completed" value={completed} label="completed jobs" />
+      <JobCount kind="errored" value={errored} label="errored jobs" />
 
     </div>
   );
@@ -219,32 +224,24 @@ function JobCount({
   kind,
   value,
   label,
-  colorClass,
 }: {
   kind: "running" | "completed" | "errored";
   value: number;
   label: string;
-  colorClass: string;
 }) {
   return (
     <span
       className="inline-flex items-center gap-1 text-xs font-medium text-app-foreground"
       aria-label={`${value} ${label}`}
     >
-      <JobGlyph kind={kind} className={`size-3.5 ${colorClass}`} />
+      <JobGlyph kind={kind} />
       <span className="tabular-nums">{value}</span>
     </span>
   );
 }
 
-function JobGlyph({
-  kind,
-  className,
-}: {
-  kind: "running" | "completed" | "errored";
-  className: string;
-}) {
-  const iconProps = { "aria-hidden": true, className, strokeWidth: 2.25 } as const;
+function JobGlyph({ kind }: { kind: "running" | "completed" | "errored" }) {
+  const iconProps = { "aria-hidden": true, className: "size-3.5", strokeWidth: 2.25 } as const;
 
   switch (kind) {
     case "running":
@@ -264,62 +261,3 @@ function statusLabel(status: string): string {
   return status.replace(/_/g, " ");
 }
 
-
-function statusIconColor(status: string): string {
-  switch (status) {
-    case "succeeded":
-      return "text-app-success";
-    case "running":
-      return "text-app-warning";
-    case "failed":
-    case "errored":
-      return "text-app-danger";
-    default:
-      return "text-app-foreground-muted";
-  }
-}
-
-
-
-function useLiveClock(enabled: boolean): number {
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    if (!enabled) {
-      return;
-    }
-
-    const interval = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(interval);
-  }, [enabled]);
-
-  return now;
-}
-
-function formatWorkflowDuration(
-  startedAt: number | null,
-  completedAt: number | null,
-  now: number,
-): string {
-  if (startedAt === null) {
-    return "—";
-  }
-
-  return formatDuration(Math.max(0, (completedAt ?? now) - startedAt));
-}
-
-function formatDuration(durationMs: number): string {
-  const totalSeconds = Math.floor(durationMs / 1000);
-  if (totalSeconds < 60) {
-    return `${totalSeconds}s`;
-  }
-
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  if (minutes < 60) {
-    return `${minutes}m ${seconds}s`;
-  }
-
-  const hours = Math.floor(minutes / 60);
-  return `${hours}h ${minutes % 60}m`;
-}
