@@ -5,10 +5,13 @@ import { GridList, GridListItem } from "../components/GridList";
 import { Icons } from "../components/icons";
 import { useDuration } from "../hooks/use-duration";
 import { sum } from "../lib/math";
-import { workflowRuns } from "../db/workflow-runs";
+import { workflowRuns } from "../db/collections";
 import { JobCountsBadge } from "../features/workflow-runs/components/JobCountsBadge";
 import { shortRunId } from "../features/workflow-runs/lib/id";
 import { BreadcrumbHeaderLayout } from "../components/layout/BreadcrumbHeaderLayout";
+import { useHotkey } from "@tanstack/react-hotkeys";
+import { useRef } from "react";
+import { WorkflowRunList } from "../features/workflow-runs/components/WorkflowRunList";
 
 export const Route = createFileRoute("/")({
   beforeLoad: () => ({
@@ -32,7 +35,6 @@ function IndexRoute() {
         .from({ workflowRun: workflowRuns })
         .orderBy(({ workflowRun }) => workflowRun.created_at, "desc"),
   });
-  const navigate = useNavigate();
 
   return (
     <BreadcrumbHeaderLayout>
@@ -48,18 +50,7 @@ function IndexRoute() {
         )}
 
         {runs.length > 0 ? (
-          <GridList
-            aria-label="Workflow runs"
-            items={runs}
-            onAction={(key) =>
-              navigate({
-                to: "/runs/$workflowRunId",
-                params: { workflowRunId: String(key) },
-              })
-            }
-          >
-            {(workflowRun) => <WorkflowRunItem id={workflowRun.id} workflowRun={workflowRun} />}
-          </GridList>
+          <WorkflowRunList runs={runs} />
         ) : (
           !isLoading &&
           !isError && (
@@ -71,80 +62,4 @@ function IndexRoute() {
       </main>
     </BreadcrumbHeaderLayout>
   );
-}
-
-function WorkflowRunItem({ id, workflowRun }: { id: string; workflowRun: WorkflowRun }) {
-  const totalJobs = sum([
-    workflowRun.active_job_count,
-    workflowRun.succeeded_job_count,
-    workflowRun.errored_job_count,
-  ]);
-
-  const duration = useDuration({
-    startedAt: workflowRun.started_at,
-    completedAt: workflowRun.completed_at,
-  });
-
-  return (
-    <GridListItem
-      id={id}
-      textValue={`${workflowRun.id} ${statusLabel(workflowRun.status)} ${totalJobs} jobs`}
-    >
-      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-6">
-        <div className="flex min-w-0 items-center gap-3 py-1 pl-1.5">
-          <StatusIcon status={workflowRun.status} />
-          <div className="min-w-0">
-            <p className="truncate font-mono text-base font-semibold tracking-tight text-app-foreground">
-              <span className="text-app -foreground-muted font-normal">
-                ({shortRunId(workflowRun.id)})
-              </span>{" "}
-              {workflowRun.workflow_id}
-            </p>
-          </div>
-        </div>
-        <div className="flex justify-end">
-          <JobCountsBadge
-            activeJobCount={workflowRun.active_job_count}
-            succeededJobCount={workflowRun.succeeded_job_count}
-            erroredJobCount={workflowRun.errored_job_count}
-          />
-        </div>
-        <div className="flex justify-end py-1 pr-1.5">
-          <p className="font-mono text-sm text-app-foreground">{duration ?? "—"}</p>
-        </div>
-      </div>
-    </GridListItem>
-  );
-}
-
-function StatusIcon({ status }: { status: string }) {
-  return (
-    <span
-      role="img"
-      aria-label={statusLabel(status)}
-      className="flex size-3 shrink-0 items-center justify-center"
-    >
-      <StatusGlyph status={status} className="size-5" />
-    </span>
-  );
-}
-
-function StatusGlyph({ status, className }: { status: string; className: string }) {
-  const iconProps = { "aria-hidden": true, className, strokeWidth: 2.25 } as const;
-
-  switch (status) {
-    case "succeeded":
-      return <Icons.Completed {...iconProps} />;
-    case "running":
-      return <Icons.InProgress {...iconProps} />;
-    case "failed":
-    case "errored":
-      return <Icons.Errored {...iconProps} />;
-    default:
-      return null;
-  }
-}
-
-function statusLabel(status: string): string {
-  return status.replace(/_/g, " ");
 }

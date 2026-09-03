@@ -12,6 +12,8 @@ pub enum Error {
     },
     #[error("CDC table `{0}` is not supported by local sync")]
     UnsupportedTable(String),
+    #[error("CDC row ID `{id}` for a tag association is not an integer")]
+    InvalidTagId { id: String },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

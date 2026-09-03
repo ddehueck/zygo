@@ -1,3 +1,4 @@
+import type { RefAttributes } from "react";
 import {
   GridList as AriaGridList,
   GridListItem as AriaGridListItem,
@@ -9,7 +10,7 @@ import { composeRenderProps } from "react-aria-components/composeRenderProps";
 import { tv } from "tailwind-variants";
 import { composeTailwindRenderProps, focusRing } from "./utils";
 
-export type GridListProps<T> = AriaGridListProps<T>;
+export type GridListProps<T> = AriaGridListProps<T> & RefAttributes<HTMLDivElement>;
 
 export function GridList<T>(props: GridListProps<T>) {
   return (

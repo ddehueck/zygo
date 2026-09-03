@@ -1,6 +1,7 @@
 import { useRouter, useRouterState, useCanGoBack } from "@tanstack/react-router";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { IconButton } from "./IconButton";
+import { useHotkey } from "@tanstack/react-hotkeys";
 
 export function NavigationArrows() {
   const router = useRouter();
@@ -12,6 +13,11 @@ export function NavigationArrows() {
     select: ({ location }) => location.state.__TSR_index,
   });
   const canGoForward = historyIndex < router.history.length - 1;
+
+  // Back hotkey definition
+  useHotkey("Mod+[", () => router.history.back());
+  // Forward hotkey definition
+  useHotkey("Mod+]", () => router.history.forward());
 
   return (
     <div className="flex gap-0">

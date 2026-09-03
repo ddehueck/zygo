@@ -11,9 +11,10 @@ A client will subscribe to a broker that will hold a connection to the server. T
 
 All clients will mirror the same normalized collections we have in the local db file. Then using tools like TanstackDB the client can decide the particular projection of data it needs to best serve it's usecase. This creates a clear separation between the client's unique data needs and the local crate's core concerns.
 
-Right now we have two:
+Right now we have three:
 - Workflow Run
 - Job Run
+- Tag
 
 ## Implementation
 
@@ -68,7 +69,7 @@ Because an active workflow run results in many changes in a short span of time, 
 
 ### The Desktop App
 
-As the primary target client, we discuss the implementation specific with tauri and this core local sync module.
+As the primary target client, we discuss the implementation specific with tauri and this core local sync module. The initial related-data snapshot is cached by TanStack Query without automatic staleness or garbage collection, then projected into local-only TanStack DB collections. CDC deltas update those in-memory collections directly.
 
 The desktop app is built on Tauri which has a JS layer and Rust backend. The JS layer drives the UI and can communicate with the Rust backend via Tauri's IPC functionality. At a high level, the desktop app's Rust backend will have a background thread that runs the broker which will then emit a "poke" event to the JS layer when changes are detected. When the JS layer receives the "poke" event, it call a command to ingest the changes into the JS layer's TanstackDB instance. Once the command is completed the JS layer will inform the Broker that the changes have been ingested and the Broker will increment the high-water mark for the client.
 
@@ -76,6 +77,6 @@ The desktop app is built on Tauri which has a JS layer and Rust backend. The JS 
 
 The desktop app will not hold the full contents of the the local crate' database. Instead it will fetch a limited snapshot. As an example, imagine a large database of workflow runs:
 
-- The desktop app will fetch the first 100 workflow runs and store them in TanstackDB.
+- The desktop app will fetch the first 100 workflow runs together with their related job runs and tags, then store each entity in its normalized TanStack DB collection.
 - If a change notification is received for an out of set run, the desktop app will ignore it. (This only applies to the delete operation, upserts are always applied)
 - If the desktop app wants to fetch the next 100 workflow runs, it will begin to buffer all change notifications, fetch the snapshot, the apply the buffered changes and beginning listening for changes again.

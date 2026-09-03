@@ -33,8 +33,18 @@ pub struct JobRun {
 }
 
 #[derive(Debug, Serialize, Deserialize, Type)]
+pub struct Tag {
+    pub id: String,
+    pub workflow_run_id: String,
+    pub key: String,
+    pub value: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Type)]
 #[serde(tag = "entity", rename_all = "snake_case")]
 pub enum SyncUpsert {
     WorkflowRun { id: String, data: WorkflowRun },
     JobRun { id: String, data: JobRun },
+    Tag { id: String, data: Tag },
 }

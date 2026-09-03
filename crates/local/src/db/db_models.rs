@@ -118,6 +118,7 @@ impl JobRunRow {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TagRow {
+    pub id: i64,
     pub workflow_run_id: String,
     pub key: String,
     pub value: String,
@@ -127,6 +128,7 @@ pub struct TagRow {
 impl TagRow {
     pub fn from_row(row: &Row, rows: &Rows) -> Result<Self> {
         Ok(Self {
+            id: row.get(rows.column_index("id")?)?,
             workflow_run_id: row.get(rows.column_index("workflow_run_id")?)?,
             key: row.get(rows.column_index("key")?)?,
             value: row.get(rows.column_index("value")?)?,

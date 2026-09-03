@@ -7,9 +7,9 @@ use tokio::sync::Notify;
 use crate::Repos;
 use crate::sync::batch::DeltaBatch;
 use crate::sync::error::Result;
-use crate::sync::schema::Delta;
+use crate::sync::schema::{Delta, SyncEntity};
 
-const SYNC_TABLES: [&str; 2] = ["workflow_runs", "job_runs"];
+const SYNC_TABLES: [&str; 3] = ["workflow_runs", "job_runs", "tag_associations"];
 
 #[derive(Clone)]
 pub struct SyncSubscription {
@@ -65,11 +65,52 @@ impl SyncSubscription {
             .map(Delta::try_from)
             .collect::<Result<Vec<_>>>()?;
 
-        Ok(DeltaBatch::new(max_change_id, deltas))
+        let mut hydrated_deltas = Vec::with_capacity(deltas.len());
+        for delta in deltas {
+            hydrated_deltas.push(self.hydrate_tag_delta(delta).await?);
+        }
+
+        Ok(DeltaBatch::new(max_change_id, hydrated_deltas))
     }
 
     pub async fn wait_for_changes(&self) {
         self.notify.notified().await;
+    }
+
+    async fn hydrate_tag_delta(&self, delta: Delta) -> Result<Delta> {
+        let Delta::Upsert {
+            entity: SyncEntity::Tag,
+            id,
+            ..
+        } = &delta
+        else {
+            return Ok(delta);
+        };
+
+        let id = id
+            .parse::<i64>()
+            .map_err(|_| super::error::Error::InvalidTagId { id: id.clone() })?;
+
+        let Some(tag) = self.repos.tags.get_by_id(id).await? else {
+            // The association may have been deleted after CDC was read. A
+            // delete is the correct current-state update for the client.
+            return Ok(Delta::Delete {
+                entity: SyncEntity::Tag,
+                id: id.to_string(),
+            });
+        };
+
+        Ok(Delta::Upsert {
+            entity: SyncEntity::Tag,
+            id: tag.id.to_string(),
+            data: serde_json::json!({
+                "id": tag.id.to_string(),
+                "workflow_run_id": tag.workflow_run_id,
+                "key": tag.key,
+                "value": tag.value,
+                "created_at": tag.created_at,
+            }),
+        })
     }
 
     /// Spawns a Tokio task that polls the CDC table for changes and notifies subscribers.

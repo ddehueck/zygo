@@ -38,7 +38,7 @@ function BreadcrumbItem({ breadcrumb }: { breadcrumb: Breadcrumb }) {
         <>
           <RouterBreadcrumbLink
             to={breadcrumb.link}
-            className={`truncate rounded-sm outline-none hover:text-app-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-app-accent ${
+            className={`truncate rounded-sm outline-none hover:text-app-foreground focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-app-accent ${
               isCurrent ? "font-medium text-app-foreground" : ""
             }`}
           >

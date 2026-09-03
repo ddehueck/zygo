@@ -5,12 +5,8 @@ import { invoke as __TAURI_INVOKE, Channel } from "@tauri-apps/api/core";
 /** Commands */
 export const commands = {
   greet: (name: string, title: string) => __TAURI_INVOKE<string>("greet", { name, title }),
-  listJobRuns: (request: ListJobRunsRequest) =>
-    typedError<ListJobRunsResponse, CommandError>(__TAURI_INVOKE("list_job_runs", { request })),
-  listWorkflowRuns: (request: ListWorkflowRunsRequest) =>
-    typedError<ListWorkflowRunsResponse, CommandError>(
-      __TAURI_INVOKE("list_workflow_runs", { request }),
-    ),
+  loadData: (request: LoadDataRequest) =>
+    typedError<LoadDataResponse, CommandError>(__TAURI_INVOKE("load_data", { request })),
   sync: (onEvent: Channel<SyncDelta>) =>
     typedError<null, CommandError>(__TAURI_INVOKE("sync", { onEvent })),
 };
@@ -32,23 +28,15 @@ export type JobRun = {
   updated_at: string;
 };
 
-export type ListJobRunsRequest = {
+export type LoadDataRequest = {
   cursor: string | null;
   limit: number;
 };
 
-export type ListJobRunsResponse = {
-  runs: JobRun[];
-  next_cursor: string | null;
-};
-
-export type ListWorkflowRunsRequest = {
-  cursor: string | null;
-  limit: number;
-};
-
-export type ListWorkflowRunsResponse = {
-  runs: WorkflowRun[];
+export type LoadDataResponse = {
+  workflow_runs: WorkflowRun[];
+  job_runs: JobRun[];
+  tags: Tag[];
   next_cursor: string | null;
 };
 
@@ -57,11 +45,20 @@ export type SyncDelta =
   | { operation: "delete"; entity: SyncEntityKind; id: string }
   | { operation: "upsert"; payload: SyncUpsert };
 
-export type SyncEntityKind = "workflow_run" | "job_run";
+export type SyncEntityKind = "workflow_run" | "job_run" | "tag";
 
 export type SyncUpsert =
   | { entity: "workflow_run"; id: string; data: WorkflowRun }
-  | { entity: "job_run"; id: string; data: JobRun };
+  | { entity: "job_run"; id: string; data: JobRun }
+  | { entity: "tag"; id: string; data: Tag };
+
+export type Tag = {
+  id: string;
+  workflow_run_id: string;
+  key: string;
+  value: string;
+  created_at: string;
+};
 
 export type WorkflowRun = {
   id: string;

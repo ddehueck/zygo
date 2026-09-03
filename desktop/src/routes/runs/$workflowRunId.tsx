@@ -3,7 +3,7 @@ import dayjs from "dayjs";
 import { useEffect, useState, type ReactNode } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import type { WorkflowRun } from "../../bindings";
-import { workflowRuns } from "../../db/workflow-runs";
+import { workflowRuns } from "../../db/collections";
 import { shortRunId } from "../../features/workflow-runs/lib/id";
 import { formatDate, formatDurationBetween } from "../../lib/dates";
 
@@ -94,7 +94,7 @@ function RunDetails({
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-6 py-10">
       <header>
-        <p className="mb-2 text-sm font-medium uppercase tracking-wide text-app-foreground-muted">
+        <p className="mb-2 text-sm font-medium tracking-wide text-app-foreground-muted uppercase">
           Run details
         </p>
         <div className="flex flex-wrap items-center gap-3">
@@ -157,7 +157,7 @@ function InfoItem({
     <div>
       <dt className="text-sm text-app-foreground-muted">{label}</dt>
       <dd
-        className={`mt-1 break-all text-sm text-app-foreground ${mono ? "font-mono text-xs" : ""}`}
+        className={`mt-1 text-sm break-all text-app-foreground ${mono ? "font-mono text-xs" : ""}`}
       >
         {value}
       </dd>
