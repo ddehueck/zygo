@@ -1,0 +1,6 @@
+{
+  "sortTailwindcss": {
+    "stylesheet": "./src/styles/theme.css",
+    "functions": ["cn", "clsx", "cva", "tv"]
+  }
+}
