@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { BreadcrumbHeaderLayout } from "../components/layout/BreadcrumbHeaderLayout";
-import { WorkflowRunList } from "../features/workflow-runs/components/WorkflowRunList";
 import { useWorkflowRunsListData } from "../features/workflow-runs/hooks/use-workflow-runs-list-data";
+import { TokenSearch } from "@/features/token-search/TokenSearch";
 
 export const Route = createFileRoute("/")({
   beforeLoad: () => ({
@@ -27,8 +27,9 @@ function IndexRoute() {
         )}
 
         {runs.length > 0 ? (
-          <WorkflowRunList runs={runs} />
+          <TokenSearch />
         ) : (
+          // <WorkflowRunList runs={runs} />
           !isLoading &&
           !isError && (
             <p className="mx-6 p-8 text-center text-app-foreground-muted">
