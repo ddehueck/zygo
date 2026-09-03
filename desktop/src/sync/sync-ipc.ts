@@ -1,17 +1,17 @@
 import { Channel } from "@tauri-apps/api/core";
 import { commands, type SyncDelta, type SyncEntityKind, type SyncUpsert } from "../bindings";
-import { workflowRuns } from "../db/workflow-run-summaries";
-import { jobRuns } from "../db/job-run-summaries";
+import { workflowRuns } from "../db/workflow-runs";
+import { jobRuns } from "../db/job-runs";
 import { assertNever } from "../utils";
 
 type CollectionsByEntity = {
-  workflow_run_summary: typeof workflowRuns;
-  job_run_summary: typeof jobRuns;
+  workflow_run: typeof workflowRuns;
+  job_run: typeof jobRuns;
 };
 
 const collections: CollectionsByEntity = {
-  workflow_run_summary: workflowRuns,
-  job_run_summary: jobRuns,
+  workflow_run: workflowRuns,
+  job_run: jobRuns,
 };
 
 const SyncChannel = new Channel<SyncDelta>();

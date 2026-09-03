@@ -1,15 +1,13 @@
-use std::{
-    collections::HashMap,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::collections::HashMap;
+use std::time::SystemTime;
 
-use zygo_core::{
-    engine::RunCursor,
-    models::{EventKind, StreamItem, WorkflowRunId, WorkflowRunStatus},
-    stream::{ReadResult, StreamReader},
-};
+use chrono::{DateTime, SecondsFormat, Utc};
+use zygo_core::engine::RunCursor;
+use zygo_core::models::{EventKind, StreamItem, WorkflowRunId, WorkflowRunStatus};
+use zygo_core::stream::{ReadResult, StreamReader};
 
-use crate::{Repos, db::KvRepository};
+use crate::Repos;
+use crate::db::KvRepository;
 
 /// Processes workflow stream records and projects local read models.
 /// While still exposing the underlying stream for local clients. e.g. ui updates.
@@ -44,14 +42,14 @@ impl LocalStreamProcessor {
 
         let workflow_run_id = self.workflow_run_id.to_string();
         let timestamp = event.timestamp;
-        let timestamp_value = timestamp_ms(timestamp);
+        let timestamp_value = timestamp_string(timestamp);
 
         match &event.kind {
             EventKind::JobStarted(data) => {
                 let job_run_id = data.job_run_id.to_string();
                 self.job_started_at.insert(job_run_id.clone(), timestamp);
                 self.repos
-                    .job_run_summaries
+                    .job_runs
                     .record_started(&workflow_run_id, &job_run_id, &data.job_id.to_string())
                     .await?;
             }
@@ -77,14 +75,14 @@ impl LocalStreamProcessor {
             }
             EventKind::TagInserted(data) => {
                 self.repos
-                    .workflow_runs
-                    .insert_tag(&workflow_run_id, &data.name, &data.value)
+                    .tags
+                    .insert(&workflow_run_id, &data.name, &data.value)
                     .await?;
             }
             EventKind::DataReferenceInserted(_) | EventKind::ChannelItemInserted(_) => {}
         }
 
-        self.refresh_workflow_summary(&workflow_run_id, timestamp_value)
+        self.refresh_workflow_run(&workflow_run_id, &timestamp_value)
             .await?;
 
         Ok(result)
@@ -105,23 +103,24 @@ impl LocalStreamProcessor {
             .map(|duration| duration.as_millis().try_into().unwrap_or(i64::MAX));
 
         self.repos
-            .job_run_summaries
+            .job_runs
             .record_completed(workflow_run_id, job_run_id, job_id, status, duration_ms)
             .await?;
 
         Ok(())
     }
 
-    async fn refresh_workflow_summary(
+    async fn refresh_workflow_run(
         &self,
         workflow_run_id: &str,
-        timestamp: i64,
+        timestamp: &str,
     ) -> anyhow::Result<()> {
         let counts = self
             .repos
-            .job_run_summaries
+            .job_runs
             .counts_by_workflow_run_id(workflow_run_id)
             .await?;
+
         let status = if counts.errored_job_count > 0 {
             WorkflowRunStatus::Failed
         } else if counts.active_job_count > 0 {
@@ -134,18 +133,20 @@ impl LocalStreamProcessor {
 
         let existing = self
             .repos
-            .workflow_run_summaries
+            .workflow_runs
             .get_by_workflow_run_id(workflow_run_id)
             .await?;
+
         let started_at = existing
             .as_ref()
-            .and_then(|summary| summary.started_at)
-            .unwrap_or(timestamp);
+            .and_then(|run| run.started_at.clone())
+            .unwrap_or_else(|| timestamp.to_owned());
+
         let completed_at = if status.is_terminal() {
             existing
                 .as_ref()
-                .and_then(|summary| summary.completed_at)
-                .or(Some(timestamp))
+                .and_then(|run| run.completed_at.clone())
+                .or_else(|| Some(timestamp.to_owned()))
         } else {
             None
         };
@@ -153,15 +154,15 @@ impl LocalStreamProcessor {
         let status = status.to_string();
 
         self.repos
-            .workflow_run_summaries
-            .upsert_projection(
+            .workflow_runs
+            .upsert(
                 workflow_run_id,
                 &status,
-                Some(started_at),
-                completed_at,
-                counts.active_job_count,
-                counts.succeeded_job_count,
-                counts.errored_job_count,
+                Some(started_at.as_str()),
+                completed_at.as_deref(),
+                Some(counts.active_job_count),
+                Some(counts.succeeded_job_count),
+                Some(counts.errored_job_count),
             )
             .await?;
 
@@ -169,10 +170,6 @@ impl LocalStreamProcessor {
     }
 }
 
-fn timestamp_ms(timestamp: SystemTime) -> i64 {
-    timestamp
-        .duration_since(UNIX_EPOCH)
-        .ok()
-        .and_then(|duration| duration.as_millis().try_into().ok())
-        .unwrap_or(i64::MAX)
+fn timestamp_string(timestamp: SystemTime) -> String {
+    DateTime::<Utc>::from(timestamp).to_rfc3339_opts(SecondsFormat::Millis, true)
 }

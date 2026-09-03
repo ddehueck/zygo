@@ -58,7 +58,14 @@ pub struct WorkflowRunRow {
     pub id: String,
     pub workflow_id: String,
     pub content_hash: String,
+    pub status: String,
+    pub started_at: Option<String>,
+    pub completed_at: Option<String>,
+    pub active_job_count: i64,
+    pub succeeded_job_count: i64,
+    pub errored_job_count: i64,
     pub created_at: String,
+    pub updated_at: String,
 }
 
 impl WorkflowRunRow {
@@ -68,28 +75,6 @@ impl WorkflowRunRow {
             id: row.get(rows.column_index("id")?)?,
             workflow_id: row.get(rows.column_index("workflow_id")?)?,
             content_hash: row.get(rows.column_index("content_hash")?)?,
-            created_at: row.get(rows.column_index("created_at")?)?,
-        })
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct WorkflowRunSummaryRow {
-    pub workflow_run_id: String,
-    pub status: String,
-    pub started_at: Option<i64>,
-    pub completed_at: Option<i64>,
-    pub active_job_count: i64,
-    pub succeeded_job_count: i64,
-    pub errored_job_count: i64,
-    pub created_at: String,
-    pub updated_at: String,
-}
-
-impl WorkflowRunSummaryRow {
-    pub fn from_row(row: &Row, rows: &Rows) -> Result<Self> {
-        Ok(Self {
-            workflow_run_id: row.get(rows.column_index("workflow_run_id")?)?,
             status: row.get(rows.column_index("status")?)?,
             started_at: row.get(rows.column_index("started_at")?)?,
             completed_at: row.get(rows.column_index("completed_at")?)?,
@@ -103,10 +88,10 @@ impl WorkflowRunSummaryRow {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct JobRunSummaryRow {
+pub struct JobRunRow {
     pub row_id: i64,
+    pub id: String,
     pub workflow_run_id: String,
-    pub job_run_id: String,
     pub job_id: String,
     pub status: String,
     pub duration_ms: Option<i64>,
@@ -115,19 +100,12 @@ pub struct JobRunSummaryRow {
     pub updated_at: String,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct JobRunSummaryCounts {
-    pub active_job_count: i64,
-    pub succeeded_job_count: i64,
-    pub errored_job_count: i64,
-}
-
-impl JobRunSummaryRow {
+impl JobRunRow {
     pub fn from_row(row: &Row, rows: &Rows) -> Result<Self> {
         Ok(Self {
             row_id: row.get(rows.column_index("row_id")?)?,
+            id: row.get(rows.column_index("id")?)?,
             workflow_run_id: row.get(rows.column_index("workflow_run_id")?)?,
-            job_run_id: row.get(rows.column_index("job_run_id")?)?,
             job_id: row.get(rows.column_index("job_id")?)?,
             status: row.get(rows.column_index("status")?)?,
             duration_ms: row.get(rows.column_index("duration_ms")?)?,
@@ -176,4 +154,11 @@ impl KvRow {
             updated_at: row.get(rows.column_index("updated_at")?)?,
         })
     }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct WorkflowRunJobCounts {
+    pub active_job_count: i64,
+    pub succeeded_job_count: i64,
+    pub errored_job_count: i64,
 }

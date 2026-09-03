@@ -2,13 +2,12 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 
 #[derive(Debug, Deserialize, Serialize, Type)]
-pub struct WorkflowRunSummary {
-    pub workflow_run_id: String,
+pub struct WorkflowRun {
+    pub id: String,
+    pub workflow_id: String,
     pub status: String,
-    #[specta(type = Option<specta_typescript::Number>)]
-    pub started_at: Option<i64>,
-    #[specta(type = Option<specta_typescript::Number>)]
-    pub completed_at: Option<i64>,
+    pub started_at: Option<String>,
+    pub completed_at: Option<String>,
     #[specta(type = specta_typescript::Number)]
     pub active_job_count: i64,
     #[specta(type = specta_typescript::Number)]
@@ -20,10 +19,9 @@ pub struct WorkflowRunSummary {
 }
 
 #[derive(Debug, Serialize, Deserialize, Type)]
-pub struct JobRunSummary {
+pub struct JobRun {
     pub id: String,
     pub workflow_run_id: String,
-    pub job_run_id: String,
     pub job_id: String,
     pub status: String,
     #[specta(type = Option<specta_typescript::Number>)]
@@ -37,12 +35,6 @@ pub struct JobRunSummary {
 #[derive(Debug, Serialize, Deserialize, Type)]
 #[serde(tag = "entity", rename_all = "snake_case")]
 pub enum SyncUpsert {
-    WorkflowRunSummary {
-        id: String,
-        data: WorkflowRunSummary,
-    },
-    JobRunSummary {
-        id: String,
-        data: JobRunSummary,
-    },
+    WorkflowRun { id: String, data: WorkflowRun },
+    JobRun { id: String, data: JobRun },
 }

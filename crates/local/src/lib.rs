@@ -1,11 +1,11 @@
 mod config;
+mod db;
 mod paths;
 mod repos;
+mod service;
+mod storage;
 mod stream_processor;
 mod sync;
-
-mod db;
-mod service;
 
 // This is the single entrypoint for the local Zygo service.
 pub use config::{DEFAULT_DATABASE_BUSY_TIMEOUT, ZygoLocalConfig};
@@ -13,9 +13,9 @@ pub use service::ZygoLocalService;
 
 // Type re-exports only for convenience
 pub use db::{
-    CdcChangeType, CdcRepository, CdcRow, DbError, DbResult, JobRunSummaryCounts,
-    JobRunSummaryRepository, JobRunSummaryRow, KvRepository, TagRow, WorkflowRunRepository,
-    WorkflowRunRow, WorkflowRunSummaryRepository, WorkflowRunSummaryRow,
+    CdcChangeType, CdcRepository, CdcRow, DbError, DbResult, JobRunRepository, JobRunRow,
+    KvRepository, TagRow, TagsRepository, WorkflowRunJobCounts, WorkflowRunRepository,
+    WorkflowRunRow,
 };
 pub use repos::Repos;
 pub use sync::{Delta, DeltaBatch, SyncEntity, SyncSubscription};

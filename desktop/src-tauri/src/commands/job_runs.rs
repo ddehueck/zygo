@@ -5,44 +5,43 @@ use tauri::State;
 
 use crate::error::{CommandError, CommandResult};
 
-use super::JobRunSummary;
+use super::JobRun;
 
 const MAX_PAGE_SIZE: u32 = 1000;
 
 #[derive(Debug, Deserialize, Type)]
-pub struct ListJobRunSummariesRequest {
+pub struct ListJobRunsRequest {
     pub cursor: Option<String>,
     pub limit: u32,
 }
 
 #[derive(Debug, Serialize, Type)]
-pub struct ListJobRunSummariesResponse {
-    pub summaries: Vec<JobRunSummary>,
+pub struct ListJobRunsResponse {
+    pub runs: Vec<JobRun>,
     pub next_cursor: Option<String>,
 }
 
-impl From<local::JobRunSummaryRow> for JobRunSummary {
-    fn from(summary: local::JobRunSummaryRow) -> Self {
+impl From<local::JobRunRow> for JobRun {
+    fn from(run: local::JobRunRow) -> Self {
         Self {
-            id: summary.row_id.to_string(),
-            workflow_run_id: summary.workflow_run_id,
-            job_run_id: summary.job_run_id,
-            job_id: summary.job_id,
-            status: summary.status,
-            duration_ms: summary.duration_ms,
-            retry_count: summary.retry_count,
-            created_at: summary.created_at,
-            updated_at: summary.updated_at,
+            id: run.id,
+            workflow_run_id: run.workflow_run_id,
+            job_id: run.job_id,
+            status: run.status,
+            duration_ms: run.duration_ms,
+            retry_count: run.retry_count,
+            created_at: run.created_at,
+            updated_at: run.updated_at,
         }
     }
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn list_job_run_summaries(
+pub async fn list_job_runs(
     state: State<'_, ZygoLocalService>,
-    request: ListJobRunSummariesRequest,
-) -> CommandResult<ListJobRunSummariesResponse> {
+    request: ListJobRunsRequest,
+) -> CommandResult<ListJobRunsResponse> {
     if request.limit == 0 {
         return Err(CommandError::invalid_input(
             "limit",
@@ -57,26 +56,24 @@ pub async fn list_job_run_summaries(
     }
 
     let limit = request.limit;
-    let mut summaries = state
+    let mut runs = state
         .repos
-        .job_run_summaries
+        .job_runs
         .list_after_id(request.cursor.as_deref(), limit + 1)
         .await
-        .map_err(|error| {
-            CommandError::internal("list_job_run_summaries_failed", error.to_string())
-        })?;
+        .map_err(|error| CommandError::internal("list_job_runs_failed", error.to_string()))?;
 
-    let has_more = summaries.len() > limit as usize;
+    let has_more = runs.len() > limit as usize;
     if has_more {
-        summaries.pop();
+        runs.pop();
     }
 
     let next_cursor = has_more
-        .then(|| summaries.last().map(|summary| summary.row_id.to_string()))
+        .then(|| runs.last().map(|run| run.id.clone()))
         .flatten();
 
-    Ok(ListJobRunSummariesResponse {
-        summaries: summaries.into_iter().map(JobRunSummary::from).collect(),
+    Ok(ListJobRunsResponse {
+        runs: runs.into_iter().map(JobRun::from).collect(),
         next_cursor,
     })
 }

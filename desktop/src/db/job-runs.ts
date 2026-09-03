@@ -16,7 +16,7 @@ const options = collectionOptions("job_runs", (client) =>
     queryFn: async (ctx) => {
       const options = parseLoadSubsetOptions(ctx.meta?.loadSubsetOptions);
 
-      const result = await commands.listJobRunSummaries({
+      const result = await commands.listJobRuns({
         cursor: null,
         limit: options.limit ?? DEFAULT_LIMIT,
       });
@@ -29,7 +29,7 @@ const options = collectionOptions("job_runs", (client) =>
       return result.data;
     },
     // https://tanstack.com/db/latest/docs/collections/query-collection#selecting-rows-from-wrapped-responses
-    select: (response) => response.summaries,
+    select: (response) => response.runs,
     getKey: (item) => item.id,
   }),
 );

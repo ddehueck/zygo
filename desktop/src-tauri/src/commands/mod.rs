@@ -3,8 +3,8 @@ mod sync;
 mod types;
 mod workflow_runs;
 
-use types::{JobRunSummary, SyncUpsert, WorkflowRunSummary};
+use types::{JobRun, SyncUpsert, WorkflowRun};
 
-pub use job_runs::list_job_run_summaries;
+pub use job_runs::list_job_runs;
 pub use sync::sync;
-pub use workflow_runs::list_workflow_run_summaries;
+pub use workflow_runs::list_workflow_runs;

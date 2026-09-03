@@ -1,4 +1,4 @@
-import { Circle, type LucideProps } from "lucide-react";
+import { Circle, CircleDashed, type LucideProps } from "lucide-react";
 import { cn } from "../utils";
 
 export type StatusIconStatus = "completed" | "in-progress" | "errored";
@@ -8,16 +8,13 @@ export interface StatusIconProps extends LucideProps {
 }
 
 const statusClasses: Record<StatusIconStatus, string> = {
-  completed: "text-app-success",
-  "in-progress": "text-app-accent motion-safe:animate-pulse",
-  errored: "text-app-danger",
+  completed: "fill-current stroke-none text-app-success",
+  "in-progress": "fill-none stroke-current text-app-accent motion-safe:animate-pulse",
+  errored: "fill-current stroke-none text-app-danger",
 };
 
 export function StatusIcon({ status, className, ...props }: StatusIconProps) {
-  return (
-    <Circle
-      {...props}
-      className={cn("fill-current stroke-none", statusClasses[status], className)}
-    />
-  );
+  const Icon = status === "in-progress" ? CircleDashed : Circle;
+
+  return <Icon {...props} className={cn(statusClasses[status], className)} />;
 }

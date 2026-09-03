@@ -5,8 +5,8 @@ import { invoke as __TAURI_INVOKE, Channel } from "@tauri-apps/api/core";
 /** Commands */
 export const commands = {
 	greet: (name: string, title: string) => __TAURI_INVOKE<string>("greet", { name, title }),
-	listJobRunSummaries: (request: ListJobRunSummariesRequest) => typedError<ListJobRunSummariesResponse, CommandError>(__TAURI_INVOKE("list_job_run_summaries", { request })),
-	listWorkflowRunSummaries: (request: ListWorkflowRunSummariesRequest) => typedError<ListWorkflowRunSummariesResponse, CommandError>(__TAURI_INVOKE("list_workflow_run_summaries", { request })),
+	listJobRuns: (request: ListJobRunsRequest) => typedError<ListJobRunsResponse, CommandError>(__TAURI_INVOKE("list_job_runs", { request })),
+	listWorkflowRuns: (request: ListWorkflowRunsRequest) => typedError<ListWorkflowRunsResponse, CommandError>(__TAURI_INVOKE("list_workflow_runs", { request })),
 	sync: (onEvent: Channel<SyncDelta>) => typedError<null, CommandError>(__TAURI_INVOKE("sync", { onEvent })),
 };
 
@@ -14,10 +14,9 @@ export const commands = {
 /**  The error contract exposed by Tauri commands to the frontend. */
 export type CommandError = { kind: "invalid_input"; field: string; message: string } | { kind: "internal"; code: string; message: string };
 
-export type JobRunSummary = {
+export type JobRun = {
 	id: string,
 	workflow_run_id: string,
-	job_run_id: string,
 	job_id: string,
 	status: string,
 	duration_ms: number | null,
@@ -26,37 +25,38 @@ export type JobRunSummary = {
 	updated_at: string,
 };
 
-export type ListJobRunSummariesRequest = {
+export type ListJobRunsRequest = {
 	cursor: string | null,
 	limit: number,
 };
 
-export type ListJobRunSummariesResponse = {
-	summaries: JobRunSummary[],
+export type ListJobRunsResponse = {
+	runs: JobRun[],
 	next_cursor: string | null,
 };
 
-export type ListWorkflowRunSummariesRequest = {
+export type ListWorkflowRunsRequest = {
 	cursor: string | null,
 	limit: number,
 };
 
-export type ListWorkflowRunSummariesResponse = {
-	summaries: WorkflowRunSummary[],
+export type ListWorkflowRunsResponse = {
+	runs: WorkflowRun[],
 	next_cursor: string | null,
 };
 
 export type SyncDelta = { operation: "resync" } | { operation: "delete"; entity: SyncEntityKind; id: string } | { operation: "upsert"; payload: SyncUpsert };
 
-export type SyncEntityKind = "workflow_run_summary" | "job_run_summary";
+export type SyncEntityKind = "workflow_run" | "job_run";
 
-export type SyncUpsert = { entity: "workflow_run_summary"; id: string; data: WorkflowRunSummary } | { entity: "job_run_summary"; id: string; data: JobRunSummary };
+export type SyncUpsert = { entity: "workflow_run"; id: string; data: WorkflowRun } | { entity: "job_run"; id: string; data: JobRun };
 
-export type WorkflowRunSummary = {
-	workflow_run_id: string,
+export type WorkflowRun = {
+	id: string,
+	workflow_id: string,
 	status: string,
-	started_at: number | null,
-	completed_at: number | null,
+	started_at: string | null,
+	completed_at: string | null,
 	active_job_count: number,
 	succeeded_job_count: number,
 	errored_job_count: number,

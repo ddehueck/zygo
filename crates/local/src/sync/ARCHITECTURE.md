@@ -12,8 +12,8 @@ A client will subscribe to a broker that will hold a connection to the server. T
 All clients will mirror the same normalized collections we have in the local db file. Then using tools like TanstackDB the client can decide the particular projection of data it needs to best serve it's usecase. This creates a clear separation between the client's unique data needs and the local crate's core concerns.
 
 Right now we have two:
-- Workflow Run Summary
-- Job Run Summary
+- Workflow Run
+- Job Run
 
 ## Implementation
 

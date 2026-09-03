@@ -69,13 +69,13 @@ mod tests {
         let batch = DeltaBatch::new(
             4,
             vec![
-                upsert(SyncEntity::WorkflowRunSummary, "run-1", "started"),
-                upsert(SyncEntity::WorkflowRunSummary, "run-2", "started"),
+                upsert(SyncEntity::WorkflowRun, "run-1", "started"),
+                upsert(SyncEntity::WorkflowRun, "run-2", "started"),
                 Delta::Delete {
-                    entity: SyncEntity::WorkflowRunSummary,
+                    entity: SyncEntity::WorkflowRun,
                     id: "run-1".to_owned(),
                 },
-                upsert(SyncEntity::WorkflowRunSummary, "run-2", "completed"),
+                upsert(SyncEntity::WorkflowRun, "run-2", "completed"),
             ],
         );
 
@@ -84,10 +84,10 @@ mod tests {
             batch.deltas,
             vec![
                 Delta::Delete {
-                    entity: SyncEntity::WorkflowRunSummary,
+                    entity: SyncEntity::WorkflowRun,
                     id: "run-1".to_owned(),
                 },
-                upsert(SyncEntity::WorkflowRunSummary, "run-2", "completed"),
+                upsert(SyncEntity::WorkflowRun, "run-2", "completed"),
             ]
         );
     }

@@ -1,8 +1,9 @@
 import { useLiveQuery } from "@tanstack/react-db";
+import dayjs from "dayjs";
 import { useEffect, useState, type ReactNode } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import type { WorkflowRunSummary } from "../../bindings";
-import { workflowRuns } from "../../db/workflow-run-summaries";
+import type { WorkflowRun } from "../../bindings";
+import { workflowRuns } from "../../db/workflow-runs";
 
 export const Route = createFileRoute("/runs/$workflowRunId")({
   beforeLoad: ({ params }) => ({
@@ -19,7 +20,7 @@ function RunRoute() {
   const { data: runs, isLoading, isError, status } = useLiveQuery({
     query: (q) => q.from({ workflowRun: workflowRuns }),
   });
-  const workflowRun = runs.find((run) => run.workflow_run_id === workflowRunId);
+  const workflowRun = runs.find((run) => run.id === workflowRunId);
   const isActive =
     workflowRun !== undefined && (workflowRun.status === "running" || workflowRun.active_job_count > 0);
   const now = useLiveClock(isActive);
@@ -71,7 +72,7 @@ function RunDetails({
   isActive,
   now,
 }: {
-  workflowRun: WorkflowRunSummary;
+  workflowRun: WorkflowRun;
   isActive: boolean;
   now: number;
 }) {
@@ -88,7 +89,7 @@ function RunDetails({
       <header>
         <p className="mb-2 text-sm font-medium uppercase tracking-wide text-app-foreground-muted">Run details</p>
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="font-mono text-2xl font-semibold tracking-tight text-app-foreground">{workflowRun.workflow_run_id}</h1>
+          <h1 className="font-mono text-2xl font-semibold tracking-tight text-app-foreground">{workflowRun.id}</h1>
           <StatusBadge status={workflowRun.status} />
         </div>
         <p className="mt-2 text-app-foreground-muted">General information and job counts for this workflow run.</p>
@@ -97,7 +98,7 @@ function RunDetails({
       <section className="rounded-lg border border-app-border bg-app-bg-elevated p-5" aria-labelledby="run-information-heading">
         <h2 id="run-information-heading" className="text-lg font-semibold text-app-foreground">General information</h2>
         <dl className="mt-5 grid gap-5 sm:grid-cols-2">
-          <InfoItem label="Workflow run ID" value={workflowRun.workflow_run_id} mono />
+          <InfoItem label="Workflow run ID" value={workflowRun.id} mono />
           <InfoItem label="Status" value={statusLabel(workflowRun.status)} />
           <InfoItem label="Created" value={formatDate(workflowRun.created_at)} />
           <InfoItem label="Started" value={formatDate(workflowRun.started_at)} />
@@ -165,37 +166,38 @@ function statusClasses(status: string): string {
   }
 }
 
-function formatDate(value: string | number | null): string {
+function formatDate(value: string | null): string {
   if (value === null) {
     return "—";
   }
 
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? String(value)
-    : new Intl.DateTimeFormat(undefined, {
-        dateStyle: "medium",
-        timeStyle: "short",
-      }).format(date);
+  const date = dayjs(value);
+  return date.isValid() ? date.format("MMM D, YYYY h:mm A") : value;
 }
 
-function formatWorkflowDuration(startedAt: number | null, completedAt: number | null, now: number): string {
+function formatWorkflowDuration(startedAt: string | null, completedAt: string | null, now: number): string {
   if (startedAt === null) {
     return "—";
   }
 
-  return formatDuration(Math.max(0, (completedAt ?? now) - startedAt));
+  const startedAtDate = dayjs(startedAt);
+  const completedAtDate = completedAt === null ? dayjs(now) : dayjs(completedAt);
+  if (!startedAtDate.isValid() || !completedAtDate.isValid()) {
+    return "—";
+  }
+
+  return formatDuration(Math.max(0, completedAtDate.diff(startedAtDate)));
 }
 
 function useLiveClock(enabled: boolean): number {
-  const [now, setNow] = useState(() => Date.now());
+  const [now, setNow] = useState(() => dayjs().valueOf());
 
   useEffect(() => {
     if (!enabled) {
       return;
     }
 
-    const interval = setInterval(() => setNow(Date.now()), 1000);
+    const interval = setInterval(() => setNow(dayjs().valueOf()), 1000);
     return () => clearInterval(interval);
   }, [enabled]);
 

@@ -1,46 +1,18 @@
-use std::{io, path::PathBuf};
+use std::io;
+use std::path::PathBuf;
 
 use anyhow::Result;
-use serde_json::Value;
+use zygo_core::Zygo;
+use zygo_core::models::{DataReference, WorkflowRunId, WorkflowSchema};
 
-use zygo_core::{
-    Zygo,
-    models::{DataReference, WorkflowRunId, WorkflowSchema},
-    store::StorageProvider,
+use crate::ZygoLocalConfig;
+use crate::db::{
+    CdcRepository, Db, JobRunRepository, KvRepository, TagsRepository, WorkflowRunRepository,
+    WorkflowRunRow,
 };
-
-use crate::{
-    ZygoLocalConfig,
-    db::{
-        CdcRepository, Db, JobRunSummaryRepository, KvRepository, WorkflowRunRepository,
-        WorkflowRunRow, WorkflowRunSummaryRepository,
-    },
-    paths,
-    repos::Repos,
-    stream_processor::LocalStreamProcessor,
-};
-
-const WORKFLOW_ID_TAG_NAME: &str = "sys.workflow";
-
-impl StorageProvider for KvRepository {
-    async fn put(&self, entries: &[(&str, &Value)]) -> Result<()> {
-        self.upsert_many(entries).await?;
-        Ok(())
-    }
-
-    async fn get(&self, key: &str) -> Result<Option<Value>> {
-        Ok(self.get_by_key(key).await?.map(|entry| entry.value))
-    }
-
-    async fn get_many(&self, keys: &[&str]) -> Result<Vec<Option<Value>>> {
-        let mut values = Vec::with_capacity(keys.len());
-        for key in keys {
-            values.push(self.get(key).await?);
-        }
-
-        Ok(values)
-    }
-}
+use crate::paths;
+use crate::repos::Repos;
+use crate::stream_processor::LocalStreamProcessor;
 
 pub struct ZygoLocalService {
     pub base: Zygo<KvRepository>,
@@ -59,11 +31,13 @@ impl ZygoLocalService {
     pub async fn new(config: ZygoLocalConfig) -> Result<Self> {
         let path = Self::database_path()?.to_string_lossy().into_owned();
         let database = Db::open(&path, config.database_busy_timeout, true).await?;
+
         let cdc = CdcRepository::new(database.clone());
+        let tags = TagsRepository::new(database.clone());
         let workflow_runs = WorkflowRunRepository::new(database.clone());
-        let workflow_run_summaries = WorkflowRunSummaryRepository::new(database.clone());
-        let job_run_summaries = JobRunSummaryRepository::new(database.clone());
+        let job_runs = JobRunRepository::new(database.clone());
         let kv = KvRepository::new(database);
+
         let store = zygo_core::store::Store::new(kv.clone());
 
         Ok(Self {
@@ -71,9 +45,9 @@ impl ZygoLocalService {
             repos: Repos {
                 cdc,
                 kv,
+                tags,
                 workflow_runs,
-                workflow_run_summaries,
-                job_run_summaries,
+                job_runs,
             },
         })
     }
@@ -103,12 +77,7 @@ impl ZygoLocalService {
         // we save the workflow id as a tag so we can filter runs by workflow
         self.repos
             .workflow_runs
-            .insert(
-                &workflow_run_id.to_string(),
-                &workflow_id,
-                &content_hash,
-                &[(WORKFLOW_ID_TAG_NAME, workflow_id.as_str())],
-            )
+            .insert(&workflow_run_id.to_string(), &workflow_id, &content_hash)
             .await?;
 
         self.base.run_many(&workflow_run_id, inputs, schema).await?;
@@ -125,6 +94,7 @@ impl ZygoLocalService {
     }
 
     // todo: don't love that this is here. There's a repository/deps refactor brewing.
+    // this requires a cli tui rewrite which is also brewing
     pub async fn list_workflow_runs(
         &self,
         filter: Option<(&str, &str)>,

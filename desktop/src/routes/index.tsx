@@ -1,11 +1,11 @@
 import { useLiveQuery } from "@tanstack/react-db";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import type { WorkflowRunSummary } from "../bindings";
+import type { WorkflowRun } from "../bindings";
 import { Cell, Column, Row, Table, TableBody, TableHeader } from "../components/Table";
 import { Icons } from "../components/icons";
 import { MainContentLayout } from "../components/layout/MainContentLayout";
 import { useDuration } from "../hooks/use-duration";
-import { workflowRuns } from "../db/workflow-run-summaries";
+import { workflowRuns } from "../db/workflow-runs";
 
 export const Route = createFileRoute("/")({
   beforeLoad: () => ({
@@ -98,7 +98,7 @@ function IndexRoute() {
             <TableBody items={runs}>
               {(workflowRun) => (
                 <WorkflowRunRow
-                  id={workflowRun.workflow_run_id}
+                  id={workflowRun.id}
                   workflowRun={workflowRun}
                 />
               )}
@@ -122,7 +122,7 @@ function WorkflowRunRow({
   workflowRun,
 }: {
   id: string;
-  workflowRun: WorkflowRunSummary;
+  workflowRun: WorkflowRun;
 }) {
   const totalJobs =
     workflowRun.active_job_count + workflowRun.succeeded_job_count + workflowRun.errored_job_count;
@@ -134,16 +134,16 @@ function WorkflowRunRow({
   return (
     <Row
       id={id}
-      textValue={`${workflowRun.workflow_run_id} ${statusLabel(workflowRun.status)} ${totalJobs} jobs`}
+      textValue={`${workflowRun.id} ${statusLabel(workflowRun.status)} ${totalJobs} jobs`}
     >
-      <Cell textValue={workflowRun.workflow_run_id}>
+      <Cell textValue={workflowRun.id}>
         <div className="flex min-w-64 items-center gap-3 py-1">
           <StatusIcon status={workflowRun.status} />
           <div className="min-w-0">
             <p
               className="truncate font-mono text-base font-semibold tracking-tight text-app-foreground"
             >
-              …{shortRunId(workflowRun.workflow_run_id)}
+              {workflowRun.workflow_id} <span className="text-app font-normal -foreground-muted">({shortRunId(workflowRun.id)})</span>
             </p>
 
           </div>
@@ -260,4 +260,3 @@ function shortRunId(workflowRunId: string): string {
 function statusLabel(status: string): string {
   return status.replace(/_/g, " ");
 }
-

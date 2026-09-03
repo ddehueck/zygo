@@ -6,8 +6,8 @@ use super::{Error, Result};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SyncEntity {
-    WorkflowRunSummary,
-    JobRunSummary,
+    WorkflowRun,
+    JobRun,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -29,8 +29,8 @@ impl TryFrom<CdcRow> for Delta {
 
     fn try_from(row: CdcRow) -> Result<Self> {
         let entity = match row.table_name.as_str() {
-            "workflow_run_summary" => SyncEntity::WorkflowRunSummary,
-            "job_run_summary" => SyncEntity::JobRunSummary,
+            "workflow_runs" => SyncEntity::WorkflowRun,
+            "job_runs" => SyncEntity::JobRun,
             table_name => return Err(Error::UnsupportedTable(table_name.to_owned())),
         };
 
@@ -93,32 +93,32 @@ mod tests {
     #[test]
     fn converts_supported_table_to_upsert() {
         let delta = Delta::try_from(cdc_row(
-            "workflow_run_summary",
+            "workflow_runs",
             CdcChangeType::Update,
-            Some(json!({"workflow_run_id": "run-1"})),
+            Some(json!({"id": "run-1"})),
         ))
         .expect("supported CDC row should convert");
 
         match delta {
             Delta::Upsert { entity, data, .. } => {
-                assert!(matches!(entity, SyncEntity::WorkflowRunSummary));
-                assert_eq!(data, json!({"workflow_run_id": "run-1"}));
+                assert!(matches!(entity, SyncEntity::WorkflowRun));
+                assert_eq!(data, json!({"id": "run-1"}));
             }
             _ => panic!("expected an upsert delta"),
         }
     }
 
     #[test]
-    fn rejects_workflow_runs_as_an_unsupported_table() {
+    fn rejects_legacy_workflow_run_table() {
         let result = Delta::try_from(cdc_row(
-            "workflow_runs",
+            "workflow_run_summary",
             CdcChangeType::Insert,
             Some(json!({"id": "run-1"})),
         ));
 
         assert!(matches!(
             result,
-            Err(Error::UnsupportedTable(table_name)) if table_name == "workflow_runs"
+            Err(Error::UnsupportedTable(table_name)) if table_name == "workflow_run_summary"
         ));
     }
 

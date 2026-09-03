@@ -9,7 +9,7 @@ use crate::sync::batch::DeltaBatch;
 use crate::sync::error::Result;
 use crate::sync::schema::Delta;
 
-const SYNC_TABLES: [&str; 2] = ["workflow_run_summary", "job_run_summary"];
+const SYNC_TABLES: [&str; 2] = ["workflow_runs", "job_runs"];
 
 #[derive(Clone)]
 pub struct SyncSubscription {

@@ -16,7 +16,7 @@ const options = collectionOptions("workflow_runs", (client) =>
     queryFn: async (ctx) => {
       const options = parseLoadSubsetOptions(ctx.meta?.loadSubsetOptions);
 
-      const result = await commands.listWorkflowRunSummaries({
+      const result = await commands.listWorkflowRuns({
         cursor: null,
         limit: options.limit ?? DEFAULT_LIMIT,
       });
@@ -29,8 +29,8 @@ const options = collectionOptions("workflow_runs", (client) =>
       return result.data;
     },
     // https://tanstack.com/db/latest/docs/collections/query-collection#selecting-rows-from-wrapped-responses
-    select: (response) => response.summaries,
-    getKey: (item) => item.workflow_run_id,
+    select: (response) => response.runs,
+    getKey: (item) => item.id,
   }),
 );
 
