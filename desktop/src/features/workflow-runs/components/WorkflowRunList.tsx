@@ -2,14 +2,13 @@ import { useHotkey } from "@tanstack/react-hotkeys";
 import { useNavigate } from "@tanstack/react-router";
 
 import { useRef } from "react";
-import { GridList, GridListItem } from "../../../components/GridList";
-import { sum } from "../../../lib/math";
-import { useDuration } from "../../../hooks/use-duration";
-import { shortRunId } from "../lib/id";
-import { JobCountsBadge } from "./JobCountsBadge";
-import { TagOverflowList } from "../../tags/components/TagOverflowList";
-import { Icons } from "../../../components/icons";
-import type { useWorkflowRunsListData } from "../hooks/use-workflow-runs-list-data";
+import { GridList, GridListItem } from "@/components/GridList";
+import { useDuration } from "@/hooks/use-duration";
+import { shortRunId } from "@/features/workflow-runs/lib/id";
+import { JobCountsBadge } from "@/features/workflow-runs/components/JobCountsBadge";
+import { TagOverflowList } from "@/features/tags/components/TagOverflowList";
+import { Icons } from "@/components/icons";
+import type { useWorkflowRunsListData } from "@/features/workflow-runs/hooks/use-workflow-runs-list-data";
 
 type WorkflowRunListData = ReturnType<typeof useWorkflowRunsListData>["data"];
 
@@ -59,7 +58,7 @@ function WorkflowRunItem({ id, item }: { id: string; item: WorkflowRunListRow })
 
   return (
     <GridListItem id={id} textValue={textValue}>
-      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,2fr)_8rem_4rem] items-center gap-6 px-1.5">
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,2fr)_6rem_max-content] items-center gap-4 px-1.5">
         <div className="flex min-w-0 items-center gap-3 py-1">
           <StatusIcon status={workflowRun.status} />
           <p className="min-w-0 truncate font-mono text-base font-semibold tracking-tight text-app-foreground">
@@ -74,18 +73,18 @@ function WorkflowRunItem({ id, item }: { id: string; item: WorkflowRunListRow })
           <TagOverflowList tags={tags} />
         </div>
 
-        <div className="flex justify-end">
-          <div className="flex flex-1 items-center justify-start">
-            <JobCountsBadge
-              activeJobCount={workflowRun.active_job_count}
-              succeededJobCount={workflowRun.succeeded_job_count}
-              erroredJobCount={workflowRun.errored_job_count}
-            />
-          </div>
+        <div className="flex min-w-0 justify-end">
+          <p className="w-full text-right font-mono text-sm text-app-foreground-muted">
+            {duration ?? "—"}
+          </p>
         </div>
 
-        <div className="flex justify-end py-1">
-          <p className="font-mono text-xs text-app-foreground">{duration ?? "—"}</p>
+        <div className="flex min-w-0 justify-end">
+          <JobCountsBadge
+            activeJobCount={workflowRun.active_job_count}
+            succeededJobCount={workflowRun.succeeded_job_count}
+            erroredJobCount={workflowRun.errored_job_count}
+          />
         </div>
       </div>
     </GridListItem>

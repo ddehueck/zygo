@@ -14,12 +14,12 @@ export function TagBadge({ name, value, includeIcon = false }: TagBadgeProps) {
     <span
       title={`${name}: ${displayValue}`}
       aria-label={`${name}: ${displayValue}`}
-      className="inline-flex max-w-full shrink-0 items-center rounded-md border border-app-border bg-app-bg-surface px-2 py-1 font-mono text-xs leading-none whitespace-nowrap"
+      className="inline-flex max-w-full shrink-0 items-center rounded-md border border-app-border bg-app-bg-surface px-1 py-1 font-mono text-xs leading-none whitespace-nowrap"
     >
       {includeIcon && (
         <Icons.Tag
           aria-hidden="true"
-          className="size-3 shrink-0 pr-0.5 text-app-accent"
+          className="size-3 shrink-0 fill-current pr-0.75 text-app-accent [&>circle]:fill-app-bg-surface [&>circle]:stroke-app-bg-surface"
           strokeWidth={2}
         />
       )}
