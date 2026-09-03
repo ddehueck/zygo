@@ -1,10 +1,10 @@
 import { useLiveQuery } from "@tanstack/react-db";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import type { WorkflowRun } from "../bindings";
-import { Cell, Column, Row, Table, TableBody, TableHeader } from "../components/Table";
+import { GridList, GridListItem } from "../components/GridList";
 import { Icons } from "../components/icons";
-import { MainContentLayout } from "../components/layout/MainContentLayout";
 import { useDuration } from "../hooks/use-duration";
+import { sum } from "../lib/math";
 import { workflowRuns } from "../db/workflow-runs";
 import { JobCountsBadge } from "../features/workflow-runs/components/JobCountsBadge";
 import { shortRunId } from "../features/workflow-runs/lib/id";
@@ -19,12 +19,6 @@ export const Route = createFileRoute("/")({
   }),
   component: IndexRoute,
 });
-
-const columns = [
-  { id: "run", name: "Workflow run" },
-  { id: "jobs", name: "Jobs" },
-  { id: "duration", name: "Duration" },
-] as const;
 
 function IndexRoute() {
   const {
@@ -43,7 +37,6 @@ function IndexRoute() {
   return (
     <BreadcrumbHeaderLayout>
       <main className="flex w-full flex-col gap-6">
-
         {isLoading && <p className="px-6 text-app-foreground-muted">Loading workflow runs…</p>}
         {isError && (
           <p
@@ -55,29 +48,18 @@ function IndexRoute() {
         )}
 
         {runs.length > 0 ? (
-          <Table
+          <GridList
             aria-label="Workflow runs"
-            onRowAction={(key) =>
+            items={runs}
+            onAction={(key) =>
               navigate({
                 to: "/runs/$workflowRunId",
                 params: { workflowRunId: String(key) },
               })
             }
           >
-            <TableHeader
-              columns={columns}
-              className="h-0 overflow-hidden [&>tr]:h-0 [&>tr>th]:h-0 [&>tr>th]:border-0 [&>tr>th]:p-0 [&>tr>th>*]:hidden"
-            >
-              {(column) => (
-                <Column id={column.id} isRowHeader={column.id === "run"}>
-                  {column.name}
-                </Column>
-              )}
-            </TableHeader>
-            <TableBody items={runs}>
-              {(workflowRun) => <WorkflowRunRow id={workflowRun.id} workflowRun={workflowRun} />}
-            </TableBody>
-          </Table>
+            {(workflowRun) => <WorkflowRunItem id={workflowRun.id} workflowRun={workflowRun} />}
+          </GridList>
         ) : (
           !isLoading &&
           !isError && (
@@ -91,45 +73,47 @@ function IndexRoute() {
   );
 }
 
-function WorkflowRunRow({ id, workflowRun }: { id: string; workflowRun: WorkflowRun }) {
-  const totalJobs =
-    workflowRun.active_job_count + workflowRun.succeeded_job_count + workflowRun.errored_job_count;
+function WorkflowRunItem({ id, workflowRun }: { id: string; workflowRun: WorkflowRun }) {
+  const totalJobs = sum([
+    workflowRun.active_job_count,
+    workflowRun.succeeded_job_count,
+    workflowRun.errored_job_count,
+  ]);
+
   const duration = useDuration({
     startedAt: workflowRun.started_at,
     completedAt: workflowRun.completed_at,
   });
 
   return (
-    <Row
+    <GridListItem
       id={id}
       textValue={`${workflowRun.id} ${statusLabel(workflowRun.status)} ${totalJobs} jobs`}
     >
-      <Cell textValue={workflowRun.id}>
-        <div className="flex min-w-64 items-center gap-3 py-1">
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-6">
+        <div className="flex min-w-0 items-center gap-3 py-1 pl-1.5">
           <StatusIcon status={workflowRun.status} />
           <div className="min-w-0">
             <p className="truncate font-mono text-base font-semibold tracking-tight text-app-foreground">
-              {workflowRun.workflow_id}{" "}
-              <span className="text-app font-normal -foreground-muted">
+              <span className="text-app -foreground-muted font-normal">
                 ({shortRunId(workflowRun.id)})
-              </span>
+              </span>{" "}
+              {workflowRun.workflow_id}
             </p>
           </div>
         </div>
-      </Cell>
-      <Cell textValue={`${totalJobs} total jobs`}>
-        <JobCountsBadge
-          activeJobCount={workflowRun.active_job_count}
-          succeededJobCount={workflowRun.succeeded_job_count}
-          erroredJobCount={workflowRun.errored_job_count}
-        />
-      </Cell>
-      <Cell textValue={duration ?? ""}>
-        <div className="py-1">
+        <div className="flex justify-end">
+          <JobCountsBadge
+            activeJobCount={workflowRun.active_job_count}
+            succeededJobCount={workflowRun.succeeded_job_count}
+            erroredJobCount={workflowRun.errored_job_count}
+          />
+        </div>
+        <div className="flex justify-end py-1 pr-1.5">
           <p className="font-mono text-sm text-app-foreground">{duration ?? "—"}</p>
         </div>
-      </Cell>
-    </Row>
+      </div>
+    </GridListItem>
   );
 }
 
@@ -138,7 +122,7 @@ function StatusIcon({ status }: { status: string }) {
     <span
       role="img"
       aria-label={statusLabel(status)}
-      className="flex size-5 shrink-0 items-center justify-center"
+      className="flex size-3 shrink-0 items-center justify-center"
     >
       <StatusGlyph status={status} className="size-5" />
     </span>
@@ -160,8 +144,6 @@ function StatusGlyph({ status, className }: { status: string; className: string 
       return null;
   }
 }
-
-
 
 function statusLabel(status: string): string {
   return status.replace(/_/g, " ");

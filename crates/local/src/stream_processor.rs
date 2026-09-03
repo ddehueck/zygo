@@ -1,13 +1,12 @@
 use std::collections::HashMap;
 use std::time::SystemTime;
 
-use chrono::{DateTime, SecondsFormat, Utc};
 use zygo_core::engine::RunCursor;
 use zygo_core::models::{EventKind, StreamItem, WorkflowRunId, WorkflowRunStatus};
 use zygo_core::stream::{ReadResult, StreamReader};
 
-use crate::Repos;
 use crate::db::KvRepository;
+use crate::{Repos, format_database_timestamp};
 
 /// Processes workflow stream records and projects local read models.
 /// While still exposing the underlying stream for local clients. e.g. ui updates.
@@ -42,7 +41,7 @@ impl LocalStreamProcessor {
 
         let workflow_run_id = self.workflow_run_id.to_string();
         let timestamp = event.timestamp;
-        let timestamp_value = timestamp_string(timestamp);
+        let timestamp_value = format_database_timestamp(timestamp);
 
         match &event.kind {
             EventKind::JobStarted(data) => {
@@ -168,8 +167,4 @@ impl LocalStreamProcessor {
 
         Ok(())
     }
-}
-
-fn timestamp_string(timestamp: SystemTime) -> String {
-    DateTime::<Utc>::from(timestamp).to_rfc3339_opts(SecondsFormat::Millis, true)
 }

@@ -1,3 +1,5 @@
+import { cn } from "tailwind-variants";
+
 interface JobCountsBadgeProps {
   activeJobCount: number;
   succeededJobCount: number;
@@ -37,10 +39,10 @@ export function JobCountsBadge({
         <span
           key={label}
           aria-label={`${label}: ${formatJobCount(value)}`}
-          className="inline-flex items-center gap-2 font-semibold leading-none tracking-tight text-app-foreground"
+          className="inline-flex items-center gap-2 leading-none tracking-tight text-app-foreground"
         >
           <span aria-hidden="true" className={`size-2 shrink-0 rounded-full ${dotClassName}`} />
-          <span className={valueClassName}>{formatJobCount(value)}</span>
+          <span className={cn("font-mono", valueClassName)}>{formatJobCount(value)}</span>
         </span>
       ))}
     </div>

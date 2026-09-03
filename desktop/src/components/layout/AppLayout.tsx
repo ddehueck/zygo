@@ -18,7 +18,7 @@ function Titlebar() {
   return (
     <div
       className={cn(
-        "flex h-10 shrink-0 w-full select-none items-center justify-start bg-transparent text-xs font-medium text-app-foreground",
+        "flex h-10 w-full shrink-0 items-center justify-start bg-transparent text-xs font-medium text-app-foreground select-none",
         MAC_STOP_LIGHT_PADDING_CLS,
       )}
       data-tauri-drag-region
@@ -30,7 +30,7 @@ function Titlebar() {
 
 function Bottombar() {
   return (
-    <div className="flex h-7 shrink-0 px-1 w-full select-none items-center justify-start bg-transparent text-xs font-medium text-app-foreground">
+    <div className="flex h-7 w-full shrink-0 items-center justify-start bg-transparent px-0.5 text-xs font-medium text-app-foreground select-none">
       <ThemeToggle size={14} />
     </div>
   );

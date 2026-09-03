@@ -9,7 +9,7 @@ export const Icons = {
   Completed: statusIcon("completed"),
   InProgress: statusIcon("in-progress"),
   Errored: statusIcon("errored"),
-  Tag: Tag
+  Tag: Tag,
 };
 
 export { StatusIcon };

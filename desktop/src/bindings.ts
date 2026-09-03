@@ -4,73 +4,86 @@ import { invoke as __TAURI_INVOKE, Channel } from "@tauri-apps/api/core";
 
 /** Commands */
 export const commands = {
-	greet: (name: string, title: string) => __TAURI_INVOKE<string>("greet", { name, title }),
-	listJobRuns: (request: ListJobRunsRequest) => typedError<ListJobRunsResponse, CommandError>(__TAURI_INVOKE("list_job_runs", { request })),
-	listWorkflowRuns: (request: ListWorkflowRunsRequest) => typedError<ListWorkflowRunsResponse, CommandError>(__TAURI_INVOKE("list_workflow_runs", { request })),
-	sync: (onEvent: Channel<SyncDelta>) => typedError<null, CommandError>(__TAURI_INVOKE("sync", { onEvent })),
+  greet: (name: string, title: string) => __TAURI_INVOKE<string>("greet", { name, title }),
+  listJobRuns: (request: ListJobRunsRequest) =>
+    typedError<ListJobRunsResponse, CommandError>(__TAURI_INVOKE("list_job_runs", { request })),
+  listWorkflowRuns: (request: ListWorkflowRunsRequest) =>
+    typedError<ListWorkflowRunsResponse, CommandError>(
+      __TAURI_INVOKE("list_workflow_runs", { request }),
+    ),
+  sync: (onEvent: Channel<SyncDelta>) =>
+    typedError<null, CommandError>(__TAURI_INVOKE("sync", { onEvent })),
 };
 
 /* Types */
 /**  The error contract exposed by Tauri commands to the frontend. */
-export type CommandError = { kind: "invalid_input"; field: string; message: string } | { kind: "internal"; code: string; message: string };
+export type CommandError =
+  | { kind: "invalid_input"; field: string; message: string }
+  | { kind: "internal"; code: string; message: string };
 
 export type JobRun = {
-	id: string,
-	workflow_run_id: string,
-	job_id: string,
-	status: string,
-	duration_ms: number | null,
-	retry_count: number,
-	created_at: string,
-	updated_at: string,
+  id: string;
+  workflow_run_id: string;
+  job_id: string;
+  status: string;
+  duration_ms: number | null;
+  retry_count: number;
+  created_at: string;
+  updated_at: string;
 };
 
 export type ListJobRunsRequest = {
-	cursor: string | null,
-	limit: number,
+  cursor: string | null;
+  limit: number;
 };
 
 export type ListJobRunsResponse = {
-	runs: JobRun[],
-	next_cursor: string | null,
+  runs: JobRun[];
+  next_cursor: string | null;
 };
 
 export type ListWorkflowRunsRequest = {
-	cursor: string | null,
-	limit: number,
+  cursor: string | null;
+  limit: number;
 };
 
 export type ListWorkflowRunsResponse = {
-	runs: WorkflowRun[],
-	next_cursor: string | null,
+  runs: WorkflowRun[];
+  next_cursor: string | null;
 };
 
-export type SyncDelta = { operation: "resync" } | { operation: "delete"; entity: SyncEntityKind; id: string } | { operation: "upsert"; payload: SyncUpsert };
+export type SyncDelta =
+  | { operation: "resync" }
+  | { operation: "delete"; entity: SyncEntityKind; id: string }
+  | { operation: "upsert"; payload: SyncUpsert };
 
 export type SyncEntityKind = "workflow_run" | "job_run";
 
-export type SyncUpsert = { entity: "workflow_run"; id: string; data: WorkflowRun } | { entity: "job_run"; id: string; data: JobRun };
+export type SyncUpsert =
+  | { entity: "workflow_run"; id: string; data: WorkflowRun }
+  | { entity: "job_run"; id: string; data: JobRun };
 
 export type WorkflowRun = {
-	id: string,
-	workflow_id: string,
-	status: string,
-	started_at: string | null,
-	completed_at: string | null,
-	active_job_count: number,
-	succeeded_job_count: number,
-	errored_job_count: number,
-	created_at: string,
-	updated_at: string,
+  id: string;
+  workflow_id: string;
+  status: string;
+  started_at: string | null;
+  completed_at: string | null;
+  active_job_count: number;
+  succeeded_job_count: number;
+  errored_job_count: number;
+  created_at: string;
+  updated_at: string;
 };
 
 /* Tauri Specta runtime */
-async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {
-    try {
-        return { status: "ok", data: await result };
-    } catch (e) {
-        if (e instanceof Error) throw e;
-        return { status: "error", error: e as any };
-    }
+async function typedError<T, E>(
+  result: Promise<T>,
+): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {
+  try {
+    return { status: "ok", data: await result };
+  } catch (e) {
+    if (e instanceof Error) throw e;
+    return { status: "error", error: e as any };
+  }
 }
-
