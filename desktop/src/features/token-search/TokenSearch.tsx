@@ -10,9 +10,9 @@
 import { Autocomplete } from "react-aria-components/Autocomplete";
 import { Text } from "react-aria-components/Text";
 import { Token, TokenField } from "./TokenField";
-import { TokenFieldValue } from "react-aria-components/TokenField";
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { ListBox, ListBoxItem } from "@/components/ListBox";
+import { WorkflowSearchTokenValue } from "./workflow-search-token-value";
 
 type Item = { username: string } | { command: string; description: string };
 
@@ -56,39 +56,29 @@ export function TokenSearch() {
   let inputRef = useRef<HTMLDivElement>(null);
 
   let [value, setValue] = useState(
-    new TokenFieldValue([
-      { type: "text", text: "This example has autocomplete for " },
-      { type: "token", text: "@usernames" },
-      { type: "text", text: " and " },
-      { type: "token", text: "/commands" },
-    ]),
+    new WorkflowSearchTokenValue([
+      { type: "token", text: "@workflow:name", value: "workflow" },
+      { type: "text", text: " " },
+      { type: "token", text: "@tag:name", value: "tag" },
+      { type: "text", text: " " },
+    ]).withCaretPosition({ index: 3, offset: 1 }),
   );
 
-  let [filterAnchor, filterValue] = useMemo(() => {
-    let currentPosition = value.selectedRange.current;
-    let filterAnchor = value.findText(
-      currentPosition,
-      TokenFieldValue.Direction.Backward,
-      /(?<=^|\s)[@/]/,
-    );
-    if (filterAnchor != null) {
-      let filterValue = value.slice(filterAnchor, currentPosition).toString();
-      return [filterAnchor, filterValue];
-    }
-    return [null, null];
-  }, [value]);
+  let activeFilter = value.getActiveFilter();
+  let filterAnchor = activeFilter?.anchor ?? null;
+  let filterValue = activeFilter?.value ?? null;
 
-  let items: Item[] = [];
+  // TODO: This should be a hook that accepts the token field value class instance
+  // we'll include default suggestions and suggestions relative to the current value
+  let suggestions: Item[] = [];
   if (filterValue != null && filterValue.startsWith("/")) {
-    items = slashCommands.filter((item) => item.command.includes(filterValue.slice(1)));
+    suggestions = slashCommands.filter((item) => item.command.includes(filterValue.slice(1)));
   } else if (filterValue != null && filterValue.startsWith("@")) {
-    items = usernames.filter((item) => item.username.includes(filterValue.slice(1)));
+    suggestions = usernames.filter((item) => item.username.includes(filterValue.slice(1)));
   }
 
   let insertItem = (item: Item) => {
-    if (filterAnchor == null) {
-      return;
-    }
+    if (filterAnchor == null) return;
 
     setValue((value) =>
       value.replaceRangeWithSegments(
@@ -107,57 +97,56 @@ export function TokenSearch() {
   };
 
   return (
-    <Autocomplete>
-      <TokenField
-        value={value}
-        onChange={setValue}
-        onKeyDown={(event) => {
-          // Multiline token inputs otherwise insert a newline after selecting a suggestion.
-          if (
-            event.key === "Enter" &&
-            inputRef.current?.getAttribute("aria-activedescendant") != null
-          ) {
-            event.preventDefault();
-          }
-        }}
-        allowsNewlines
-        inputRef={inputRef}
-      >
-        {(segment) => <Token>{segment.text}</Token>}
-      </TokenField>
-      <ListBox
-        items={items}
-        dependencies={[filterAnchor]}
-        layout="stack"
-        orientation="vertical"
-        style={{ flexDirection: "row", overflowX: "auto" }}
-        selectionMode="single"
-        shouldFocusWrap
-        selectedKeys={[]}
-        onSelectionChange={(keys) => {
-          if (keys === "all") {
-            return;
-          }
+    <div className="p-2">
+      <Autocomplete>
+        <TokenField
+          value={value}
+          onChange={setValue}
+          inputRef={inputRef}
+          aria-label="Search workflow runs"
+          onKeyDown={(event) => {
+            // Multiline token inputs otherwise insert a newline after selecting a suggestion.
+            if (
+              event.key === "Enter" &&
+              inputRef.current?.getAttribute("aria-activedescendant") != null
+            ) {
+              event.preventDefault();
+            }
+          }}
+        >
+          {(segment) => <Token>{segment.text}</Token>}
+        </TokenField>
+        <ListBox
+          items={suggestions}
+          dependencies={[filterAnchor]}
+          layout="stack"
+          orientation="vertical"
+          style={{ flexDirection: "row", overflowX: "auto" }}
+          className={"w-full scrollbar-none"}
+          selectionMode="single"
+          selectedKeys={[]}
+          onSelectionChange={(keys) => {
+            if (keys === "all") return;
 
-          let key = keys.values().next().value;
-          let item = items.find((item) =>
-            "username" in item ? item.username === key : item.command === key,
-          );
-          if (item) {
-            insertItem(item);
-          }
-        }}
-      >
-        {(item) => (
-          <ListBoxItem
-            id={"username" in item ? item.username : item.command}
-            textValue={"username" in item ? item.username : item.command}
-          >
-            <Text slot="label">{"username" in item ? item.username : item.command}</Text>
-            {"description" in item ? <Text slot="description">{item.description}</Text> : null}
-          </ListBoxItem>
-        )}
-      </ListBox>
-    </Autocomplete>
+            let key = keys.values().next().value;
+            let item = suggestions.find((item) =>
+              "username" in item ? item.username === key : item.command === key,
+            );
+            if (item) insertItem(item);
+          }}
+        >
+          {(item) => (
+            <ListBoxItem
+              id={"username" in item ? item.username : item.command}
+              textValue={"username" in item ? item.username : item.command}
+            >
+              <Text slot="label">{"username" in item ? item.username : item.command}</Text>
+              {"description" in item ? <Text slot="description">{item.description}</Text> : null}
+            </ListBoxItem>
+          )}
+        </ListBox>
+      </Autocomplete>
+      <p> {activeFilter?.mayBecomeToken === false && "invalid?"} </p>
+    </div>
   );
 }
