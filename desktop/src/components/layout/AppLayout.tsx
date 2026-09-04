@@ -6,7 +6,7 @@ const MAC_STOP_LIGHT_PADDING_CLS = "pl-20";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex h-screen min-h-0 w-full flex-col items-start overflow-hidden bg-app-bg-base px-1.5">
+    <div className="flex h-screen min-h-0 w-full scrollbar-none flex-col items-start overflow-hidden bg-app-bg-base px-1.5">
       <Titlebar />
       {children}
       <Bottombar />

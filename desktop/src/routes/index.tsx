@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { BreadcrumbHeaderLayout } from "../components/layout/BreadcrumbHeaderLayout";
 import { useWorkflowRunsListData } from "../features/workflow-runs/hooks/use-workflow-runs-list-data";
 import { TokenSearch } from "@/features/token-search/TokenSearch";
+import { WorkflowRunList } from "@/features/workflow-runs/components/WorkflowRunList";
 
 export const Route = createFileRoute("/")({
   beforeLoad: () => ({
@@ -18,26 +19,24 @@ function IndexRoute() {
 
   return (
     <BreadcrumbHeaderLayout>
-      <main className="flex w-full flex-col gap-6">
-        {isLoading && <p className="px-6 text-app-foreground-muted">Loading workflow runs…</p>}
-        {isError && (
-          <p className="mx-6 p-4 text-app-danger" role="alert">
-            Unable to load workflow runs (status: {status}).
-          </p>
-        )}
+      {isLoading && <p className="px-6 text-app-foreground-muted">Loading workflow runs…</p>}
+      {isError && (
+        <p className="mx-6 p-4 text-app-danger" role="alert">
+          Unable to load workflow runs (status: {status}).
+        </p>
+      )}
 
-        {runs.length > 0 ? (
+      {runs.length > 0 ? (
+        <>
           <TokenSearch />
-        ) : (
-          // <WorkflowRunList runs={runs} />
-          !isLoading &&
-          !isError && (
-            <p className="mx-6 p-8 text-center text-app-foreground-muted">
-              No workflow runs loaded.
-            </p>
-          )
-        )}
-      </main>
+          <WorkflowRunList runs={runs} />
+        </>
+      ) : (
+        !isLoading &&
+        !isError && (
+          <p className="mx-6 p-8 text-center text-app-foreground-muted">No workflow runs loaded.</p>
+        )
+      )}
     </BreadcrumbHeaderLayout>
   );
 }

@@ -58,7 +58,7 @@ const tokenInputStyles = tv({
 });
 
 const tokenStyles = tv({
-  base: "mx-0.5 inline-flex h-6 cursor-default items-center rounded-full px-2 align-middle font-mono text-xs transition select-none",
+  base: "mx-0.5 inline-flex h-6 cursor-default items-center rounded-full px-2 align-top font-mono text-xs transition select-none",
   variants: {
     isSelected: {
       false: "bg-app-accent/15 text-app-accent hover:bg-app-accent/20",
@@ -78,6 +78,7 @@ export interface TokenFieldProps<T extends TokenFieldValue = TokenFieldValue> ex
   description?: string;
   placeholder?: string;
   inputRef?: React.Ref<HTMLDivElement>;
+  inputClassName?: TokenInputProps["className"];
   children: TokenInputProps["children"];
 }
 
@@ -86,6 +87,7 @@ export function TokenField<T extends TokenFieldValue = TokenFieldValue>({
   description,
   placeholder,
   inputRef,
+  inputClassName,
   children,
   ...props
 }: TokenFieldProps<T>) {
@@ -104,7 +106,7 @@ export function TokenField<T extends TokenFieldValue = TokenFieldValue>({
         ref={inputRef}
         data-placeholder={placeholder}
         className={composeRenderProps<string | undefined, TokenInputClassNameRenderProps, string>(
-          undefined,
+          inputClassName,
           (className, renderProps) => tokenInputStyles({ ...renderProps, className }),
         )}
       >
