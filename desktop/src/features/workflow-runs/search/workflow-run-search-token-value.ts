@@ -4,8 +4,8 @@ import {
   type TokenFieldSegment,
   TokenFieldValue,
 } from "react-aria-components/TokenField";
+import { WorkflowRunSearchSuggestion, WorkflowSearchValue } from "./types";
 
-type WorkflowSearchValue = "workflow" | "tag";
 type WorkflowSearchTokenSegment = TokenFieldSegment<WorkflowSearchValue>;
 
 export interface ActiveWorkflowSearchFilter {
@@ -99,6 +99,23 @@ export class WorkflowSearchTokenValue extends TokenFieldValue<WorkflowSearchValu
       value,
       mayBecomeToken: mayBecomeToken(value),
     };
+  }
+
+  acceptSuggestion({
+    suggestion,
+    anchor,
+    end,
+  }: {
+    suggestion: WorkflowRunSearchSuggestion;
+    anchor: Position;
+    end: Position;
+  }): WorkflowSearchTokenValue {
+    let segments: WorkflowSearchTokenSegment[] =
+      suggestion.type === "token"
+        ? [suggestion, { type: "text", text: " " }]
+        : [{ type: "text", text: suggestion.text }];
+
+    return this.replaceRangeWithSegments(anchor, end, segments, false);
   }
 }
 

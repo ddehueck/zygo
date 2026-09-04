@@ -1,5 +1,5 @@
 import { OverflowList } from "react-responsive-overflow-list";
-import type { Tag } from "../../../bindings";
+import type { Tag } from "@/bindings";
 import { TagBadge } from "./TagBadge";
 
 type TagOverflowListProps = { tags: Tag[] };

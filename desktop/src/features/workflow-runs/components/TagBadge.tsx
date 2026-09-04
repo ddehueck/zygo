@@ -1,5 +1,5 @@
-import { Icons } from "../../../components/icons";
-import type { Maybe } from "../../../utils";
+import { Icons } from "@/components/icons";
+import type { Maybe } from "@/utils";
 
 interface TagBadgeProps {
   name: string;

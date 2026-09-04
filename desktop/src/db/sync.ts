@@ -1,8 +1,8 @@
 import { Channel } from "@tauri-apps/api/core";
-import { commands, type SyncDelta, type SyncEntityKind, type SyncUpsert } from "../../bindings";
-import { deleteCollectionItem, upsertCollectionItem } from "../../db/collection-helpers";
-import { jobRuns, tags, workflowRuns } from "../../db/collections";
-import { assertNever } from "../../utils";
+import { commands, type SyncDelta, type SyncEntityKind, type SyncUpsert } from "@/bindings";
+import { deleteCollectionItem, upsertCollectionItem } from "@/db/collection-helpers";
+import { jobRuns, tags, workflowRuns } from "@/db/collections";
+import { assertNever } from "@/utils";
 
 type CollectionsByEntity = {
   workflow_run: typeof workflowRuns;

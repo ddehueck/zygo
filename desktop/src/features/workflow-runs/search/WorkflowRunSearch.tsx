@@ -1,4 +1,4 @@
-// TokenSearch consists of two elements
+// WorkflowRunSearch consists of two elements
 // 1. The text input that gets tokenized as the user types
 // 2. The suggestion box that get's filtered as the user types
 // This follows the autocomplete example: https://react-aria.adobe.com/TokenField#autocomplete
@@ -12,29 +12,30 @@ import {
   ListBox as AriaListBox,
   ListBoxItem as AriaListBoxItem,
 } from "react-aria-components/ListBox";
-import { Token, TokenField } from "./TokenField";
-import { type Dispatch, type SetStateAction, useRef, useState } from "react";
-import { WorkflowSearchTokenValue } from "./workflow-search-token-value";
+import { Token, TokenField } from "@/components/TokenField";
+import { type Dispatch, type RefObject, type SetStateAction, useRef, useState } from "react";
+import { WorkflowSearchTokenValue } from "@/features/workflow-runs/search/workflow-run-search-token-value";
 import { cn, focusRing } from "@/components/utils";
 import { tv } from "tailwind-variants";
 import { Icons } from "@/components/icons";
 import { IconButton } from "@/components/IconButton";
+import { WorkflowRunSearchSuggestion } from "./types";
+import { useWorkflowRunsSearchSuggestions } from "./use-workflow-runs-search-suggestions";
 
-type Suggestion = { tokenPrefix: string }; // todo: based on actual data
-
-const tokenPrefixes = [{ tokenPrefix: "@workflow" }, { tokenPrefix: "@tag" }];
-
-export function TokenSearch() {
+export function WorkflowRunSearch() {
   let inputRef = useRef<HTMLDivElement>(null);
+  let { suggestions } = useWorkflowRunsSearchSuggestions();
 
-  let [value, setValue] = useState(
-    new WorkflowSearchTokenValue([
-      { type: "token", text: "@workflow:name", value: "workflow" },
-      { type: "token", text: "@tag:name", value: "tag" },
-    ]).withCaretPosition({ index: 2, offset: 1 }),
-  );
+  let [value, setValue] = useState(new WorkflowSearchTokenValue([]));
 
   let activeFilter = value.getActiveFilter();
+  if (activeFilter == null && value.segments.length === 0) {
+    activeFilter = {
+      anchor: value.caretPosition,
+      value: "",
+      mayBecomeToken: true,
+    };
+  }
   let hasValue = value.segments.some((segment) => segment.text.length > 0);
 
   return (
@@ -62,12 +63,14 @@ export function TokenSearch() {
           </IconButton>
         )}
       </div>
-      <div className="relative h-9.5 w-full shrink-0 border-b border-app-border px-2">
+      <div className="flex h-9.5 w-full shrink-0 overflow-hidden border-b border-app-border px-2">
         {/* Bar underneath for suggestions/errors */}
         <SuggestionBar
           activeFilter={activeFilter}
+          suggestions={suggestions}
+          inputRef={inputRef}
           setValue={setValue}
-          className="h-full w-full shrink-0 scrollbar-none rounded-none border-0 bg-transparent pr-24"
+          className="h-full min-w-0 flex-1 scrollbar-none rounded-none border-0 bg-transparent"
         />
         <SuggestionKeyboardHint />
       </div>
@@ -77,38 +80,38 @@ export function TokenSearch() {
 
 function SuggestionBar({
   activeFilter,
+  suggestions,
+  inputRef,
   setValue,
   className,
 }: {
   activeFilter: ReturnType<WorkflowSearchTokenValue["getActiveFilter"]>;
+  suggestions: WorkflowRunSearchSuggestion[];
+  inputRef: RefObject<HTMLDivElement | null>;
   setValue: Dispatch<SetStateAction<WorkflowSearchTokenValue>>;
   className?: string;
 }) {
   let isInvalid = activeFilter?.mayBecomeToken === false;
 
-  let filterValue = activeFilter?.value;
-  let filterAnchor = activeFilter?.anchor;
+  let filterValue = activeFilter?.value ?? "";
+  // let filterAnchor = activeFilter?.anchor;
+  let filteredSuggestions = suggestions.filter((item) =>
+    item.text.toLocaleLowerCase().startsWith(filterValue.toLocaleLowerCase()),
+  );
 
-  let suggestions: Suggestion[] = [];
-  if (filterValue)
-    suggestions = tokenPrefixes.filter((item) => item.tokenPrefix.includes(filterValue.slice(1)));
-
-  let insertItem = (item: Suggestion) => {
+  let insertItem = (item: WorkflowRunSearchSuggestion) => {
+    let filterAnchor = activeFilter?.anchor;
     if (filterAnchor == null) return;
 
     setValue((value) =>
-      value.replaceRangeWithSegments(
-        filterAnchor,
-        value.selectedRange.current,
-        [
-          {
-            type: "text",
-            text: item.tokenPrefix,
-          },
-        ],
-        false,
-      ),
+      value.acceptSuggestion({
+        suggestion: item,
+        anchor: filterAnchor,
+        end: value.selectedRange.current,
+      }),
     );
+    // Restore focus to the input so the updated caret position is applied to the DOM.
+    inputRef.current?.focus();
   };
 
   if (isInvalid) {
@@ -128,29 +131,28 @@ function SuggestionBar({
   return (
     <AriaListBox
       id="suggestion-bar"
-      items={suggestions}
-      dependencies={[filterAnchor]}
+      items={filteredSuggestions}
+      // dependencies={[filterAnchor]}
       layout="stack"
-      orientation="horizontal"
-      className={cn("flex scroll-p-1 items-center gap-1 overflow-x-auto p-1", className)}
+      orientation="vertical" // We use vertical so only up and down arrow keys move through suggestions
+      className={cn("flex min-w-0 scroll-p-1 items-center gap-1 overflow-x-auto p-1", className)}
       selectionMode="single"
       selectedKeys={[]}
       onSelectionChange={(keys) => {
         if (keys === "all") return;
-
         let key = keys.values().next().value;
-        let item = suggestions.find((item) => item.tokenPrefix === key);
+        let item = filteredSuggestions.find((item) => item.id === key);
         if (item) insertItem(item);
       }}
     >
-      {(item) => <SuggestionItem id={item.tokenPrefix} item={item} />}
+      {(item) => <SuggestionItem id={item.id} item={item} />}
     </AriaListBox>
   );
 }
 
 export const suggestionItemStyles = tv({
   extend: focusRing,
-  base: "group relative flex h-6 shrink-0 cursor-default items-center rounded-full border border-app-accent bg-transparent px-2 align-middle font-mono text-xs transition will-change-transform forced-color-adjust-none select-none",
+  base: "group relative flex h-6 shrink-0 cursor-default items-center rounded-full bg-transparent px-2 align-middle font-mono text-xs transition will-change-transform forced-color-adjust-none select-none",
   variants: {
     isSelected: {
       false:
@@ -166,17 +168,23 @@ export const suggestionItemStyles = tv({
   },
 });
 
-function SuggestionItem({ item, id }: { item: Suggestion; id: string }) {
+function SuggestionItem({ item, id }: { item: WorkflowRunSearchSuggestion; id: string }) {
   return (
-    <AriaListBoxItem id={id} textValue={item.tokenPrefix} className={suggestionItemStyles}>
-      {item.tokenPrefix}
+    <AriaListBoxItem
+      id={id}
+      textValue={item.text}
+      className={suggestionItemStyles}
+      // Keep the token field focused so its updated caret position is applied to the DOM.
+      onMouseDown={(event) => event.preventDefault()}
+    >
+      {item.text}
     </AriaListBoxItem>
   );
 }
 
 function SuggestionKeyboardHint() {
   return (
-    <div className="pointer-events-none absolute top-1/2 right-3 flex -translate-y-1/2 items-center gap-0.5 text-xs text-app-foreground-muted">
+    <div className="bg-app-bg flex h-full w-22 shrink-0 items-center justify-end gap-0.5 px-2 text-xs text-app-foreground-muted">
       <span className="sr-only">Use the up and down arrow keys to select a suggestion</span>
       <span aria-hidden="true" className="flex items-center gap-0.5">
         <kbd className="inline-flex size-3.5 items-center justify-center rounded-sm border border-app-border bg-app-bg-surface font-sans text-xs leading-none">
