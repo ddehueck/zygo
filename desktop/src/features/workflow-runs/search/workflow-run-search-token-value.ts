@@ -1,15 +1,13 @@
 import { last } from "@/lib/arrays";
+import { type Position, TokenFieldValue } from "react-aria-components/TokenField";
 import {
-  type Position,
-  type TokenFieldSegment,
-  TokenFieldValue,
-} from "react-aria-components/TokenField";
-import { WorkflowRunFilter, WorkflowRunSearchSuggestion, WorkflowSearchValue } from "./types";
+  WorkflowRunFilter,
+  WorkflowRunSearchSuggestion,
+  WorkflowSearchTokenSegment,
+} from "./types";
 import { toFilter, toTokenSegment } from "./parse";
 import { isErr } from "@/lib/result";
 import { lastChar } from "@/lib/string";
-
-type WorkflowSearchTokenSegment = TokenFieldSegment<WorkflowSearchValue>;
 
 export interface ActiveWorkflowSearchFilter {
   anchor: Position;
@@ -46,33 +44,7 @@ export interface ActiveWorkflowSearchFilter {
 
  * ```
  */
-export class WorkflowSearchTokenValue extends TokenFieldValue<WorkflowSearchValue> {
-  getInputValue(): string {
-    let segment = this.segments[this.caretPosition.index];
-    return segment?.type === "text" ? segment.text : "";
-  }
-
-  getFilters(): WorkflowRunFilter[] {
-    const filters = [];
-    for (let segment of this.segments) {
-      if (segment.type == "text") continue;
-
-      const result = toFilter(segment.text);
-      if (isErr(result)) {
-        console.warn("Could not parse token to filter");
-        continue;
-      }
-
-      filters.push(result.data);
-    }
-    return filters;
-  }
-
-  addFilter(filter: WorkflowRunFilter): WorkflowSearchTokenValue {
-    let allFilters = [...this.getFilters(), filter];
-    return new WorkflowSearchTokenValue(allFilters.map(toTokenSegment));
-  }
-
+export class WorkflowSearchTokenValue extends TokenFieldValue<WorkflowRunFilter> {
   tokenize(text: string): WorkflowSearchTokenSegment[] {
     const result = toFilter(text);
 
@@ -82,19 +54,6 @@ export class WorkflowSearchTokenValue extends TokenFieldValue<WorkflowSearchValu
 
     return [{ type: "text", text }];
   }
-  // }
-  //     segments.push({ type: "text", text: part });
-  //     continue;
-  //   }
-  //   let tokenValue = index < text.length ? getTokenValue(part) : null;
-  //   if (tokenValue == null) {
-  //     segments.push({ type: "text", text: text.slice(partStart) });
-  //     break;
-  //   }
-  //   segments.push({ type: "token", text: part, value: tokenValue });
-  // }
-  // return segments;
-  // }
 
   /**
    * Returns the final text segment, which is the only segment that can still be
@@ -102,7 +61,12 @@ export class WorkflowSearchTokenValue extends TokenFieldValue<WorkflowSearchValu
    */
   getActiveFilter(): ActiveWorkflowSearchFilter | null {
     let segment = last(this.segments);
-    if (segment == null) return null;
+    if (segment == null)
+      return {
+        anchor: this.caretPosition,
+        value: "",
+        mayBecomeToken: true,
+      };
 
     // React Aria represents the caret immediately after a token without a
     // trailing text segment. Treat that position as an empty filter so a
@@ -142,22 +106,4 @@ export class WorkflowSearchTokenValue extends TokenFieldValue<WorkflowSearchValu
 
 function isSeparatorCharacter(character: string | undefined): boolean {
   return character === "," || character === "\u200B" || character?.trim().length === 0;
-}
-
-// If a part is prefixed with "@workflow" or "@tag" and contains a colon
-// with a non-empty value after it, return the corresponding token value.
-function getTokenValue(part: string): WorkflowSearchValue | null {
-  let prefix: [string, WorkflowSearchValue] | undefined;
-  if (part.startsWith("@workflow:")) {
-    prefix = ["@workflow:", "workflow"];
-  } else if (part.startsWith("@tag:")) {
-    prefix = ["@tag:", "tag"];
-  }
-
-  if (prefix == null) {
-    return null;
-  }
-
-  let value = part.slice(prefix[0].length);
-  return value.length > 0 && !value.includes(":") ? prefix[1] : null;
 }

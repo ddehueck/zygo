@@ -73,7 +73,6 @@ function createSuggestions(rows: SuggestionQueryResultItem[]): WorkflowRunSearch
         id: `workflow:${workflowId}`,
         type: "token" as const,
         text: `@workflow:${workflowId}`,
-        value: "workflow" as const,
       })),
     ...[...tagValues]
       .sort((left, right) => left.localeCompare(right))
@@ -81,7 +80,6 @@ function createSuggestions(rows: SuggestionQueryResultItem[]): WorkflowRunSearch
         id: `tag:${tagValue}`,
         type: "token" as const,
         text: `@tag:${tagValue}`,
-        value: "tag" as const,
       })),
   ];
 }

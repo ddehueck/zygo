@@ -1,4 +1,4 @@
-export type WorkflowSearchValue = "workflow" | "tag";
+import { TokenFieldSegment } from "react-aria-components/TokenField";
 
 export type WorkflowRunSearchSuggestion =
   | {
@@ -10,7 +10,6 @@ export type WorkflowRunSearchSuggestion =
       id: string;
       type: "token";
       text: string;
-      value: WorkflowSearchValue;
     };
 
 export type WorkflowRunFilter =
@@ -23,3 +22,5 @@ export type WorkflowRunFilter =
       name: string;
       value?: string;
     };
+
+export type WorkflowSearchTokenSegment = TokenFieldSegment<WorkflowRunFilter>;

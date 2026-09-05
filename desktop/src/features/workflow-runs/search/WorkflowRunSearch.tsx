@@ -21,16 +21,7 @@ export function WorkflowRunSearch() {
   let [value, setValue] = useState(new WorkflowSearchTokenValue([]));
 
   let activeFilter = value.getActiveFilter();
-  if (activeFilter == null && value.segments.length === 0) {
-    activeFilter = {
-      anchor: value.caretPosition,
-      value: "",
-      mayBecomeToken: true,
-    };
-  }
   let hasValue = value.segments.some((segment) => segment.text.length > 0);
-
-  console.log("value segments", value.segments);
 
   return (
     <Autocomplete>

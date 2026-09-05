@@ -8,6 +8,7 @@ import { tv } from "tailwind-variants";
 import { WorkflowSearchTokenValue } from "@/features/workflow-runs/search/workflow-run-search-token-value";
 import { type WorkflowRunSearchSuggestion } from "./types";
 import { useWorkflowRunsSearchSuggestions } from "./use-workflow-runs-search-suggestions";
+import { getFilterValue } from "./parse";
 
 const suggestionItemStyles = tv({
   extend: focusRing,
@@ -38,13 +39,16 @@ export function SuggestionBar({
   setValue: Dispatch<SetStateAction<WorkflowSearchTokenValue>>;
   className?: string;
 }) {
-  let filterValue = activeFilter?.value ?? "";
+  let searchString = activeFilter?.value ?? "";
   let isInvalid = activeFilter?.mayBecomeToken === false;
 
-  let { suggestions } = useWorkflowRunsSearchSuggestions({ filterValue, limit: 10 });
+  let { suggestions } = useWorkflowRunsSearchSuggestions({
+    filterValue: getFilterValue(searchString),
+    limit: 10,
+  });
 
   let filteredSuggestions = suggestions.filter((item) =>
-    item.text.toLocaleLowerCase().startsWith(filterValue.toLocaleLowerCase()),
+    item.text.toLocaleLowerCase().includes(searchString),
   );
 
   let insertItem = (item: WorkflowRunSearchSuggestion) => {

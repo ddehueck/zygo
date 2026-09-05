@@ -56,3 +56,11 @@ export function toTokenSegment(filter: WorkflowRunFilter): TokenSegment {
   }
   return { type: "token", text, value: filter };
 }
+
+export function getFilterValue(text: string): string {
+  if (text.includes(FILTER_DELIMITER)) {
+    const [_, value] = text.split(FILTER_DELIMITER);
+    return value;
+  }
+  return text;
+}
