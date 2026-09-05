@@ -5,6 +5,8 @@ export const workflowRuns = createCollection(
   localOnlyCollectionOptions<WorkflowRun, string>({
     id: "workflow_runs",
     getKey: (item) => item.id,
+    defaultIndexType: BasicIndex,
+    autoIndex: "eager",
   }),
 );
 

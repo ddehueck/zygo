@@ -4,7 +4,10 @@ import {
   type TokenFieldSegment,
   TokenFieldValue,
 } from "react-aria-components/TokenField";
-import { WorkflowRunSearchSuggestion, WorkflowSearchValue } from "./types";
+import { WorkflowRunFilter, WorkflowRunSearchSuggestion, WorkflowSearchValue } from "./types";
+import { toFilter, toTokenSegment } from "./parse";
+import { isErr } from "@/lib/result";
+import { lastChar } from "@/lib/string";
 
 type WorkflowSearchTokenSegment = TokenFieldSegment<WorkflowSearchValue>;
 
@@ -44,41 +47,54 @@ export interface ActiveWorkflowSearchFilter {
  * ```
  */
 export class WorkflowSearchTokenValue extends TokenFieldValue<WorkflowSearchValue> {
-  tokenize(text: string): WorkflowSearchTokenSegment[] {
-    // Keep separators in the model so segment positions continue to map one-to-one
-    // to the contenteditable DOM. A complete filter becomes a token only after a
-    // separator is entered, and ordinary text prevents later filters from becoming
-    // tokens.
-    if (text.length === 0) {
-      return [{ type: "text", text }];
-    }
+  getInputValue(): string {
+    let segment = this.segments[this.caretPosition.index];
+    return segment?.type === "text" ? segment.text : "";
+  }
 
-    let segments: WorkflowSearchTokenSegment[] = [];
-    let index = 0;
-    while (index < text.length) {
-      let partStart = index;
-      let separator = isSeparatorCharacter(text[index]);
-      while (index < text.length && isSeparatorCharacter(text[index]) === separator) {
-        index++;
-      }
+  getFilters(): WorkflowRunFilter[] {
+    const filters = [];
+    for (let segment of this.segments) {
+      if (segment.type == "text") continue;
 
-      let part = text.slice(partStart, index);
-      if (separator) {
-        segments.push({ type: "text", text: part });
+      const result = toFilter(segment.text);
+      if (isErr(result)) {
+        console.warn("Could not parse token to filter");
         continue;
       }
 
-      let tokenValue = index < text.length ? getTokenValue(part) : null;
-      if (tokenValue == null) {
-        segments.push({ type: "text", text: text.slice(partStart) });
-        break;
-      }
-
-      segments.push({ type: "token", text: part, value: tokenValue });
+      filters.push(result.data);
     }
-
-    return segments;
+    return filters;
   }
+
+  addFilter(filter: WorkflowRunFilter): WorkflowSearchTokenValue {
+    let allFilters = [...this.getFilters(), filter];
+    return new WorkflowSearchTokenValue(allFilters.map(toTokenSegment));
+  }
+
+  tokenize(text: string): WorkflowSearchTokenSegment[] {
+    const result = toFilter(text);
+
+    if (isErr(result)) return [{ type: "text", text }];
+
+    if (isSeparatorCharacter(lastChar(text))) return [toTokenSegment(result.data)];
+
+    return [{ type: "text", text }];
+  }
+  // }
+  //     segments.push({ type: "text", text: part });
+  //     continue;
+  //   }
+  //   let tokenValue = index < text.length ? getTokenValue(part) : null;
+  //   if (tokenValue == null) {
+  //     segments.push({ type: "text", text: text.slice(partStart) });
+  //     break;
+  //   }
+  //   segments.push({ type: "token", text: part, value: tokenValue });
+  // }
+  // return segments;
+  // }
 
   /**
    * Returns the final text segment, which is the only segment that can still be
@@ -86,18 +102,25 @@ export class WorkflowSearchTokenValue extends TokenFieldValue<WorkflowSearchValu
    */
   getActiveFilter(): ActiveWorkflowSearchFilter | null {
     let segment = last(this.segments);
-    if (segment == null || segment.type !== "text") return null;
+    if (segment == null) return null;
 
-    let start = 0;
-    let end = segment.text.length;
-    while (start < end && isSeparatorCharacter(segment.text[start])) start++;
-    while (end > start && isSeparatorCharacter(segment.text[end - 1])) end--;
+    // React Aria represents the caret immediately after a token without a
+    // trailing text segment. Treat that position as an empty filter so a
+    // second suggestion can be inserted at the caret.
+    if (segment.type === "token") {
+      if (this.caretPosition.index < this.segments.length) return null;
+      return {
+        anchor: { index: this.segments.length, offset: 0 },
+        value: "",
+        mayBecomeToken: true,
+      };
+    }
 
-    let value = segment.text.slice(start, end);
+    let value = segment.text.trim();
     return {
-      anchor: { index: this.segments.length - 1, offset: start },
+      anchor: { index: this.segments.length - 1, offset: 0 },
       value,
-      mayBecomeToken: mayBecomeToken(value),
+      mayBecomeToken: true, // TODO: Move validation somewhere else
     };
   }
 
@@ -111,9 +134,7 @@ export class WorkflowSearchTokenValue extends TokenFieldValue<WorkflowSearchValu
     end: Position;
   }): WorkflowSearchTokenValue {
     let segments: WorkflowSearchTokenSegment[] =
-      suggestion.type === "token"
-        ? [suggestion, { type: "text", text: " " }]
-        : [{ type: "text", text: suggestion.text }];
+      suggestion.type === "token" ? [suggestion] : [{ type: "text", text: suggestion.text }];
 
     return this.replaceRangeWithSegments(anchor, end, segments, false);
   }
@@ -121,13 +142,6 @@ export class WorkflowSearchTokenValue extends TokenFieldValue<WorkflowSearchValu
 
 function isSeparatorCharacter(character: string | undefined): boolean {
   return character === "," || character === "\u200B" || character?.trim().length === 0;
-}
-
-function mayBecomeToken(part: string): boolean {
-  if (getTokenValue(part) !== null) return true;
-  let prefixes = ["@workflow:", "@tag:"];
-  for (let prefix of prefixes) if (prefix.startsWith(part)) return true;
-  return false;
 }
 
 // If a part is prefixed with "@workflow" or "@tag" and contains a colon

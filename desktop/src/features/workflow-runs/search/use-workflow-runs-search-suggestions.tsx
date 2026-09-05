@@ -1,7 +1,6 @@
-import { eq, materialize } from "@tanstack/db";
+import { concat, ilike, or } from "@tanstack/db";
 import { useLiveQuery } from "@tanstack/react-db";
 
-import type { Tag } from "@/bindings";
 import { tags, workflowRuns } from "@/db/collections";
 import { WorkflowRunSearchSuggestion } from "./types";
 
@@ -10,27 +9,51 @@ const defaultSuggestions: WorkflowRunSearchSuggestion[] = [
   { id: "tag-search-prefix", type: "prefix" as const, text: "@tag:" },
 ];
 
-type WorkflowRunSearchSource = {
-  workflowId: string;
-  tags: Tag[];
+type SuggestionQueryResultItem = {
+  type: "workflowId" | "tag";
+  text: string;
+  created_at: string;
 };
 
 /**
  * Builds the complete set of values that can be inserted into the workflow-run
  * search field. The live query keeps suggestions current as the local DB syncs.
  */
-export function useWorkflowRunsSearchSuggestions() {
+export function useWorkflowRunsSearchSuggestions({
+  filterValue,
+  limit,
+}: {
+  filterValue: string;
+  limit: number;
+}) {
   const { data, isLoading, isError, status } = useLiveQuery({
-    query: (q) =>
-      q.from({ workflowRun: workflowRuns }).select(({ workflowRun }) => ({
-        workflowId: workflowRun.workflow_id,
-        tags: materialize(
-          q
-            .from({ tag: tags })
-            .where(({ tag }) => eq(workflowRun.id, tag.workflow_run_id))
-            .orderBy(({ tag }) => tag.created_at, "asc"),
-        ),
-      })),
+    query: (q) => {
+      const runIdRows = q
+        .from({ run: workflowRuns })
+        .select(({ run }) => ({
+          type: "workflowId" as const,
+          text: run.workflow_id,
+          created_at: run.created_at,
+        }))
+        .where(({ run }) => ilike(run.workflow_id, `${filterValue}%`))
+        .orderBy(({ run }) => run.created_at, "asc")
+        .limit(limit);
+
+      const tagsRows = q
+        .from({ tag: tags })
+        .select(({ tag }) => ({
+          type: "tag" as const,
+          text: concat(tag.key, ":", tag.value),
+          created_at: tag.created_at,
+        }))
+        .where(({ tag }) =>
+          or(ilike(tag.key, `${filterValue}%`), ilike(tag.value, `${filterValue}%`)),
+        )
+        .orderBy(({ tag }) => tag.created_at, "asc")
+        .limit(limit);
+
+      return q.unionAll(runIdRows, tagsRows).orderBy(({ created_at }) => created_at);
+    },
   });
 
   const suggestions = createSuggestions(data);
@@ -38,16 +61,9 @@ export function useWorkflowRunsSearchSuggestions() {
   return { suggestions, isLoading, isError, status };
 }
 
-function createSuggestions(rows: WorkflowRunSearchSource[]): WorkflowRunSearchSuggestion[] {
-  const workflowIds = new Set<string>();
-  const tagValues = new Set<string>();
-
-  for (const row of rows) {
-    workflowIds.add(row.workflowId);
-    for (const tag of row.tags) {
-      tagValues.add(`${tag.key}:${tag.value}`);
-    }
-  }
+function createSuggestions(rows: SuggestionQueryResultItem[]): WorkflowRunSearchSuggestion[] {
+  const workflowIds = rows.filter((row) => row.type === "workflowId").map((row) => row.text);
+  const tagValues = rows.filter((row) => row.type === "tag").map((row) => row.text);
 
   return [
     ...defaultSuggestions,

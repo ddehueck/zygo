@@ -26,6 +26,9 @@ check: lint stylelint typecheck
 # Apply available autofixes
 fix: fmt lint-fix
 
+test:
+    pnpm test
+
 # Generate TypeScript bindings from Rust code
 generate-bindings:
     cargo run \

@@ -12,3 +12,14 @@ export type WorkflowRunSearchSuggestion =
       text: string;
       value: WorkflowSearchValue;
     };
+
+export type WorkflowRunFilter =
+  | {
+      entity: "workflow";
+      id: string;
+    }
+  | {
+      entity: "tag";
+      name: string;
+      value?: string;
+    };
