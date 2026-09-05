@@ -4,7 +4,7 @@ import { useDuration } from "@/hooks/use-duration";
 import { shortRunId } from "@/features/workflow-runs/lib/id";
 import { JobCountsBadge } from "@/features/workflow-runs/components/JobCountsBadge";
 import { TagOverflowList } from "@/features/workflow-runs/components/TagOverflowList";
-import { Icons } from "@/components/icons";
+import { StatusIcon as StatusGlyphIcon } from "@/components/icons";
 import type { WorkflowRunListData } from "@/features/workflow-runs/hooks/use-workflow-runs-list-data";
 import { useWorkflowRunListHotkeys } from "@/features/workflow-runs/hooks/use-workflow-run-list-hotkeys";
 import { useWorkflowRunSearch } from "@/features/workflow-runs/search/WorkflowRunSearchContext";
@@ -109,12 +109,12 @@ function StatusGlyph({ status, className }: { status: string; className: string 
 
   switch (status) {
     case "succeeded":
-      return <Icons.Completed {...iconProps} />;
+      return <StatusGlyphIcon status="completed" {...iconProps} />;
     case "running":
-      return <Icons.InProgress {...iconProps} />;
+      return <StatusGlyphIcon status="in-progress" {...iconProps} />;
     case "failed":
     case "errored":
-      return <Icons.Errored {...iconProps} />;
+      return <StatusGlyphIcon status="errored" {...iconProps} />;
     default:
       return null;
   }

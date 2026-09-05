@@ -1,9 +1,9 @@
-import { useRouter, useRouterState, useCanGoBack } from "@tanstack/react-router";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { IconButton } from "./IconButton";
 import { useHotkey } from "@tanstack/react-hotkeys";
+import { useRouter, useRouterState, useCanGoBack } from "@tanstack/react-router";
+import { Icon, iconDefinitions } from "./icons";
+import { IconButton } from "./IconButton";
 
-export function NavigationArrows() {
+export function ArrowNavigatioMenu() {
   const router = useRouter();
   const size = 16;
   const canGoBack = useCanGoBack();
@@ -28,7 +28,7 @@ export function NavigationArrows() {
         isDisabled={!canGoBack}
         aria-label="Go back"
       >
-        <ChevronLeft size={size} aria-hidden />
+        <Icon definition={iconDefinitions.previous} optical="circle" size={size} aria-hidden />
       </IconButton>
 
       <IconButton
@@ -38,7 +38,7 @@ export function NavigationArrows() {
         isDisabled={!canGoForward}
         aria-label="Go forward"
       >
-        <ChevronRight size={size} aria-hidden />
+        <Icon definition={iconDefinitions.next} optical="circle" size={size} aria-hidden />
       </IconButton>
     </div>
   );

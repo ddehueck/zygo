@@ -12,7 +12,7 @@ import { Token, TokenField } from "@/components/TokenField";
 import { useRef } from "react";
 import { useWorkflowRunSearch } from "./WorkflowRunSearchContext";
 import { WorkflowSearchTokenValue } from "./workflow-run-search-token-value";
-import { Icons } from "@/components/icons";
+import { Icon, iconDefinitions } from "@/components/icons";
 import { IconButton } from "@/components/IconButton";
 import { SuggestionBar, SuggestionKeyboardHint } from "./SearchSuggestionBar";
 
@@ -27,7 +27,11 @@ export function WorkflowRunSearch() {
     <Autocomplete>
       {/* Field dor searching */}
       <div className="flex items-start justify-between gap-2 border-b border-app-border px-3">
-        <Icons.Search className="mt-4 shrink-0 text-app-foreground-muted" size={20} />
+        <Icon
+          definition={iconDefinitions.search}
+          className="mt-4 shrink-0 text-app-foreground-muted"
+          size={20}
+        />
         <TokenField
           value={value}
           onChange={setValue}
@@ -44,7 +48,7 @@ export function WorkflowRunSearch() {
             className="mt-3"
             onClick={() => setValue(new WorkflowSearchTokenValue([]))}
           >
-            <Icons.X />
+            <Icon definition={iconDefinitions.close} />
           </IconButton>
         )}
       </div>
