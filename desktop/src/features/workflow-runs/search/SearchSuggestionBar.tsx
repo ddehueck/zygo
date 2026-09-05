@@ -2,7 +2,7 @@ import {
   ListBox as AriaListBox,
   ListBoxItem as AriaListBoxItem,
 } from "react-aria-components/ListBox";
-import { type Dispatch, type RefObject, type SetStateAction } from "react";
+import { type RefObject } from "react";
 import { cn, focusRing } from "@/components/utils";
 import { tv } from "tailwind-variants";
 import { WorkflowSearchTokenValue } from "@/features/workflow-runs/search/workflow-run-search-token-value";
@@ -29,16 +29,17 @@ const suggestionItemStyles = tv({
 });
 
 export function SuggestionBar({
-  activeFilter,
+  value,
   inputRef,
   setValue,
   className,
 }: {
-  activeFilter: ReturnType<WorkflowSearchTokenValue["getActiveFilter"]>;
+  value: WorkflowSearchTokenValue;
   inputRef: RefObject<HTMLDivElement | null>;
-  setValue: Dispatch<SetStateAction<WorkflowSearchTokenValue>>;
+  setValue: (value: WorkflowSearchTokenValue) => void;
   className?: string;
 }) {
+  let activeFilter = value.getActiveInputText();
   let searchString = activeFilter?.value ?? "";
   let isInvalid = activeFilter?.mayBecomeToken === false;
 
@@ -56,15 +57,12 @@ export function SuggestionBar({
     console.log("has filterAnchor", !!filterAnchor);
     if (filterAnchor == null) return;
 
-    setValue((value) => {
-      const newSuggestion = value.acceptSuggestion({
-        suggestion: item,
-        anchor: filterAnchor,
-        end: value.selectedRange.current,
-      });
-      console.log("After insert", newSuggestion);
-      return newSuggestion;
+    const newSuggestion = value.acceptSuggestion({
+      suggestion: item,
+      anchor: filterAnchor,
+      end: value.selectedRange.current,
     });
+    setValue(newSuggestion);
     // Restore focus to the input so the updated caret position is applied to the DOM.
     inputRef.current?.focus();
   };

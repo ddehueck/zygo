@@ -1,43 +1,44 @@
-import { useHotkey } from "@tanstack/react-hotkeys";
-import { useNavigate } from "@tanstack/react-router";
-
-import { useRef } from "react";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import { GridList, GridListItem } from "@/components/GridList";
 import { useDuration } from "@/hooks/use-duration";
 import { shortRunId } from "@/features/workflow-runs/lib/id";
 import { JobCountsBadge } from "@/features/workflow-runs/components/JobCountsBadge";
 import { TagOverflowList } from "@/features/workflow-runs/components/TagOverflowList";
 import { Icons } from "@/components/icons";
-import type { useWorkflowRunsListData } from "@/features/workflow-runs/hooks/use-workflow-runs-list-data";
-
-type WorkflowRunListData = ReturnType<typeof useWorkflowRunsListData>["data"];
+import type { WorkflowRunListData } from "@/features/workflow-runs/hooks/use-workflow-runs-list-data";
+import { useWorkflowRunListHotkeys } from "@/features/workflow-runs/hooks/use-workflow-run-list-hotkeys";
+import { useWorkflowRunSearch } from "@/features/workflow-runs/search/WorkflowRunSearchContext";
 
 type WorkflowRunListProps = { runs: WorkflowRunListData };
 type WorkflowRunListRow = WorkflowRunListData[number];
 
 export function WorkflowRunList({ runs }: WorkflowRunListProps) {
   const navigate = useNavigate();
-  const listRef = useRef<HTMLDivElement>(null);
+  const location = useLocation();
+  const listRef = useWorkflowRunListHotkeys();
+  const { applyFilters } = useWorkflowRunSearch();
 
-  const focusList = () => {
-    const list = listRef.current;
-    if (list && !list.contains(document.activeElement)) {
-      list.focus();
-    }
-  };
-
-  useHotkey("ArrowUp", focusList);
-  useHotkey("ArrowDown", focusList);
+  const filteredRuns = applyFilters(runs);
 
   return (
     <GridList
       ref={listRef}
       aria-label="Workflow runs"
-      items={runs}
+      items={filteredRuns}
       onAction={(key) =>
         navigate({
           to: "/runs/$workflowRunId",
           params: { workflowRunId: String(key) },
+          // Browsers do not expose the previous history entry, so record the exact
+          // list location on the detail entry before navigating away.
+          state: (previous) => ({
+            ...previous,
+            breadcrumbBack: {
+              href: location.href,
+              pathname: location.pathname,
+              historyIndex: location.state.__TSR_index,
+            },
+          }),
         })
       }
     >

@@ -9,8 +9,9 @@
 
 import { Autocomplete } from "react-aria-components/Autocomplete";
 import { Token, TokenField } from "@/components/TokenField";
-import { useRef, useState } from "react";
-import { WorkflowSearchTokenValue } from "@/features/workflow-runs/search/workflow-run-search-token-value";
+import { useRef } from "react";
+import { useWorkflowRunSearch } from "./WorkflowRunSearchContext";
+import { WorkflowSearchTokenValue } from "./workflow-run-search-token-value";
 import { Icons } from "@/components/icons";
 import { IconButton } from "@/components/IconButton";
 import { SuggestionBar, SuggestionKeyboardHint } from "./SearchSuggestionBar";
@@ -18,9 +19,8 @@ import { SuggestionBar, SuggestionKeyboardHint } from "./SearchSuggestionBar";
 export function WorkflowRunSearch() {
   let inputRef = useRef<HTMLDivElement>(null);
 
-  let [value, setValue] = useState(new WorkflowSearchTokenValue([]));
+  let { value, setValue } = useWorkflowRunSearch();
 
-  let activeFilter = value.getActiveFilter();
   let hasValue = value.segments.some((segment) => segment.text.length > 0);
 
   return (
@@ -51,7 +51,7 @@ export function WorkflowRunSearch() {
       <div className="flex h-9.5 w-full shrink-0 overflow-hidden border-b border-app-border px-2">
         {/* Bar underneath for suggestions/errors */}
         <SuggestionBar
-          activeFilter={activeFilter}
+          value={value}
           inputRef={inputRef}
           setValue={setValue}
           className="h-full min-w-0 flex-1 scrollbar-none rounded-none border-0 bg-transparent"

@@ -56,10 +56,9 @@ export class WorkflowSearchTokenValue extends TokenFieldValue<WorkflowRunFilter>
   }
 
   /**
-   * Returns the final text segment, which is the only segment that can still be
-   * pending or invalid. All preceding non-separator segments are tokens.
+   * Returns the currently active text block and it's position
    */
-  getActiveFilter(): ActiveWorkflowSearchFilter | null {
+  getActiveInputText(): ActiveWorkflowSearchFilter | null {
     let segment = last(this.segments);
     if (segment == null)
       return {
@@ -88,6 +87,10 @@ export class WorkflowSearchTokenValue extends TokenFieldValue<WorkflowRunFilter>
     };
   }
 
+  getFilterValues(): WorkflowRunFilter[] {
+    return this.segments.filter((s) => s.type === "token").map((t) => t.value!);
+  }
+
   acceptSuggestion({
     suggestion,
     anchor,
@@ -98,7 +101,9 @@ export class WorkflowSearchTokenValue extends TokenFieldValue<WorkflowRunFilter>
     end: Position;
   }): WorkflowSearchTokenValue {
     let segments: WorkflowSearchTokenSegment[] =
-      suggestion.type === "token" ? [suggestion] : [{ type: "text", text: suggestion.text }];
+      suggestion.type === "token"
+        ? [toTokenSegment(suggestion.value)]
+        : [{ type: "text", text: suggestion.text }];
 
     return this.replaceRangeWithSegments(anchor, end, segments, false);
   }

@@ -73,13 +73,18 @@ function createSuggestions(rows: SuggestionQueryResultItem[]): WorkflowRunSearch
         id: `workflow:${workflowId}`,
         type: "token" as const,
         text: `@workflow:${workflowId}`,
+        value: { entity: "workflow" as const, id: workflowId },
       })),
     ...[...tagValues]
       .sort((left, right) => left.localeCompare(right))
-      .map((tagValue) => ({
-        id: `tag:${tagValue}`,
-        type: "token" as const,
-        text: `@tag:${tagValue}`,
-      })),
+      .map((tagValue) => {
+        const [name, value] = tagValue.split(":");
+        return {
+          id: `tag:${tagValue}`,
+          type: "token" as const,
+          text: `@tag:${tagValue}`,
+          value: { entity: "tag" as const, name, value },
+        };
+      }),
   ];
 }

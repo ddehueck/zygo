@@ -2,6 +2,8 @@ import { eq, materialize } from "@tanstack/db";
 import { useLiveQuery } from "@tanstack/react-db";
 import { tags, workflowRuns } from "../../../db/collections";
 
+export type WorkflowRunListData = ReturnType<typeof useWorkflowRunsListData>["data"];
+
 export function useWorkflowRunsListData() {
   return useLiveQuery({
     query: (q) =>

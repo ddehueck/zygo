@@ -10,6 +10,7 @@ export type WorkflowRunSearchSuggestion =
       id: string;
       type: "token";
       text: string;
+      value: WorkflowRunFilter;
     };
 
 export type WorkflowRunFilter =
