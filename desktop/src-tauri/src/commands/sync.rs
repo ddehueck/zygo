@@ -12,6 +12,7 @@ use super::SyncUpsert;
 pub enum SyncEntityKind {
     WorkflowRun,
     JobRun,
+    Tag,
 }
 
 #[derive(Debug, Serialize, Type)]
@@ -26,6 +27,7 @@ fn entity_kind(entity: SyncEntity) -> SyncEntityKind {
     match entity {
         SyncEntity::WorkflowRun => SyncEntityKind::WorkflowRun,
         SyncEntity::JobRun => SyncEntityKind::JobRun,
+        SyncEntity::Tag => SyncEntityKind::Tag,
     }
 }
 
@@ -58,6 +60,10 @@ impl TryFrom<Delta> for SyncDelta {
                             data: serde_json::from_value(data)?,
                         }
                     }
+                    SyncEntity::Tag => SyncUpsert::Tag {
+                        id,
+                        data: serde_json::from_value(data)?,
+                    },
                 };
 
                 Ok(Self::Upsert { payload })

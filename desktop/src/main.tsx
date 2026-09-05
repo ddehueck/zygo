@@ -1,8 +1,9 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { RouterProvider } from "@tanstack/react-router";
+import { loadSnapshot } from "./db/snapshot";
+import { startSync } from "./db/sync";
 import { getRouter } from "./router";
-import { startSync } from "./sync/sync-ipc";
 
 const router = getRouter();
 
@@ -12,6 +13,15 @@ createRoot(document.getElementById("root")!).render(
   </StrictMode>,
 );
 
-// The sync command stays open for the lifetime of the app, so it must not
-// block the initial React render.
-void startSync();
+async function initializeData() {
+  try {
+    await loadSnapshot();
+  } catch (error) {
+    console.error("initial snapshot load failed", error);
+  }
+
+  // The sync command stays open for the lifetime of the app.
+  void startSync();
+}
+
+void initializeData();

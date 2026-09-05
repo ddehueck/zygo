@@ -5,17 +5,29 @@ default:
 dev:
     pnpm tauri dev
 
-lint:
-    oxlint
-
-fmt:
-    oxfmt
-
-check:
-    pnpm check
-
 typecheck:
     pnpm tsc
+
+lint:
+    pnpm exec oxlint
+
+lint-fix:
+    pnpm exec oxlint --fix --fix-suggestions
+
+stylelint:
+    pnpm exec stylelint "src/**/*.{css,scss}"
+
+fmt:
+    pnpm exec oxfmt
+
+# Run all checks/lints/etc available
+check: lint stylelint typecheck
+
+# Apply available autofixes
+fix: fmt lint-fix
+
+test:
+    pnpm test
 
 # Generate TypeScript bindings from Rust code
 generate-bindings:

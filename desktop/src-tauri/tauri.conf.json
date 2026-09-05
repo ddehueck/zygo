@@ -20,9 +20,9 @@
         "hiddenTitle": true,
         "backgroundColor": "#eeeeee",
         "trafficLightPosition": {
-                  "x": 18.0,
-                  "y": 18.0
-                }
+          "x": 18.0,
+          "y": 18.0
+        }
       }
     ],
     "security": {

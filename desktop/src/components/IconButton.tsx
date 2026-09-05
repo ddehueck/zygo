@@ -17,7 +17,7 @@ export function IconButton({ size = 16, className, style, ...props }: IconButton
         "h-auto w-auto px-0 data-disabled:cursor-not-allowed data-disabled:opacity-40 data-disabled:hover:bg-transparent forced-colors:data-disabled:opacity-100",
       )}
       style={composeRenderProps(style, (style) => ({
-        padding: size / 4,
+        padding: size / 6,
         ...style,
       }))}
     />

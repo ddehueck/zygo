@@ -1,16 +1,20 @@
-import { createFileRoute, Outlet } from '@tanstack/react-router'
-import { MainContentLayout } from '../components/layout/MainContentLayout'
+import { createFileRoute, Outlet } from "@tanstack/react-router";
+import { BreadcrumbHeaderLayout } from "../components/layout/BreadcrumbHeaderLayout";
 
-export const Route = createFileRoute('/runs')({
+export const Route = createFileRoute("/runs")({
   component: RouteComponent,
-})
+  beforeLoad: () => ({
+    breadcrumb: {
+      label: "Workflow Runs",
+      link: "/",
+    },
+  }),
+});
 
 function RouteComponent() {
   return (
-  <MainContentLayout
-    titleContent={<p></p>}
-    >
+    <BreadcrumbHeaderLayout>
       <Outlet />
-      </MainContentLayout>
-  )
+    </BreadcrumbHeaderLayout>
+  );
 }

@@ -14,3 +14,5 @@ export function invariant(condition: boolean, message?: string): asserts conditi
     throw new InvariantViolation(message ?? "Invariant violation");
   }
 }
+
+export type Maybe<T> = T | undefined | null;

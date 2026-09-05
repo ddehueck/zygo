@@ -1,6 +1,6 @@
 import dayjs from "dayjs";
 import { useEffect, useState } from "react";
-import { formatDuration } from "../lib/dates";
+import { formatDurationBetween } from "../lib/dates";
 
 type UseDurationProps = {
   startedAt: string | null;
@@ -11,24 +11,11 @@ export function useDuration({ startedAt, completedAt }: UseDurationProps): strin
   const [now, setNow] = useState(() => dayjs().valueOf());
 
   useEffect(() => {
-    if (startedAt === null || completedAt !== null) {
-      return;
-    }
+    if (startedAt === null || completedAt !== null) return;
 
     const interval = setInterval(() => setNow(dayjs().valueOf()), 1000);
     return () => clearInterval(interval);
   }, [completedAt, startedAt]);
 
-  if (startedAt === null) {
-    return undefined;
-  }
-
-  const startedAtDate = dayjs(startedAt);
-  const completedAtDate = completedAt === null ? dayjs(now) : dayjs(completedAt);
-
-  if (!startedAtDate.isValid() || !completedAtDate.isValid()) {
-    return undefined;
-  }
-
-  return formatDuration(Math.max(0, completedAtDate.diff(startedAtDate)));
+  return formatDurationBetween(startedAt, completedAt ?? now);
 }

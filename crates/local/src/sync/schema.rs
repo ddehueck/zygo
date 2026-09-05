@@ -8,6 +8,7 @@ use super::{Error, Result};
 pub enum SyncEntity {
     WorkflowRun,
     JobRun,
+    Tag,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -31,6 +32,7 @@ impl TryFrom<CdcRow> for Delta {
         let entity = match row.table_name.as_str() {
             "workflow_runs" => SyncEntity::WorkflowRun,
             "job_runs" => SyncEntity::JobRun,
+            "tag_associations" => SyncEntity::Tag,
             table_name => return Err(Error::UnsupportedTable(table_name.to_owned())),
         };
 
@@ -105,6 +107,24 @@ mod tests {
                 assert_eq!(data, json!({"id": "run-1"}));
             }
             _ => panic!("expected an upsert delta"),
+        }
+    }
+
+    #[test]
+    fn converts_tag_association_to_tag_entity() {
+        let delta = Delta::try_from(cdc_row(
+            "tag_associations",
+            CdcChangeType::Insert,
+            Some(json!({"id": 1, "tag_id": 1, "value": "batch", "workflow_run_id": "run-1"})),
+        ))
+        .expect("tag association should convert");
+
+        match delta {
+            Delta::Upsert { entity, id, .. } => {
+                assert!(matches!(entity, SyncEntity::Tag));
+                assert_eq!(id, "1");
+            }
+            _ => panic!("expected a tag upsert delta"),
         }
     }
 

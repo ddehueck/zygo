@@ -1,4 +1,4 @@
-use turso::{params, transaction::TransactionBehavior};
+use turso::{Value, params, transaction::TransactionBehavior};
 
 use super::Db;
 use super::db_models::{JobRunRow, WorkflowRunJobCounts};
@@ -183,35 +183,35 @@ impl JobRunRepository {
         Ok(Some(JobRunRow::from_row(&row, &rows)?))
     }
 
-    /// Lists job runs after the supplied job-run ID in lexicographic ID order.
-    ///
-    /// The caller can request one more row than it intends to return to determine
-    /// whether another page exists.
-    pub async fn list_after_id(&self, cursor: Option<&str>, limit: u32) -> Result<Vec<JobRunRow>> {
+    pub async fn list_by_workflow_run_ids(
+        &self,
+        workflow_run_ids: &[String],
+    ) -> Result<Vec<JobRunRow>> {
+        if workflow_run_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let placeholders = (1..=workflow_run_ids.len())
+            .map(|index| format!("?{index}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let params = workflow_run_ids
+            .iter()
+            .cloned()
+            .map(Value::from)
+            .collect::<Vec<_>>();
         let connection = self.database.connection.lock().await;
-        let limit = i64::from(limit);
-        let mut rows = match cursor {
-            Some(cursor) => {
-                connection
-                    .query(
-                        &format!(
-                            "SELECT {SELECT_COLUMNS} FROM job_runs WHERE id > ?1 ORDER BY id ASC LIMIT ?2"
-                        ),
-                        params![cursor, limit],
-                    )
-                    .await?
-            }
-            None => {
-                connection
-                    .query(
-                        &format!(
-                            "SELECT {SELECT_COLUMNS} FROM job_runs ORDER BY id ASC LIMIT ?1"
-                        ),
-                        [limit],
-                    )
-                    .await?
-            }
-        };
+        let mut rows = connection
+            .query(
+                format!(
+                    "SELECT {SELECT_COLUMNS}
+                     FROM job_runs
+                     WHERE workflow_run_id IN ({placeholders})
+                     ORDER BY workflow_run_id ASC, created_at ASC, rowid ASC"
+                ),
+                params,
+            )
+            .await?;
 
         let mut job_runs = Vec::new();
         while let Some(row) = rows.next().await? {

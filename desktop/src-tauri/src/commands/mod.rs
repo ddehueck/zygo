@@ -1,10 +1,8 @@
-mod job_runs;
+mod load_data;
 mod sync;
 mod types;
-mod workflow_runs;
 
-use types::{JobRun, SyncUpsert, WorkflowRun};
+use types::{JobRun, SyncUpsert, Tag, WorkflowRun};
 
-pub use job_runs::list_job_runs;
+pub use load_data::load_data;
 pub use sync::sync;
-pub use workflow_runs::list_workflow_runs;
