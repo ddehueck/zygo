@@ -2,8 +2,8 @@ use std::io;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use zygo_core::Zygo;
 use zygo_core::models::{DataReference, WorkflowRunId, WorkflowSchema};
+use zygo_core::{Dependencies, Zygo};
 
 use crate::ZygoLocalConfig;
 use crate::db::{
@@ -15,7 +15,7 @@ use crate::repos::Repos;
 use crate::stream_processor::LocalStreamProcessor;
 
 pub struct ZygoLocalService {
-    pub base: Zygo<KvRepository>,
+    pub base: Zygo<Dependencies<KvRepository, LogsRepository>>,
     pub repos: Repos,
 }
 
@@ -39,10 +39,10 @@ impl ZygoLocalService {
         let logs = LogsRepository::new(database.clone());
         let kv = KvRepository::new(database);
 
-        let store = kv.clone();
+        let dependencies = Dependencies::new(kv.clone(), logs.clone());
 
         Ok(Self {
-            base: Zygo::new(store, config.base),
+            base: Zygo::new(dependencies, config.base),
             repos: Repos {
                 cdc,
                 kv,

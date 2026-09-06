@@ -2,6 +2,7 @@ mod config;
 mod dates;
 mod db;
 mod log_watcher;
+mod log_writer;
 mod paths;
 mod repos;
 mod service;

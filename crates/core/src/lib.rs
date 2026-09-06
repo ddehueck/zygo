@@ -16,7 +16,7 @@ pub mod workers;
 
 use cancellation::CancellationGroup;
 
-pub use dependencies::AppDeps;
+pub use dependencies::{AppDeps, Dependencies, LogWriter};
 pub use error::{Error, Result};
 pub use reader::WorkflowRunReader;
 pub use service::{Zygo, ZygoConfig};
