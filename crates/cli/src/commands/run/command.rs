@@ -89,7 +89,7 @@ struct LogViewState {
 
 impl LogViewState {
     fn new(job_run: &JobRunSummary, repository: LogsRepository) -> anyhow::Result<Self> {
-        let job_run_id = JobRunId::try_from(job_run.job_run_id.clone())?;
+        let job_run_id = JobRunId::try_from(job_run.public_id.clone())?;
         let watcher = LogWatcher::new(repository, job_run_id.clone());
         Ok(Self {
             job_id: job_run.job_id.clone(),
@@ -374,7 +374,7 @@ pub async fn run_workflow(
                     log.is_running = summary
                         .job_runs
                         .iter()
-                        .find(|job_run| job_run.job_run_id == log.job_run_id.as_ref())
+                        .find(|job_run| job_run.public_id == log.job_run_id.as_ref())
                         .is_some_and(|job_run| job_run.status == "running");
                 }
             }

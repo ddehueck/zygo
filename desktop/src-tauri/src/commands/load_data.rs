@@ -27,7 +27,8 @@ pub struct LoadDataResponse {
 impl From<local::WorkflowRunRow> for WorkflowRun {
     fn from(run: local::WorkflowRunRow) -> Self {
         Self {
-            id: run.id,
+            id: run.row_id,
+            public_id: run.public_id,
             workflow_id: run.workflow_id,
             status: run.status,
             started_at: run.started_at,
@@ -44,7 +45,8 @@ impl From<local::WorkflowRunRow> for WorkflowRun {
 impl From<local::JobRunRow> for JobRun {
     fn from(run: local::JobRunRow) -> Self {
         Self {
-            id: run.id,
+            id: run.row_id,
+            public_id: run.public_id,
             workflow_run_id: run.workflow_run_id,
             job_id: run.job_id,
             status: run.status,
@@ -59,7 +61,7 @@ impl From<local::JobRunRow> for JobRun {
 impl From<local::DataReferenceRow> for DataReference {
     fn from(reference: local::DataReferenceRow) -> Self {
         Self {
-            id: reference.id.to_string(),
+            id: reference.id,
             workflow_run_id: reference.workflow_run_id,
             job_run_id: reference.job_run_id,
             job_id: reference.job_id,
@@ -75,9 +77,10 @@ impl From<local::DataReferenceRow> for DataReference {
 impl From<local::TagRow> for Tag {
     fn from(tag: local::TagRow) -> Self {
         Self {
-            id: tag.id.to_string(),
+            id: tag.id,
             workflow_run_id: tag.workflow_run_id,
-            key: tag.key,
+            job_run_id: tag.job_run_id,
+            data_reference_id: tag.data_reference_id,
             value: tag.value,
             created_at: tag.created_at,
         }
@@ -117,11 +120,11 @@ pub async fn load_data(
     }
 
     let next_cursor = has_more
-        .then(|| workflow_runs.last().map(|run| run.id.clone()))
+        .then(|| workflow_runs.last().map(|run| run.public_id.clone()))
         .flatten();
     let workflow_run_ids = workflow_runs
         .iter()
-        .map(|run| run.id.clone())
+        .map(|run| run.public_id.clone())
         .collect::<Vec<_>>();
 
     let job_runs = state

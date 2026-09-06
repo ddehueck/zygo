@@ -33,4 +33,3 @@ The DB has two responsibilities:
 - `workflow_run`: Durable record of a local workflow run and its state, e.g. status, total duration, and active jobs.
 - `job_run`: Durable record of a job run and its state, e.g. status, duration, and retries.
 - `tags`: Normalized table of all tags associated with workflow runs, jobs, and data references.
-- `tag_associations`: Store the many-to-many relationships between tags and other tables along with the tag instance's value.

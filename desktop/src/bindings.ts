@@ -22,7 +22,7 @@ export type CommandError =
   | { kind: "internal"; code: string; message: string };
 
 export type DataReference = {
-  id: string;
+  id: number;
   workflow_run_id: string;
   job_run_id: string;
   job_id: string;
@@ -34,7 +34,8 @@ export type DataReference = {
 };
 
 export type JobRun = {
-  id: string;
+  id: number;
+  public_id: string;
   workflow_run_id: string;
   job_id: string;
   status: string;
@@ -75,13 +76,13 @@ export type SyncDelta =
 export type SyncEntityKind = "workflow_run" | "job_run" | "tag" | "data_reference";
 
 export type SyncUpsert =
-  | { entity: "workflow_run"; id: string; data: WorkflowRun }
-  | { entity: "job_run"; id: string; data: JobRun }
-  | { entity: "tag"; id: string; data: Tag }
-  | { entity: "data_reference"; id: string; data: DataReference };
+  | { entity: "workflow_run"; id: number; data: WorkflowRun }
+  | { entity: "job_run"; id: number; data: JobRun }
+  | { entity: "tag"; id: number; data: Tag }
+  | { entity: "data_reference"; id: number; data: DataReference };
 
 export type Tag = {
-  id: string;
+  id: number;
   workflow_run_id: string;
   key: string;
   value: string;
@@ -89,7 +90,8 @@ export type Tag = {
 };
 
 export type WorkflowRun = {
-  id: string;
+  id: number;
+  public_id: string;
   workflow_id: string;
   status: string;
   started_at: string | null;

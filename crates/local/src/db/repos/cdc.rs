@@ -1,4 +1,4 @@
-use super::{Db, db_models::CdcRow, error::Result};
+use crate::db::{Db, db_models::CdcRow, error::Result};
 
 const SELECT_COLUMNS: &str = "
     change_id,
@@ -46,20 +46,37 @@ impl CdcRepository {
         &self,
         after_change_id: i64,
         through_change_id: i64,
+        table_names: &[impl AsRef<str>],
     ) -> Result<Vec<CdcRow>> {
+        if table_names.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let table_placeholders = (3..=table_names.len() + 2)
+            .map(|index| format!("?{index}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        let sql = format!(
+            "SELECT {SELECT_COLUMNS}
+             FROM turso_cdc
+             WHERE change_id > ?1 AND change_id <= ?2
+               AND change_type != 2
+               AND table_name IN ({table_placeholders})
+             ORDER BY change_id ASC"
+        );
+
+        let mut params = Vec::with_capacity(table_names.len() + 2);
+        params.push(turso::Value::from(after_change_id));
+        params.push(turso::Value::from(through_change_id));
+        params.extend(
+            table_names
+                .iter()
+                .map(|table_name| turso::Value::from(table_name.as_ref())),
+        );
+
         let connection = self.database.connection.lock().await;
-        let mut rows = connection
-            .query(
-                &format!(
-                    "SELECT {SELECT_COLUMNS}
-                     FROM turso_cdc
-                     WHERE change_id > ?1 AND change_id <= ?2
-                       AND change_type != 2
-                     ORDER BY change_id ASC"
-                ),
-                [after_change_id, through_change_id],
-            )
-            .await?;
+        let mut rows = connection.query(sql, params).await?;
 
         let mut changes = Vec::new();
         while let Some(row) = rows.next().await? {
@@ -135,7 +152,9 @@ mod tests {
         drop(connection);
 
         assert!(repository.last_change_id().await? > before_change_id);
-        let changes = repository.list_between(before_change_id, i64::MAX).await?;
+        let changes = repository
+            .list_between(before_change_id, i64::MAX, &["kv"])
+            .await?;
         let change = changes
             .iter()
             .find(|change| change.table_name == "kv")

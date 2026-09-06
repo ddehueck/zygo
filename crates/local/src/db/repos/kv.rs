@@ -1,7 +1,7 @@
 use serde_json::Value;
 use turso::transaction::TransactionBehavior;
 
-use super::{Db, db_models::KvRow, error::Result};
+use crate::db::{Db, db_models::KvRow, error::Result};
 
 const UPSERT_SQL: &str = "
     INSERT INTO kv (key, value)

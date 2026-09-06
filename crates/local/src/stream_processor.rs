@@ -75,7 +75,7 @@ impl LocalStreamProcessor {
             EventKind::TagInserted(data) => {
                 self.repos
                     .tags
-                    .insert(&workflow_run_id, &data.name, &data.value)
+                    .insert(&data.value, &workflow_run_id, None, None)
                     .await?;
             }
             EventKind::DataReferenceInserted(data) => {

@@ -1,29 +1,33 @@
 import type { Collection, UtilsRecord } from "@tanstack/db";
 
-type Entity = { id: string };
+type Entity = { public_id: string } | { id: number };
 
-type MutableEntityCollection<T extends Entity> = Pick<
-  Collection<T, string, UtilsRecord, never, T>,
+type MutableEntityCollection<T extends Entity, K extends string | number> = Pick<
+  Collection<T, K, UtilsRecord, never, T>,
   "has" | "insert" | "update"
 >;
 
-type DeletableCollection = {
-  delete(id: string): unknown;
-  has(id: string): boolean;
+type DeletableCollection<K extends string | number> = {
+  delete(id: K): unknown;
+  has(id: K): boolean;
 };
 
-export function upsertCollectionItem<T extends Entity>(
-  collection: MutableEntityCollection<T>,
-  item: T,
+export function upsertCollectionItem<T extends Entity, K extends string | number>(
+  collection: MutableEntityCollection<T, K>,
+  item: T & ({ public_id: K } | { id: K }),
 ) {
-  if (collection.has(item.id)) {
-    collection.update(item.id, (draft) => Object.assign(draft, item));
+  const id = ("public_id" in item ? item.public_id : item.id) as K;
+  if (collection.has(id)) {
+    collection.update(id, (draft) => Object.assign(draft, item));
   } else {
     collection.insert(item);
   }
 }
 
-export function deleteCollectionItem(collection: DeletableCollection, id: string) {
+export function deleteCollectionItem<K extends string | number>(
+  collection: DeletableCollection<K>,
+  id: K,
+) {
   if (collection.has(id)) {
     collection.delete(id);
   }

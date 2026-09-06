@@ -7,7 +7,7 @@ use zygo_core::ZygoConfig;
 mod commands;
 mod error;
 
-use commands::{load_data, load_data_references, sync, watch_logs};
+use commands::{load_data, sync, watch_logs};
 
 const TYPESCRIPT_BINDINGS_PATH: &str = "../src/bindings.ts";
 
@@ -19,13 +19,7 @@ fn greet(name: &str, title: &str) -> String {
 }
 
 fn specta_builder() -> Builder<tauri::Wry> {
-    Builder::<tauri::Wry>::new().commands(collect_commands![
-        greet,
-        load_data,
-        load_data_references,
-        sync,
-        watch_logs
-    ])
+    Builder::<tauri::Wry>::new().commands(collect_commands![greet, load_data, sync, watch_logs])
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

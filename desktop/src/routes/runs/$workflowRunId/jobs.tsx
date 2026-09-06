@@ -34,7 +34,7 @@ function JobsListPage({ workflowRunId }: { workflowRunId: string }) {
     query: (q) => q.from({ jobRun: jobRunsCollection }),
   });
 
-  const workflowRun = runsQuery.data.find((run) => run.id === workflowRunId);
+  const workflowRun = runsQuery.data.find((run) => run.public_id === workflowRunId);
   const jobs = jobsQuery.data
     .filter((job) => job.workflow_run_id === workflowRunId)
     .sort((a, b) => a.created_at.localeCompare(b.created_at));

@@ -28,7 +28,7 @@ export function WorkflowRunDetails({ workflowRunId }: WorkflowRunDetailsProps) {
     query: (q) => q.from({ tag: tagsCollection }),
   });
 
-  const workflowRun = runsQuery.data.find((run) => run.id === workflowRunId);
+  const workflowRun = runsQuery.data.find((run) => run.public_id === workflowRunId);
   const jobs = jobsQuery.data
     .filter((job) => job.workflow_run_id === workflowRunId)
     .sort((a, b) => a.created_at.localeCompare(b.created_at));
@@ -178,7 +178,7 @@ function JobsPreviewCard({
   return (
     <Link
       to="/runs/$workflowRunId/jobs"
-      params={{ workflowRunId: run.id }}
+      params={{ workflowRunId: run.public_id }}
       aria-label="View all jobs for this workflow run"
       className="group block h-full rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-app-accent"
     >
@@ -186,7 +186,7 @@ function JobsPreviewCard({
         {visibleJobs.length > 0 ? (
           visibleJobs.map((job) => (
             <PreviewRow
-              key={job.id}
+              key={job.public_id}
               label={
                 <span className="flex min-w-0 items-center gap-2">
                   <StatusIcon status={job.status} className="size-3.5 shrink-0" />

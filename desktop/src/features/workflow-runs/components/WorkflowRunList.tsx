@@ -42,7 +42,9 @@ export function WorkflowRunList({ runs }: WorkflowRunListProps) {
         })
       }
     >
-      {(workflowRun) => <WorkflowRunItem id={workflowRun.workflowRun.id} item={workflowRun} />}
+      {(workflowRun) => (
+        <WorkflowRunItem id={workflowRun.workflowRun.public_id} item={workflowRun} />
+      )}
     </GridList>
   );
 }
@@ -55,7 +57,7 @@ function WorkflowRunItem({ id, item }: { id: string; item: WorkflowRunListRow })
     completedAt: workflowRun.completed_at,
   });
 
-  const textValue = `${workflowRun.id} ${statusLabel(workflowRun.status)}`;
+  const textValue = `${workflowRun.public_id} ${statusLabel(workflowRun.status)}`;
 
   return (
     <GridListItem id={id} textValue={textValue}>
@@ -64,7 +66,7 @@ function WorkflowRunItem({ id, item }: { id: string; item: WorkflowRunListRow })
           <StatusIcon status={workflowRun.status} />
           <p className="min-w-0 truncate font-mono text-base font-semibold tracking-tight text-app-foreground">
             <span className="text-app -foreground-muted font-normal">
-              ({shortRunId(workflowRun.id)})
+              ({shortRunId(workflowRun.public_id)})
             </span>{" "}
             {workflowRun.workflow_id}
           </p>

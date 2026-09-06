@@ -54,8 +54,8 @@ impl CdcRow {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorkflowRunRow {
-    pub row_id: i64,
-    pub id: String,
+    pub id: i64,
+    pub public_id: String,
     pub workflow_id: String,
     pub content_hash: String,
     pub status: String,
@@ -65,14 +65,13 @@ pub struct WorkflowRunRow {
     pub succeeded_job_count: i64,
     pub errored_job_count: i64,
     pub created_at: String,
-    pub updated_at: String,
 }
 
 impl WorkflowRunRow {
     pub fn from_row(row: &Row, rows: &Rows) -> Result<Self> {
         Ok(Self {
-            row_id: row.get(rows.column_index("row_id")?)?,
             id: row.get(rows.column_index("id")?)?,
+            public_id: row.get(rows.column_index("public_id")?)?,
             workflow_id: row.get(rows.column_index("workflow_id")?)?,
             content_hash: row.get(rows.column_index("content_hash")?)?,
             status: row.get(rows.column_index("status")?)?,
@@ -82,36 +81,33 @@ impl WorkflowRunRow {
             succeeded_job_count: row.get(rows.column_index("succeeded_job_count")?)?,
             errored_job_count: row.get(rows.column_index("errored_job_count")?)?,
             created_at: row.get(rows.column_index("created_at")?)?,
-            updated_at: row.get(rows.column_index("updated_at")?)?,
         })
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct JobRunRow {
-    pub row_id: i64,
-    pub id: String,
-    pub workflow_run_id: String,
+    pub id: i64,
+    pub public_id: String,
+    pub workflow_run_id: i64,
     pub job_id: String,
     pub status: String,
     pub duration_ms: Option<i64>,
     pub retry_count: i64,
     pub created_at: String,
-    pub updated_at: String,
 }
 
 impl JobRunRow {
     pub fn from_row(row: &Row, rows: &Rows) -> Result<Self> {
         Ok(Self {
-            row_id: row.get(rows.column_index("row_id")?)?,
             id: row.get(rows.column_index("id")?)?,
+            public_id: row.get(rows.column_index("public_id")?)?,
             workflow_run_id: row.get(rows.column_index("workflow_run_id")?)?,
             job_id: row.get(rows.column_index("job_id")?)?,
             status: row.get(rows.column_index("status")?)?,
             duration_ms: row.get(rows.column_index("duration_ms")?)?,
             retry_count: row.get(rows.column_index("retry_count")?)?,
             created_at: row.get(rows.column_index("created_at")?)?,
-            updated_at: row.get(rows.column_index("updated_at")?)?,
         })
     }
 }
@@ -119,22 +115,33 @@ impl JobRunRow {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TagRow {
     pub id: i64,
-    pub workflow_run_id: String,
-    pub key: String,
+    pub workflow_run_id: i64,
+    pub job_run_id: Option<i64>,
+    pub data_reference_id: Option<i64>,
     pub value: String,
     pub created_at: String,
+}
+
+impl TagRow {
+    pub fn from_row(row: &Row, rows: &Rows) -> Result<Self> {
+        Ok(Self {
+            id: row.get(rows.column_index("id")?)?,
+            workflow_run_id: row.get(rows.column_index("workflow_run_id")?)?,
+            job_run_id: row.get(rows.column_index("job_run_id")?)?,
+            data_reference_id: row.get(rows.column_index("data_reference_id")?)?,
+            value: row.get(rows.column_index("value")?)?,
+            created_at: row.get(rows.column_index("created_at")?)?,
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DataReferenceRow {
     pub id: i64,
-    pub workflow_run_id: String,
-    pub job_run_id: String,
-    pub job_id: String,
+    pub workflow_run_id: i64,
+    pub job_run_id: i64,
     pub uri: String,
-    pub version: String,
     pub is_replay: bool,
-    pub inserted_at: String,
     pub created_at: String,
 }
 
@@ -145,23 +152,8 @@ impl DataReferenceRow {
             id: row.get(rows.column_index("id")?)?,
             workflow_run_id: row.get(rows.column_index("workflow_run_id")?)?,
             job_run_id: row.get(rows.column_index("job_run_id")?)?,
-            job_id: row.get(rows.column_index("job_id")?)?,
             uri: row.get(rows.column_index("uri")?)?,
-            version: row.get(rows.column_index("version")?)?,
             is_replay: is_replay != 0,
-            inserted_at: row.get(rows.column_index("inserted_at")?)?,
-            created_at: row.get(rows.column_index("created_at")?)?,
-        })
-    }
-}
-
-impl TagRow {
-    pub fn from_row(row: &Row, rows: &Rows) -> Result<Self> {
-        Ok(Self {
-            id: row.get(rows.column_index("id")?)?,
-            workflow_run_id: row.get(rows.column_index("workflow_run_id")?)?,
-            key: row.get(rows.column_index("key")?)?,
-            value: row.get(rows.column_index("value")?)?,
             created_at: row.get(rows.column_index("created_at")?)?,
         })
     }
@@ -188,6 +180,7 @@ impl KvRow {
     }
 }
 
+// TODO: remove this
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct WorkflowRunJobCounts {
     pub active_job_count: i64,

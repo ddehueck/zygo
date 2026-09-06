@@ -14,7 +14,7 @@ export function useWorkflowRunsListData() {
           tags: materialize(
             q
               .from({ tag: tagsCollection })
-              .where(({ tag }) => eq(workflowRun.id, tag.workflow_run_id))
+              .where(({ tag }) => eq(workflowRun.public_id, tag.workflow_run_id))
               .orderBy(({ tag }) => tag.created_at, "asc"),
           ),
         }))

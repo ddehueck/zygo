@@ -3,7 +3,8 @@ use specta::Type;
 
 #[derive(Debug, Deserialize, Serialize, Type)]
 pub struct WorkflowRun {
-    pub id: String,
+    pub id: i64,
+    pub public_id: String,
     pub workflow_id: String,
     pub status: String,
     pub started_at: Option<String>,
@@ -20,7 +21,8 @@ pub struct WorkflowRun {
 
 #[derive(Debug, Serialize, Deserialize, Type)]
 pub struct JobRun {
-    pub id: String,
+    pub id: i64,
+    pub public_id: String,
     pub workflow_run_id: String,
     pub job_id: String,
     pub status: String,
@@ -34,16 +36,17 @@ pub struct JobRun {
 
 #[derive(Debug, Serialize, Deserialize, Type)]
 pub struct Tag {
-    pub id: String,
+    pub id: i64,
     pub workflow_run_id: String,
-    pub key: String,
+    pub job_run_id: Option<String>,
+    pub data_reference_id: Option<i64>,
     pub value: String,
     pub created_at: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Type)]
 pub struct DataReference {
-    pub id: String,
+    pub id: i64,
     pub workflow_run_id: String,
     pub job_run_id: String,
     pub job_id: String,
@@ -54,11 +57,31 @@ pub struct DataReference {
     pub created_at: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Type)]
+#[derive(Debug, Serialize, Type)]
+#[serde(tag = "operation", rename_all = "snake_case")]
+pub enum RowChange<T> {
+    Insert { row: T },
+    Update { row: T },
+    Delete { id: i64 },
+}
+
+#[derive(Debug, Serialize, Type)]
 #[serde(tag = "entity", rename_all = "snake_case")]
-pub enum SyncUpsert {
-    WorkflowRun { id: String, data: WorkflowRun },
-    JobRun { id: String, data: JobRun },
-    Tag { id: String, data: Tag },
-    DataReference { id: String, data: DataReference },
+pub enum SyncDelta {
+    WorkflowRun {
+        change_id: i64,
+        change: RowChange<WorkflowRun>,
+    },
+    JobRun {
+        change_id: i64,
+        change: RowChange<JobRun>,
+    },
+    Tag {
+        change_id: i64,
+        change: RowChange<Tag>,
+    },
+    DataReference {
+        change_id: i64,
+        change: RowChange<DataReference>,
+    },
 }

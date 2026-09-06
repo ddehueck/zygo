@@ -17,14 +17,14 @@ export function JobList({ jobs }: { jobs: JobRun[] }) {
       <div role="list" aria-label="Jobs">
         {jobs.map((job, index) => (
           <button
-            key={job.id}
+            key={job.public_id}
             type="button"
             role="listitem"
             className="group grid w-full min-w-136 grid-cols-[3rem_minmax(12rem,1fr)_9rem_7rem] items-center border-b border-app-border px-3 py-3 text-left transition hover:bg-app-interaction-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-app-accent"
             onClick={() =>
               void navigate({
                 to: "/runs/$workflowRunId/jobs/$jobId",
-                params: { workflowRunId: job.workflow_run_id, jobId: job.id },
+                params: { workflowRunId: job.workflow_run_id, jobId: job.public_id },
               })
             }
           >

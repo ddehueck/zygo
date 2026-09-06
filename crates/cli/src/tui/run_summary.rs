@@ -195,7 +195,7 @@ pub fn job_run_at_position(
 }
 
 fn job_run_row(job_run: &JobRunSummary) -> Row<'static> {
-    let job_run_id = last_chars(&job_run.job_run_id, 5);
+    let job_run_id = last_chars(&job_run.public_id, 5);
     let job = format!("{} ({job_run_id})", job_run.job_id);
     let duration = job_run_duration(job_run);
     let status = Cell::from(job_run.status.clone()).style(status_style(&job_run.status));

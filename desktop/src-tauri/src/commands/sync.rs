@@ -1,35 +1,22 @@
 use local::{Delta, SyncEntity, SyncSubscription, ZygoLocalService};
-use serde::Serialize;
-use specta::Type;
+use serde::de::DeserializeOwned;
 use tauri::State;
 
 use crate::error::{CommandError, CommandResult};
 
-use super::SyncUpsert;
+use super::{RowChange, SyncDelta};
 
-#[derive(Debug, Serialize, Type)]
-#[serde(rename_all = "snake_case")]
-pub enum SyncEntityKind {
-    WorkflowRun,
-    JobRun,
-    Tag,
-    DataReference,
-}
-
-#[derive(Debug, Serialize, Type)]
-#[serde(tag = "operation", rename_all = "snake_case")]
-pub enum SyncDelta {
-    Resync,
-    Delete { entity: SyncEntityKind, id: String },
-    Upsert { payload: SyncUpsert },
-}
-
-fn entity_kind(entity: SyncEntity) -> SyncEntityKind {
-    match entity {
-        SyncEntity::WorkflowRun => SyncEntityKind::WorkflowRun,
-        SyncEntity::JobRun => SyncEntityKind::JobRun,
-        SyncEntity::Tag => SyncEntityKind::Tag,
-        SyncEntity::DataReference => SyncEntityKind::DataReference,
+fn deserialize_change<T: DeserializeOwned>(
+    change: RowChange<serde_json::Value>,
+) -> Result<RowChange<T>, serde_json::Error> {
+    match change {
+        RowChange::Insert { row } => Ok(RowChange::Insert {
+            row: serde_json::from_value(row)?,
+        }),
+        RowChange::Update { row } => Ok(RowChange::Update {
+            row: serde_json::from_value(row)?,
+        }),
+        RowChange::Delete { id } => Ok(RowChange::Delete { id }),
     }
 }
 
@@ -37,53 +24,44 @@ impl TryFrom<Delta> for SyncDelta {
     type Error = serde_json::Error;
 
     fn try_from(delta: Delta) -> Result<Self, Self::Error> {
-        match delta {
-            Delta::Resync => Ok(Self::Resync),
-            Delta::Delete { entity, id } => Ok(Self::Delete {
-                entity: entity_kind(entity),
+        let (entity, change_id, change) = match delta {
+            Delta::Insert {
+                change_id,
+                entity,
+                data,
+            } => (entity, change_id, RowChange::Insert { row: data }),
+            Delta::Update {
+                change_id,
+                entity,
+                data,
+            } => (entity, change_id, RowChange::Update { row: data }),
+            Delta::Delete {
+                change_id,
+                entity,
                 id,
-            }),
-            Delta::Upsert { entity, id, data } => {
-                let payload = match entity {
-                    SyncEntity::WorkflowRun => SyncUpsert::WorkflowRun {
-                        id,
-                        data: serde_json::from_value(data)?,
-                    },
-                    SyncEntity::JobRun => {
-                        let data = match data {
-                            serde_json::Value::Object(mut data) => {
-                                data.insert("id".to_owned(), serde_json::Value::String(id.clone()));
-                                serde_json::Value::Object(data)
-                            }
-                            data => data,
-                        };
-                        SyncUpsert::JobRun {
-                            id,
-                            data: serde_json::from_value(data)?,
-                        }
-                    }
-                    SyncEntity::Tag => SyncUpsert::Tag {
-                        id,
-                        data: serde_json::from_value(data)?,
-                    },
-                    SyncEntity::DataReference => {
-                        let data = match data {
-                            serde_json::Value::Object(mut data) => {
-                                data.insert("id".to_owned(), serde_json::Value::String(id.clone()));
-                                serde_json::Value::Object(data)
-                            }
-                            data => data,
-                        };
-                        SyncUpsert::DataReference {
-                            id,
-                            data: serde_json::from_value(data)?,
-                        }
-                    }
-                };
+            } => (entity, change_id, RowChange::Delete { id }),
+        };
 
-                Ok(Self::Upsert { payload })
-            }
-        }
+        let delta = match entity {
+            SyncEntity::WorkflowRun => Self::WorkflowRun {
+                change_id,
+                change: deserialize_change(change)?,
+            },
+            SyncEntity::JobRun => Self::JobRun {
+                change_id,
+                change: deserialize_change(change)?,
+            },
+            SyncEntity::Tag => Self::Tag {
+                change_id,
+                change: deserialize_change(change)?,
+            },
+            SyncEntity::DataReference => Self::DataReference {
+                change_id,
+                change: deserialize_change(change)?,
+            },
+        };
+
+        Ok(delta)
     }
 }
 

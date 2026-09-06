@@ -11,7 +11,7 @@ pub async fn list_workflow_runs(filter: Option<&str>) -> Result<()> {
     .await?;
 
     for workflow_run in service.list_workflow_runs(filter).await? {
-        println!("{}", workflow_run.id);
+        println!("{}", workflow_run.public_id);
     }
 
     Ok(())
