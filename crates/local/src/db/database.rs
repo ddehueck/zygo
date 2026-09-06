@@ -23,6 +23,7 @@ impl Db {
         // Recommended path is to use: `turso --dev path/to/zygo.db`'s http server with Outerbase.
         let database = Builder::new_local(path)
             .experimental_multiprocess_wal(true)
+            .experimental_index_method(true)
             .build()
             .await?;
 
