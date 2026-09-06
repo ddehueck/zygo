@@ -9,6 +9,8 @@ export const commands = {
     typedError<LoadDataResponse, CommandError>(__TAURI_INVOKE("load_data", { request })),
   sync: (onEvent: Channel<SyncDelta>) =>
     typedError<null, CommandError>(__TAURI_INVOKE("sync", { onEvent })),
+  watchLogs: (jobRunId: string, onBatch: Channel<LogBatch>) =>
+    typedError<number, CommandError>(__TAURI_INVOKE("watch_logs", { jobRunId, onBatch })),
 };
 
 /* Types */
@@ -38,6 +40,11 @@ export type LoadDataResponse = {
   job_runs: JobRun[];
   tags: Tag[];
   next_cursor: string | null;
+};
+
+export type LogBatch = {
+  content: string;
+  error: string | null;
 };
 
 export type SyncDelta =
