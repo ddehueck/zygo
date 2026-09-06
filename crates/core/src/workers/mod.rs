@@ -1,5 +1,4 @@
 mod error;
-mod log;
 mod pool;
 mod runner;
 
@@ -13,5 +12,4 @@ pub struct WorkerContext<D: AppDeps> {
 }
 
 pub use error::{Error, Result};
-pub use log::{WorkerLog, WorkerLogReader};
 pub use pool::WorkerPool;

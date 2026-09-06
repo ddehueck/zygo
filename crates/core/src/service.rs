@@ -39,6 +39,7 @@ impl<D: AppDeps> Zygo<D> {
         }
     }
 
+    // todo: this should really be the initializer to avoid the actor mutex
     pub async fn run(
         &self,
         id: &WorkflowRunId,
