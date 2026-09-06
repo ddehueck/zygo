@@ -3,35 +3,35 @@ use std::{collections::VecDeque, sync::Arc};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, TryAcquireError};
 
 use crate::{
+    AppDeps,
     context::ActorContext,
     ipc::v0::RunCommandArgs,
     models::{Entrypoint, JobRunSource, WorkflowRunId},
-    store::StorageProvider,
     workers::{
         Error::{Closed, Unknown},
         Result, WorkerContext,
-        job_runner::Runner,
+        runner::JobRunner,
     },
 };
 
 #[derive(Clone)]
-pub struct WorkerPool {
+pub struct WorkerPool<D: AppDeps> {
     semaphore: Arc<Semaphore>,
-    queue: Arc<std::sync::Mutex<VecDeque<WorkerPoolMessage>>>,
+    queue: Arc<std::sync::Mutex<VecDeque<WorkerPoolMessage<D>>>>,
 }
 
-enum WorkerPoolMessage {
-    RunJob(QueuedJob),
+enum WorkerPoolMessage<D: AppDeps> {
+    RunJob(QueuedJob<D>),
 }
 
-struct QueuedJob {
-    context: WorkerContext,
+struct QueuedJob<D: AppDeps> {
+    context: WorkerContext<D>,
     source: JobRunSource,
     args: RunCommandArgs,
     entrypoint: Entrypoint,
 }
 
-impl WorkerPool {
+impl<D: AppDeps> WorkerPool<D> {
     pub fn new(config_max_workers: usize) -> Self {
         Self {
             semaphore: Arc::new(Semaphore::new(config_max_workers)),
@@ -39,9 +39,9 @@ impl WorkerPool {
         }
     }
 
-    pub fn enqueue_job<S: StorageProvider>(
+    pub fn enqueue_job(
         &self,
-        context: ActorContext<S>,
+        context: ActorContext<D>,
         source: JobRunSource,
         args: RunCommandArgs,
         entrypoint: Entrypoint,
@@ -51,6 +51,7 @@ impl WorkerPool {
         }
 
         let context = WorkerContext {
+            deps: context.deps,
             run_id: context.run_id,
             actor_tx: context.actor_tx,
             cancellation: context.cancellation,
@@ -107,7 +108,7 @@ impl WorkerPool {
         }
     }
 
-    fn spawn_message(&self, message: WorkerPoolMessage, permit: OwnedSemaphorePermit) {
+    fn spawn_message(&self, message: WorkerPoolMessage<D>, permit: OwnedSemaphorePermit) {
         let WorkerPoolMessage::RunJob(job) = message;
         let task_group = job.context.cancellation.clone();
         let cancellation = task_group.clone();
@@ -119,8 +120,8 @@ impl WorkerPool {
                     return Ok(());
                 }
 
-                Runner::new()
-                    .run_job(job.context, job.source, job.entrypoint, job.args)
+                JobRunner::new(job.context, job.source, job.entrypoint, job.args)
+                    .run()
                     .await
             }
             .await;

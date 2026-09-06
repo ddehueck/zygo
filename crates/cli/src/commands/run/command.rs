@@ -1,31 +1,29 @@
-use std::{
-    fs,
-    io::{ErrorKind, stdout},
-    path::{Path, PathBuf},
-    process::Command,
-    time::Duration,
-};
+use std::fs;
+use std::io::stdout;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::time::Duration;
 
-use crossterm::{
-    cursor::Show,
-    event::{
-        self, DisableMouseCapture, EnableMouseCapture, Event as TerminalEvent, KeyCode,
-        KeyEventKind, KeyModifiers, MouseButton, MouseEventKind,
-    },
-    execute,
-    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
+use crossterm::cursor::Show;
+use crossterm::event::{
+    self, DisableMouseCapture, EnableMouseCapture, Event as TerminalEvent, KeyCode, KeyEventKind,
+    KeyModifiers, MouseButton, MouseEventKind,
 };
-use local::{DEFAULT_DATABASE_BUSY_TIMEOUT, ZygoLocalConfig, ZygoLocalService};
-use ratatui::{
-    Terminal, TerminalOptions, Viewport, backend::CrosstermBackend, widgets::TableState,
+use crossterm::execute;
+use crossterm::terminal::{
+    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
-use zygo_core::{
-    ZygoConfig,
-    engine::{EngineSnapshot, RunCursor},
-    ipc::v0::PythonCli,
-    models::{DataReference, Event, JobRunId, StreamItem},
-    workers::WorkerLogReader,
+use local::{
+    DEFAULT_DATABASE_BUSY_TIMEOUT, DbResult, LogRow, LogWatcher, LogsRepository, ZygoLocalConfig,
+    ZygoLocalService,
 };
+use ratatui::backend::CrosstermBackend;
+use ratatui::widgets::TableState;
+use ratatui::{Terminal, TerminalOptions, Viewport};
+use zygo_core::ZygoConfig;
+use zygo_core::engine::{EngineSnapshot, RunCursor};
+use zygo_core::ipc::v0::PythonCli;
+use zygo_core::models::{DataReference, Event, JobRunId, StreamItem};
 
 use crate::tui::{JobLogView, WorkflowRunView, job_run_at_position};
 
@@ -33,7 +31,6 @@ use super::{JobRunSummary, WorkflowRunSummary};
 
 const ZYGO_PKG_INTERNAL_CLI_MODULE: &str = "zygo._internal.ipc.v0";
 const INPUT_POLL_INTERVAL: Duration = Duration::from_millis(50);
-const LOG_REFRESH_INTERVAL: Duration = Duration::from_millis(200);
 const STREAM_RECORD_BATCH_SIZE: usize = 64;
 
 struct TerminalInput {
@@ -84,82 +81,42 @@ enum Screen {
 struct LogViewState {
     job_id: String,
     job_run_id: JobRunId,
-    cwd: PathBuf,
-    reader: Option<WorkerLogReader>,
+    watcher: LogWatcher,
+    contents: String,
     error: Option<String>,
     is_running: bool,
 }
 
 impl LogViewState {
-    fn new(job_run: &JobRunSummary, cwd: impl Into<PathBuf>) -> anyhow::Result<Self> {
+    fn new(job_run: &JobRunSummary, repository: LogsRepository) -> anyhow::Result<Self> {
+        let job_run_id = JobRunId::try_from(job_run.job_run_id.clone())?;
+        let watcher = LogWatcher::new(repository, job_run_id.clone());
         Ok(Self {
             job_id: job_run.job_id.clone(),
-            job_run_id: JobRunId::try_from(job_run.job_run_id.clone())?,
-            cwd: cwd.into(),
-            reader: None,
+            job_run_id,
+            watcher,
+            contents: String::new(),
             error: None,
             is_running: job_run.status == "running",
         })
     }
 
-    async fn refresh(&mut self) {
-        if self.reader.is_none() {
-            let job_run_id = self.job_run_id.clone();
-            let cwd = self.cwd.clone();
-            match tokio::task::spawn_blocking(move || WorkerLogReader::new_sync_in(job_run_id, cwd))
-                .await
-            {
-                Ok(Ok(reader)) => {
-                    self.reader = Some(reader);
-                    self.error = None;
-                    return;
+    fn apply_batch(&mut self, batch: DbResult<Vec<LogRow>>) {
+        match batch {
+            Ok(rows) => {
+                for row in rows {
+                    self.contents.push_str(&row.content);
                 }
-                Ok(Err(error)) if error.kind() == ErrorKind::NotFound && self.is_running => {
-                    self.error = None;
-                    return;
-                }
-                Ok(Err(error)) => {
-                    self.error = Some(format!("Could not open log file: {error}"));
-                    return;
-                }
-                Err(error) => {
-                    self.error = Some(format!("Could not open log file in worker thread: {error}"));
-                    return;
-                }
-            }
-        }
-
-        let Some(reader) = self.reader.take() else {
-            return;
-        };
-        let refresh = tokio::task::spawn_blocking(move || {
-            let mut reader = reader;
-            let result = reader.refresh_sync();
-            (reader, result)
-        })
-        .await;
-
-        match refresh {
-            Ok((reader, Ok(()))) => {
-                self.reader = Some(reader);
                 self.error = None;
             }
-            Ok((reader, Err(error))) => {
-                self.reader = Some(reader);
-                self.error = Some(format!("Could not read log file: {error}"));
-            }
             Err(error) => {
-                self.error = Some(format!("Could not read log file in worker thread: {error}"));
+                self.error = Some(format!("Could not read logs: {error}"));
             }
         }
     }
 
     fn display_contents(&self) -> String {
-        let mut contents = self
-            .reader
-            .as_ref()
-            .map(|reader| String::from_utf8_lossy(reader.contents()).into_owned())
-            .unwrap_or_default();
+        let mut contents = self.contents.clone();
 
         if contents.is_empty() {
             if let Some(error) = &self.error {
@@ -195,7 +152,7 @@ enum LoopEvent {
     StreamError(anyhow::Error),
     Redraw,
     Input(Option<TerminalEvent>),
-    RefreshLogs,
+    LogBatch(DbResult<Vec<LogRow>>),
 }
 
 fn select_previous(state: &mut TableState, item_count: usize) {
@@ -278,7 +235,7 @@ pub async fn run_workflow(
     })
     .await?;
 
-    let run_id = service.run_many(inputs, schema).await?;
+    let run_id = service.run(inputs, schema).await?;
     // println!("run_id: {run_id:?}");
 
     // 5. Watch the engine state in an interactive fullscreen terminal view.
@@ -363,10 +320,8 @@ pub async fn run_workflow(
     let mut summary = WorkflowRunSummary::new(metadata.id.clone());
     let mut summary_refresh = tokio::time::interval(Duration::from_secs(1));
     let mut input_poll = tokio::time::interval(INPUT_POLL_INTERVAL);
-    let mut log_refresh = tokio::time::interval(LOG_REFRESH_INTERVAL);
     summary_refresh.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     input_poll.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-    log_refresh.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
     let mut has_snapshot = false;
     let mut screen = Screen::Summary;
@@ -393,9 +348,13 @@ pub async fn run_workflow(
                 };
                 LoopEvent::Input(input)
             }
-            _ = log_refresh.tick(), if matches!(&screen, Screen::Logs(log) if log.is_running) => {
-                LoopEvent::RefreshLogs
-            }
+            batch = async {
+                match &mut screen {
+                    // The watcher owns polling and its cursor is cancellation-safe when input wins.
+                    Screen::Logs(log) => log.watcher.next_batch().await,
+                    Screen::Summary => std::future::pending().await,
+                }
+            } => LoopEvent::LogBatch(batch),
         };
 
         let mut open_job_index = None;
@@ -412,17 +371,11 @@ pub async fn run_workflow(
                 has_snapshot = true;
 
                 if let Screen::Logs(log) = &mut screen {
-                    let was_running = log.is_running;
                     log.is_running = summary
                         .job_runs
                         .iter()
                         .find(|job_run| job_run.job_run_id == log.job_run_id.as_ref())
                         .is_some_and(|job_run| job_run.status == "running");
-
-                    // Capture the final bytes once when a watched job ends.
-                    if was_running && !log.is_running {
-                        log.refresh().await;
-                    }
                 }
             }
             LoopEvent::Input(Some(TerminalEvent::Key(key)))
@@ -463,9 +416,9 @@ pub async fn run_workflow(
                     open_job_index = Some(index);
                 }
             }
-            LoopEvent::RefreshLogs => {
+            LoopEvent::LogBatch(batch) => {
                 if let Screen::Logs(log) = &mut screen {
-                    log.refresh().await;
+                    log.apply_batch(batch);
                 }
             }
             LoopEvent::StreamError(error) => {
@@ -495,9 +448,7 @@ pub async fn run_workflow(
         if let Some(index) = open_job_index
             && let Some(job_run) = summary.job_runs.get(index)
         {
-            let mut log = LogViewState::new(job_run, cwd.clone())?;
-            log.refresh().await;
-            screen = Screen::Logs(log);
+            screen = Screen::Logs(LogViewState::new(job_run, service.repos.logs.clone())?);
         }
 
         if !has_snapshot || !should_redraw {

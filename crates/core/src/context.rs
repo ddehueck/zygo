@@ -1,47 +1,43 @@
 use crate::{
-    CancellationGroup,
-    actors::ActorTx,
-    models::WorkflowRunId,
-    store::{StorageProvider, Store},
-    stream::StreamWriter,
+    AppDeps, CancellationGroup, actor::ActorTx, models::WorkflowRunId, stream::StreamWriter,
     workers::WorkerPool,
 };
 
-pub struct ServiceContext<S: StorageProvider> {
-    pub store: Store<S>,
-    pub worker_pool: WorkerPool,
+pub struct ServiceContext<D: AppDeps> {
+    pub deps: D,
+    pub worker_pool: WorkerPool<D>,
 }
 
-impl<S: StorageProvider> ServiceContext<S> {
-    pub fn new(store: Store<S>, worker_pool: WorkerPool) -> Self {
-        Self { store, worker_pool }
+impl<D: AppDeps> ServiceContext<D> {
+    pub fn new(deps: D, worker_pool: WorkerPool<D>) -> Self {
+        Self { deps, worker_pool }
     }
 }
 
-impl<S: StorageProvider> Clone for ServiceContext<S> {
+impl<D: AppDeps> Clone for ServiceContext<D> {
     fn clone(&self) -> Self {
         Self {
-            store: self.store.clone(),
+            deps: self.deps.clone(),
             worker_pool: self.worker_pool.clone(),
         }
     }
 }
 
-pub struct RunContext<S: StorageProvider> {
-    pub store: Store<S>,
-    pub worker_pool: WorkerPool,
+pub struct RunContext<D: AppDeps> {
+    pub deps: D,
+    pub worker_pool: WorkerPool<D>,
     pub run_id: WorkflowRunId,
     pub cancellation: CancellationGroup,
 }
 
-impl<S: StorageProvider> RunContext<S> {
+impl<D: AppDeps> RunContext<D> {
     pub fn new(
-        context: &ServiceContext<S>,
+        context: &ServiceContext<D>,
         run_id: &WorkflowRunId,
         cancellation: CancellationGroup,
     ) -> Self {
         Self {
-            store: context.store.clone(),
+            deps: context.deps.clone(),
             worker_pool: context.worker_pool.clone(),
             run_id: run_id.clone(),
             cancellation,
@@ -49,19 +45,19 @@ impl<S: StorageProvider> RunContext<S> {
     }
 }
 
-impl<S: StorageProvider> From<&RunContext<S>> for ServiceContext<S> {
-    fn from(context: &RunContext<S>) -> Self {
+impl<D: AppDeps> From<&RunContext<D>> for ServiceContext<D> {
+    fn from(context: &RunContext<D>) -> Self {
         Self {
-            store: context.store.clone(),
+            deps: context.deps.clone(),
             worker_pool: context.worker_pool.clone(),
         }
     }
 }
 
-impl<S: StorageProvider> Clone for RunContext<S> {
+impl<D: AppDeps> Clone for RunContext<D> {
     fn clone(&self) -> Self {
         Self {
-            store: self.store.clone(),
+            deps: self.deps.clone(),
             worker_pool: self.worker_pool.clone(),
             run_id: self.run_id.clone(),
             cancellation: self.cancellation.clone(),
@@ -69,19 +65,19 @@ impl<S: StorageProvider> Clone for RunContext<S> {
     }
 }
 
-pub struct ActorContext<S: StorageProvider> {
-    pub store: Store<S>,
-    pub worker_pool: WorkerPool,
+pub struct ActorContext<D: AppDeps> {
+    pub deps: D,
+    pub worker_pool: WorkerPool<D>,
     pub run_id: WorkflowRunId,
     pub actor_tx: ActorTx,
     pub stream_writer: StreamWriter,
     pub cancellation: CancellationGroup,
 }
 
-impl<S: StorageProvider> ActorContext<S> {
-    pub fn from(context: &RunContext<S>, actor_tx: ActorTx, stream_writer: StreamWriter) -> Self {
+impl<D: AppDeps> ActorContext<D> {
+    pub fn from(context: &RunContext<D>, actor_tx: ActorTx, stream_writer: StreamWriter) -> Self {
         Self {
-            store: context.store.clone(),
+            deps: context.deps.clone(),
             worker_pool: context.worker_pool.clone(),
             run_id: context.run_id.clone(),
             actor_tx,
@@ -91,10 +87,10 @@ impl<S: StorageProvider> ActorContext<S> {
     }
 }
 
-impl<S: StorageProvider> From<&ActorContext<S>> for RunContext<S> {
-    fn from(context: &ActorContext<S>) -> Self {
+impl<D: AppDeps> From<&ActorContext<D>> for RunContext<D> {
+    fn from(context: &ActorContext<D>) -> Self {
         Self {
-            store: context.store.clone(),
+            deps: context.deps.clone(),
             worker_pool: context.worker_pool.clone(),
             run_id: context.run_id.clone(),
             cancellation: context.cancellation.clone(),
@@ -102,10 +98,10 @@ impl<S: StorageProvider> From<&ActorContext<S>> for RunContext<S> {
     }
 }
 
-impl<S: StorageProvider> Clone for ActorContext<S> {
+impl<D: AppDeps> Clone for ActorContext<D> {
     fn clone(&self) -> Self {
         Self {
-            store: self.store.clone(),
+            deps: self.deps.clone(),
             worker_pool: self.worker_pool.clone(),
             run_id: self.run_id.clone(),
             actor_tx: self.actor_tx.clone(),

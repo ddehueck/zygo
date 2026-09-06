@@ -1,18 +1,15 @@
 mod error;
-mod job_runner;
-mod local_runner;
-mod log;
 mod pool;
+mod runner;
 
-use crate::{CancellationGroup, actors::ActorTx, models::WorkflowRunId};
+use crate::{AppDeps, actor::ActorTx, cancellation::CancellationGroup, models::WorkflowRunId};
 
-pub use error::{Error, Result};
-use local_runner::LocalJobRunner;
-pub use log::{WorkerLog, WorkerLogReader};
-pub use pool::WorkerPool;
-
-struct WorkerContext {
+pub struct WorkerContext<D: AppDeps> {
+    deps: D,
     run_id: WorkflowRunId,
     actor_tx: ActorTx,
     cancellation: CancellationGroup,
 }
+
+pub use error::{Error, Result};
+pub use pool::WorkerPool;

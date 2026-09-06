@@ -1,6 +1,8 @@
 //! Executes command IR produced by the arbiter.
 use crate::context::ActorContext;
 
+use crate::AppDeps;
+use crate::dependencies::StorageProvider;
 use crate::engine::{Error, Result};
 use crate::ipc::v0::RunCommandArgs;
 use crate::models::{
@@ -8,7 +10,6 @@ use crate::models::{
     JobRunStatus, ReplayJobCommand, ResultCacheItem, RunJobCommand, SetJobRunStatusCommand,
     StreamItem, StreamRecord,
 };
-use crate::store::StorageProvider;
 
 use super::state::{ResultCache, RunState};
 
@@ -17,19 +18,19 @@ pub struct ExecuteResult {
     pub next_events: Vec<Event>,
 }
 
-pub struct Executor<S: StorageProvider> {
-    context: ActorContext<S>,
+pub struct Executor<D: AppDeps> {
+    context: ActorContext<D>,
 }
 
-impl<S: StorageProvider> Executor<S> {
-    pub fn new(context: ActorContext<S>) -> Self {
+impl<D: AppDeps> Executor<D> {
+    pub fn new(context: ActorContext<D>) -> Self {
         Self { context }
     }
 
     pub async fn execute(
         &self,
         command: Command,
-        context: &ResultCache<S>,
+        context: &ResultCache<D>,
         state: &RunState,
     ) -> Result<ExecuteResult> {
         match command {
@@ -48,7 +49,7 @@ impl<S: StorageProvider> Executor<S> {
     async fn run_job(
         &self,
         command: RunJobCommand,
-        context: &ResultCache<S>,
+        context: &ResultCache<D>,
         state: &RunState,
     ) -> Result<ExecuteResult> {
         let job_args = RunCommandArgs {
@@ -85,13 +86,13 @@ impl<S: StorageProvider> Executor<S> {
     async fn replay_job(
         &self,
         command: ReplayJobCommand,
-        context: &ResultCache<S>,
+        context: &ResultCache<D>,
         state: &RunState,
     ) -> Result<ExecuteResult> {
         // Retrieve cached stream records in the stored key order and turn their events into
         // replay events for the current run.
         let event_keys = &command.cache_item.event_keys;
-        let values = self.context.store.get_many(event_keys).await?;
+        let values = self.context.deps.store().get_many(event_keys).await?;
         if values.len() != event_keys.len() {
             return Err(Error::other(format!(
                 "cache returned {} values for {} event keys",
@@ -149,7 +150,7 @@ impl<S: StorageProvider> Executor<S> {
     async fn cache_job_run_result(
         &self,
         command: CacheJobRunResultCommand,
-        context: &ResultCache<S>,
+        context: &ResultCache<D>,
         state: &RunState,
     ) -> Result<ExecuteResult> {
         // A job run id is constructed from the data input and job content hash.

@@ -2,10 +2,11 @@ use anyhow::Result;
 use std::sync::Arc;
 use tokio::sync::{Mutex, OwnedMutexGuard};
 
+use crate::AppDeps;
 use crate::context::RunContext;
+use crate::dependencies::StorageProvider;
 use crate::models::SequenceId;
-use crate::store::keyspace::{KeySpace, RunKeySpace, StoreKey};
-use crate::store::{StorageProvider, WriteSetReservation};
+use crate::store::{KeySpace, RunKeySpace, StoreKey, WriteSetReservation};
 
 #[derive(Clone)]
 pub struct StreamSequencer {
@@ -14,11 +15,11 @@ pub struct StreamSequencer {
 }
 
 impl StreamSequencer {
-    pub async fn load<S: StorageProvider>(context: RunContext<S>) -> Result<Self> {
+    pub async fn load<D: AppDeps>(context: RunContext<D>) -> Result<Self> {
         let run_keyspace = KeySpace::run(&context.run_id);
 
         let tail_key = run_keyspace.tail();
-        let tail_value = context.store.get(&tail_key).await?;
+        let tail_value = context.deps.store().get(&tail_key).await?;
 
         let tail = match tail_value {
             Some(value) => serde_json::from_value::<SequenceId>(value)?,

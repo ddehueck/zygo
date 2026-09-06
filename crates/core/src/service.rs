@@ -1,16 +1,23 @@
 use crate::{
-    actors::ActorPool,
-    context::ServiceContext,
+    CancellationGroup,
+    actor::ActorHandle,
+    context::{RunContext, ServiceContext},
+    dependencies::{AppDeps, StorageProvider},
     engine::EngineSnapshot,
-    models::{DataReference, WorkflowRunId, WorkflowSchema},
-    store::{StorageProvider, Store, keyspace::KeySpace},
+    models::{
+        ChannelItemInsertedData, DataReference, Event, EventId, EventKind, Source, WorkflowRunId,
+        WorkflowSchema,
+    },
+    store::KeySpace,
     stream::StreamReader,
     workers::WorkerPool,
 };
+use std::time::SystemTime;
+use tokio::sync::Mutex;
 
-pub struct Zygo<S: StorageProvider> {
-    actor_pool: ActorPool<S>,
-    store: Store<S>,
+pub struct Zygo<D: AppDeps> {
+    context: ServiceContext<D>,
+    actor: Mutex<Option<(WorkflowRunId, ActorHandle)>>,
 }
 
 pub struct ZygoConfig {
@@ -24,36 +31,74 @@ impl ZygoConfig {
     }
 }
 
-impl<S: StorageProvider> Zygo<S> {
-    pub fn new(store: Store<S>, config: ZygoConfig) -> Self {
-        let context = ServiceContext::new(store.clone(), WorkerPool::new(config.num_workers));
-        let actor_pool = ActorPool::new(context.clone());
-
-        Self { actor_pool, store }
+impl<D: AppDeps> Zygo<D> {
+    pub fn new(deps: D, config: ZygoConfig) -> Self {
+        Self {
+            context: ServiceContext::new(deps, WorkerPool::new(config.num_workers)),
+            actor: Mutex::new(None),
+        }
     }
 
+    // todo: this should really be the initializer to avoid the actor mutex
     pub async fn run(
-        &self,
-        id: &WorkflowRunId,
-        input: DataReference,
-        schema: WorkflowSchema,
-    ) -> Result<(), anyhow::Error> {
-        self.run_many(id, vec![input], schema).await
-    }
-
-    pub async fn run_many(
         &self,
         id: &WorkflowRunId,
         inputs: Vec<DataReference>,
         schema: WorkflowSchema,
     ) -> Result<(), anyhow::Error> {
-        self.actor_pool
-            .run_with_actor_many(id, inputs, schema)
-            .await
+        anyhow::ensure!(
+            !inputs.is_empty(),
+            "a workflow run requires at least one input"
+        );
+
+        let input_events = inputs
+            .into_iter()
+            .map(|input| Event {
+                id: EventId::new(),
+                is_replay: false,
+                timestamp: SystemTime::now(),
+                kind: EventKind::ChannelItemInserted(ChannelItemInsertedData {
+                    channel_id: schema.input_channel_id.clone(),
+                    data_reference: input,
+                }),
+                source: Source::Input,
+                run_id: id.clone(),
+            })
+            .collect();
+
+        let schema_key = KeySpace::run(id).schema();
+        let schema_value = serde_json::to_value(&schema)?;
+        self.context
+            .deps
+            .store()
+            .put(&[(schema_key, schema_value)])
+            .await?;
+
+        let cancellation = CancellationGroup::new();
+        let run_context = RunContext::new(&self.context, id, cancellation);
+        let actor = ActorHandle::spawn(&run_context, input_events).await?;
+        *self.actor.lock().await = Some((id.clone(), actor));
+
+        Ok(())
     }
 
     pub async fn cancel(&self, run_id: &WorkflowRunId) -> Result<(), anyhow::Error> {
-        self.actor_pool.cancel(run_id).await;
+        let actor = {
+            let active_actor = self.actor.lock().await;
+            active_actor
+                .as_ref()
+                .filter(|(active_run_id, _)| active_run_id == run_id)
+                .map(|(_, actor)| actor.clone())
+        };
+
+        if let Some(actor) = actor {
+            actor.signal_cancel();
+            if let Err(error) = self.context.worker_pool.cancel_run(run_id) {
+                eprintln!("failed to remove queued jobs for run {run_id}: {error}");
+            }
+            actor.cancel().await;
+        }
+
         Ok(())
     }
 
@@ -61,18 +106,29 @@ impl<S: StorageProvider> Zygo<S> {
         &self,
         run_id: &WorkflowRunId,
     ) -> Result<tokio::sync::watch::Receiver<EngineSnapshot>, anyhow::Error> {
-        self.actor_pool.subscribe(run_id).await
+        let active_actor = self.actor.lock().await;
+        let (_, actor) = active_actor
+            .as_ref()
+            .filter(|(active_run_id, _)| active_run_id == run_id)
+            .ok_or_else(|| anyhow::anyhow!("No actor found for workflow run id: {run_id}"))?;
+
+        Ok(actor.state_rx.clone())
     }
 
-    pub fn stream(&self, run_id: &WorkflowRunId) -> StreamReader<S> {
-        StreamReader::new(self.store.clone(), run_id)
+    pub fn stream(&self, run_id: &WorkflowRunId) -> StreamReader<D::Store> {
+        StreamReader::new(self.context.deps.store().clone(), run_id)
     }
 
     pub async fn workflow_schema(
         &self,
         run_id: &WorkflowRunId,
     ) -> Result<Option<WorkflowSchema>, anyhow::Error> {
-        let schema_value = self.store.get(&KeySpace::run(run_id).schema()).await?;
+        let schema_value = self
+            .context
+            .deps
+            .store()
+            .get(&KeySpace::run(run_id).schema())
+            .await?;
 
         schema_value
             .map(serde_json::from_value)

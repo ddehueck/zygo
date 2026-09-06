@@ -4,26 +4,28 @@ use super::state::{EngineSnapshot, ResultCache, RunCursor};
 use super::step::{StepOutcome, StepResult};
 use crate::context::{ActorContext, RunContext};
 use crate::models::{StreamItem, StreamRecord, WorkflowSchema};
-use crate::store::keyspace::KeySpace;
-use crate::store::{StorageProvider, StoreKey};
 use crate::stream::StreamReader;
+use crate::{
+    dependencies::{AppDeps, StorageProvider},
+    store::{KeySpace, StoreKey},
+};
 use tokio::sync::watch;
 
-pub struct Engine<S: StorageProvider> {
-    context: ActorContext<S>,
+pub struct Engine<D: AppDeps> {
+    context: ActorContext<D>,
     snapshot: EngineSnapshot,
-    result_cache: ResultCache<S>,
+    result_cache: ResultCache<D>,
     arbiter: Arbiter,
-    executor: Executor<S>,
-    stream_reader: StreamReader<S>,
+    executor: Executor<D>,
+    stream_reader: StreamReader<D::Store>,
     state_tx: Option<watch::Sender<EngineSnapshot>>,
 }
 
-impl<S: StorageProvider> Engine<S> {
-    pub async fn new(context: ActorContext<S>) -> Result<Self, anyhow::Error> {
+impl<D: AppDeps> Engine<D> {
+    pub async fn new(context: ActorContext<D>) -> Result<Self, anyhow::Error> {
         let run_keyspace = KeySpace::run(&context.run_id);
         let schema_key = run_keyspace.schema();
-        let schema_value = context.store.get(&schema_key).await?.ok_or_else(|| {
+        let schema_value = context.deps.store().get(&schema_key).await?.ok_or_else(|| {
             anyhow::anyhow!(
                 "workflow schema is missing for run {}; store the run schema before starting the engine",
                 context.run_id
@@ -38,7 +40,8 @@ impl<S: StorageProvider> Engine<S> {
 
         let snapshot_key = run_keyspace.snapshot();
         let snapshot = context
-            .store
+            .deps
+            .store()
             .get(&snapshot_key)
             .await?
             .map(serde_json::from_value::<EngineSnapshot>)
@@ -53,7 +56,7 @@ impl<S: StorageProvider> Engine<S> {
 
         let run_context = RunContext::from(&context);
         let result_cache = ResultCache::new(run_context, schema);
-        let stream_reader = StreamReader::new(context.store.clone(), &context.run_id);
+        let stream_reader = StreamReader::new(context.deps.store().clone(), &context.run_id);
         let executor = Executor::new(context.clone());
 
         Ok(Self {
@@ -166,7 +169,7 @@ impl<S: StorageProvider> Engine<S> {
         // 3) Commit newly produced stream items and the snapshot atomically.
         let mut write_set = self.context.stream_writer.append(append).await?;
         write_set.push(self.engine_snapshot_key(), serde_json::to_value(&snapshot)?);
-        write_set.commit(&self.context.store).await?;
+        write_set.commit(self.context.deps.store()).await?;
 
         Ok(snapshot)
     }

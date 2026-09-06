@@ -1,10 +1,9 @@
 use crate::engine::RunCursor;
 use crate::models::{SequenceId, StreamRecord, WorkflowRunId};
-use crate::store::keyspace::{KeySpace, RunKeySpace};
-use crate::store::{StorageProvider, Store};
+use crate::store::{KeySpace, RunKeySpace, StorageProvider};
 
 pub struct StreamReader<S: StorageProvider> {
-    store: Store<S>,
+    store: S,
     keyspace: RunKeySpace,
 }
 
@@ -19,7 +18,7 @@ pub struct StreamIterator<S: StorageProvider> {
 }
 
 impl<S: StorageProvider> StreamReader<S> {
-    pub fn new(store: Store<S>, run_id: &WorkflowRunId) -> Self {
+    pub fn new(store: S, run_id: &WorkflowRunId) -> Self {
         Self {
             store,
             keyspace: KeySpace::run(run_id),

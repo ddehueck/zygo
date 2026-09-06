@@ -16,13 +16,25 @@ impl Db {
         // We are using multi-process WAL so the we can have the desktop app
         // and cli interact with the same database.
         //
-        // NB: Watch out for the following error:
+        // NB:
+        // Inspecting the DB with Beekeeper Studio caused:
         // thread 'main' (413596) panicked at src/lib.rs:36:6: failed to start the local Zygo service: I/O error: short read on WAL frame at offset 1355512: expected 4096 bytes, got 0 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace [ELIFECYCLE] Command failed with exit code 101. error: Recipe `dev` failed on line 6 with exit code 101
-        // This means the WAL got corrupted via another process that interacted with the database concurrently, but incorrectly.
-        // This happened to me while use beekeeper studio as a GUI to interact with DB locally
-        // Recommended path is to use: `turso --dev path/to/zygo.db`'s http server with Outerbase.
+        // This means the WAL got corrupted via another process that interacted with the database
+        // concurrently, but incorrectly.
+        //
+        // Historically we used `turso dev --db-file path/to/zygo.db` and connected
+        // Outerbase over HTTP instead.
+        //
+        // However, this database uses Turso's experimental `index_method` feature
+        // (e.g. `CREATE INDEX ... USING fts`). As of turso CLI v1.0.32,
+        // `turso dev` does not expose a way to enable that feature, so it cannot
+        // currently open this database either.
+        //
+        // Any process opening this DB should use Turso directly with the same
+        // experimental features enabled and that doesn't work with any mature GUI atm.
         let database = Builder::new_local(path)
             .experimental_multiprocess_wal(true)
+            .experimental_index_method(true)
             .build()
             .await?;
 

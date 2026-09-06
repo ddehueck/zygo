@@ -1,5 +1,6 @@
 use crate::db::{
-    CdcRepository, JobRunRepository, KvRepository, TagsRepository, WorkflowRunRepository,
+    CdcRepository, JobRunRepository, KvRepository, LogsRepository, TagsRepository,
+    WorkflowRunRepository,
 };
 
 /// Repositories owned by a [`ZygoLocalService`](crate::ZygoLocalService).
@@ -12,4 +13,5 @@ pub struct Repos {
     pub tags: TagsRepository,
     pub workflow_runs: WorkflowRunRepository,
     pub job_runs: JobRunRepository,
+    pub logs: LogsRepository,
 }

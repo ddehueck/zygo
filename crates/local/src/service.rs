@@ -2,20 +2,20 @@ use std::io;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use zygo_core::Zygo;
 use zygo_core::models::{DataReference, WorkflowRunId, WorkflowSchema};
+use zygo_core::{Dependencies, Zygo};
 
 use crate::ZygoLocalConfig;
 use crate::db::{
-    CdcRepository, Db, JobRunRepository, KvRepository, TagsRepository, WorkflowRunRepository,
-    WorkflowRunRow,
+    CdcRepository, Db, JobRunRepository, KvRepository, LogsRepository, TagsRepository,
+    WorkflowRunRepository, WorkflowRunRow,
 };
 use crate::paths;
 use crate::repos::Repos;
 use crate::stream_processor::LocalStreamProcessor;
 
 pub struct ZygoLocalService {
-    pub base: Zygo<KvRepository>,
+    pub base: Zygo<Dependencies<KvRepository, LogsRepository>>,
     pub repos: Repos,
 }
 
@@ -36,27 +36,25 @@ impl ZygoLocalService {
         let tags = TagsRepository::new(database.clone());
         let workflow_runs = WorkflowRunRepository::new(database.clone());
         let job_runs = JobRunRepository::new(database.clone());
+        let logs = LogsRepository::new(database.clone());
         let kv = KvRepository::new(database);
 
-        let store = zygo_core::store::Store::new(kv.clone());
+        let dependencies = Dependencies::new(kv.clone(), logs.clone());
 
         Ok(Self {
-            base: Zygo::new(store, config.base),
+            base: Zygo::new(dependencies, config.base),
             repos: Repos {
                 cdc,
                 kv,
                 tags,
                 workflow_runs,
                 job_runs,
+                logs,
             },
         })
     }
 
-    pub async fn run(&self, input: DataReference, schema: WorkflowSchema) -> Result<WorkflowRunId> {
-        self.run_many(vec![input], schema).await
-    }
-
-    pub async fn run_many(
+    pub async fn run(
         &self,
         inputs: Vec<DataReference>,
         schema: WorkflowSchema,
@@ -80,7 +78,7 @@ impl ZygoLocalService {
             .insert(&workflow_run_id.to_string(), &workflow_id, &content_hash)
             .await?;
 
-        self.base.run_many(&workflow_run_id, inputs, schema).await?;
+        self.base.run(&workflow_run_id, inputs, schema).await?;
 
         Ok(workflow_run_id)
     }

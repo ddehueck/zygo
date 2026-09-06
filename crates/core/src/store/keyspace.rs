@@ -19,6 +19,18 @@ use crate::models::{
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct StoreKey(String);
 
+impl From<&str> for StoreKey {
+    fn from(value: &str) -> Self {
+        Self(value.to_owned())
+    }
+}
+
+impl From<String> for StoreKey {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
 impl StoreKey {
     pub fn as_str(&self) -> &str {
         &self.0
@@ -26,15 +38,15 @@ impl StoreKey {
 }
 
 #[derive(Clone)]
-pub(crate) struct RunKeySpace {
+pub struct RunKeySpace {
     prefix: String,
 }
 
-pub(crate) struct CacheKeySpace {
+pub struct CacheKeySpace {
     prefix: String,
 }
 
-pub(crate) struct KeySpace;
+pub struct KeySpace;
 
 impl KeySpace {
     pub fn cache() -> CacheKeySpace {

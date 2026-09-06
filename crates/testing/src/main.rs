@@ -7,7 +7,7 @@ use testing::generators::workflow::{Topology, WorkflowGenerator};
 use testing::generators::world::WorldGenerator;
 use testing::invariants;
 use tracing::{info, warn};
-use zygo_core::store::{MemoryStore, Store};
+use zygo_core::store::MemoryStore;
 use zygo_core::{WorkflowRunReader, Zygo, ZygoConfig};
 
 /// Maximum time to wait for the actor-driven workflow run to become terminal.
@@ -47,17 +47,11 @@ async fn run() -> anyhow::Result<()> {
     let world = generator.generate_seeded(seed);
     info!(world = ?world, "generated test world");
 
-    // Zygo currently accepts one input per run. Preserve the previous harness
-    // behavior, which generated several candidates but submitted only the first.
-    let input = world
-        .inputs
-        .into_iter()
-        .next()
-        .expect("world generator must produce at least one input");
+    let inputs = world.inputs;
 
-    let store = Store::new(MemoryStore::new());
+    let store = MemoryStore::new();
     let zygo = Zygo::new(store.clone(), ZygoConfig::new(1));
-    let run_id = zygo.run(input, world.schema).await?;
+    let run_id = zygo.run(inputs, world.schema).await?;
     info!(%run_id, "submitted workflow run");
 
     let reader = WorkflowRunReader::new(store, run_id);
