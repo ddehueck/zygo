@@ -1,32 +1,40 @@
 import { useLiveQuery } from "@tanstack/react-db";
 import { Link } from "@tanstack/react-router";
-import dayjs from "dayjs";
-import { useEffect, useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
 
-import type { WorkflowRun } from "@/bindings";
-import { workflowRuns } from "@/db/collections";
-import { formatDate, formatDurationBetween } from "@/lib/dates";
+import type { JobRun, Tag, WorkflowRun } from "@/bindings";
+import { jobRunsCollection, tagsCollection, workflowRunsCollection } from "@/db/collections";
+
+import { Icon, iconDefinitions } from "@/components/icons";
+import { useDuration } from "@/hooks/use-duration";
+import { formatDate } from "@/lib/dates";
+import { RunStatus, StatusIcon, statusLabel } from "./statuses";
+import { TagBadge } from "./TagBadge";
+import { Heading } from "@/components/Text";
+import { sum } from "@/lib/math";
 
 type WorkflowRunDetailsProps = {
   workflowRunId: string;
 };
 
 export function WorkflowRunDetails({ workflowRunId }: WorkflowRunDetailsProps) {
-  const {
-    data: runs,
-    isLoading,
-    isError,
-    status,
-  } = useLiveQuery({
-    query: (q) => q.from({ workflowRun: workflowRuns }),
+  const runsQuery = useLiveQuery({
+    query: (q) => q.from({ workflowRun: workflowRunsCollection }),
   });
-  const workflowRun = runs.find((run) => run.id === workflowRunId);
-  const isActive =
-    workflowRun !== undefined &&
-    (workflowRun.status === "running" || workflowRun.active_job_count > 0);
-  const now = useLiveClock(isActive);
+  const jobsQuery = useLiveQuery({
+    query: (q) => q.from({ jobRun: jobRunsCollection }),
+  });
+  const tagsQuery = useLiveQuery({
+    query: (q) => q.from({ tag: tagsCollection }),
+  });
 
-  if (isLoading) {
+  const workflowRun = runsQuery.data.find((run) => run.id === workflowRunId);
+  const jobs = jobsQuery.data
+    .filter((job) => job.workflow_run_id === workflowRunId)
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  const runTags = tagsQuery.data.filter((tag) => tag.workflow_run_id === workflowRunId);
+
+  if (runsQuery.isLoading) {
     return (
       <RunPageShell>
         <p className="text-app-foreground-muted">Loading workflow run…</p>
@@ -34,14 +42,11 @@ export function WorkflowRunDetails({ workflowRunId }: WorkflowRunDetailsProps) {
     );
   }
 
-  if (isError) {
+  if (runsQuery.isError) {
     return (
       <RunPageShell>
-        <p
-          className="rounded-md border border-app-danger/30 bg-app-danger/10 p-4 text-app-danger"
-          role="alert"
-        >
-          Unable to load workflow run (status: {status}).
+        <p className="text-app-danger" role="alert">
+          Unable to load workflow run (status: {runsQuery.status}).
         </p>
       </RunPageShell>
     );
@@ -50,162 +55,195 @@ export function WorkflowRunDetails({ workflowRunId }: WorkflowRunDetailsProps) {
   if (!workflowRun) {
     return (
       <RunPageShell>
-        <div className="rounded-lg border border-dashed border-app-border p-8 text-center">
-          <h1 className="text-lg font-semibold text-app-foreground">Workflow run not found</h1>
-          <p className="mt-2 text-app-foreground-muted">The requested run may have been removed.</p>
-          <Link
-            to="/"
-            className="mt-5 inline-block text-sm font-medium text-app-accent hover:underline"
-          >
-            Back to workflow runs
-          </Link>
-        </div>
+        <h1 className="text-xl font-semibold text-app-foreground">Workflow run not found</h1>
+        <p className="mt-2 text-app-foreground-muted">The requested run may have been removed.</p>
+        <Link
+          to="/"
+          className="mt-5 inline-block text-sm font-medium text-app-accent hover:underline"
+        >
+          Back to workflow runs
+        </Link>
       </RunPageShell>
     );
   }
 
-  return <WorkflowRunDetailsContent workflowRun={workflowRun} isActive={isActive} now={now} />;
+  return <WorkflowRunOverview run={workflowRun} jobs={jobs} runTags={runTags} />;
 }
 
 function RunPageShell({ children }: { children: ReactNode }) {
-  return <main className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-6">{children}</main>;
+  return <main className="mx-auto w-full max-w-5xl px-6 py-10">{children}</main>;
 }
 
-function WorkflowRunDetailsContent({
-  workflowRun,
-  isActive,
-  now,
+function WorkflowRunOverview({
+  run,
+  jobs,
+  runTags,
 }: {
-  workflowRun: WorkflowRun;
-  isActive: boolean;
-  now: number;
+  run: WorkflowRun;
+  jobs: JobRun[];
+  runTags: Tag[];
 }) {
-  const totalJobs =
-    workflowRun.active_job_count + workflowRun.succeeded_job_count + workflowRun.errored_job_count;
-  const duration = formatDurationBetween(workflowRun.started_at, workflowRun.completed_at ?? now);
+  const totalJobs = sum([run.active_job_count, run.succeeded_job_count, run.errored_job_count]);
+
+  const duration = useDuration({
+    startedAt: run.started_at,
+    completedAt: run.completed_at,
+  });
 
   return (
-    <main className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-6 py-10">
-      <header>
-        <p className="mb-2 text-sm font-medium tracking-wide text-app-foreground-muted uppercase">
-          Run details
-        </p>
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="font-mono text-2xl font-semibold tracking-tight text-app-foreground">
-            {workflowRun.id}
-          </h1>
-          <StatusBadge status={workflowRun.status} />
+    <main className="mx-auto w-full max-w-5xl px-6 py-10">
+      <header className="">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-3">
+            <Heading text={run.workflow_id} />
+            <RunStatus status={run.status} />
+          </div>
         </div>
-        <p className="mt-2 text-app-foreground-muted">
-          General information and job counts for this workflow run.
+        <p className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-app-foreground-muted">
+          <span>{formatDate(run.started_at)}</span>
+          <span aria-hidden>•</span>
+          <span>{duration ?? "—"}</span>
+          <span aria-hidden>•</span>
+          <span>{totalJobs} jobs</span>
         </p>
+        {runTags.length > 0 && (
+          <div className="mt-4 flex flex-wrap gap-x-3 gap-y-1 text-sm text-app-foreground-muted">
+            {runTags.map((tag) => (
+              <TagBadge key={tag.id} name={tag.key} value={tag.value} />
+            ))}
+          </div>
+        )}
       </header>
 
-      <section
-        className="rounded-lg border border-app-border bg-app-bg-elevated p-5"
-        aria-labelledby="run-information-heading"
-      >
-        <h2 id="run-information-heading" className="text-lg font-semibold text-app-foreground">
-          General information
-        </h2>
-        <dl className="mt-5 grid gap-5 sm:grid-cols-2">
-          <InfoItem label="Workflow run ID" value={workflowRun.id} mono />
-          <InfoItem label="Status" value={statusLabel(workflowRun.status)} />
-          <InfoItem label="Created" value={formatDate(workflowRun.created_at)} />
-          <InfoItem label="Started" value={formatDate(workflowRun.started_at)} />
-          <InfoItem label="Completed" value={formatDate(workflowRun.completed_at)} />
-          <InfoItem label="Duration" value={duration ?? "—"} />
-          <InfoItem label="Last updated" value={formatDate(workflowRun.updated_at)} />
-        </dl>
-      </section>
-
-      <section aria-labelledby="job-summary-heading">
-        <h2 id="job-summary-heading" className="text-lg font-semibold text-app-foreground">
-          Job summary
-        </h2>
-        <div className="mt-3 grid gap-3 sm:grid-cols-4">
-          <SummaryItem label="Total jobs" value={totalJobs} />
-          <SummaryItem label="Succeeded" value={workflowRun.succeeded_job_count} />
-          <SummaryItem label="Running" value={workflowRun.active_job_count} />
-          <SummaryItem label="Failed" value={workflowRun.errored_job_count} />
-        </div>
-        {isActive && (
-          <p className="mt-4 text-sm text-app-foreground-muted">This run is still in progress.</p>
-        )}
+      <section aria-label="Workflow run previews" className="mt-8 grid gap-4 lg:grid-cols-3">
+        <JobsPreviewCard jobs={jobs} run={run} totalJobs={totalJobs} />
+        <DataPreviewCard />
+        <LogsPreviewCard run={run} />
       </section>
     </main>
   );
 }
 
-function InfoItem({
-  label,
-  value,
-  mono = false,
+function PreviewCard({
+  title,
+  summary,
+  children,
+  footer,
 }: {
-  label: string;
-  value: string;
-  mono?: boolean;
+  title: string;
+  summary: string;
+  children: ReactNode;
+  footer: string;
 }) {
   return (
-    <div>
-      <dt className="text-sm text-app-foreground-muted">{label}</dt>
-      <dd
-        className={`mt-1 text-sm break-all text-app-foreground ${mono ? "font-mono text-xs" : ""}`}
-      >
+    <section className="flex min-h-80 min-w-0 flex-col overflow-hidden rounded-xl border border-app-border bg-app-bg-surface p-5">
+      <header className="pb-4">
+        <Heading text={title} size="medium" />
+        <p className="mt-1 text-sm text-app-foreground-muted">{summary}</p>
+      </header>
+      <div className="flex-1">{children}</div>
+      <footer className="pt-4 text-sm font-medium text-app-foreground-secondary">
+        {footer} <span aria-hidden>→</span>
+      </footer>
+    </section>
+  );
+}
+
+function PreviewRow({ label, value }: { label: ReactNode; value: ReactNode }) {
+  return (
+    <div className="grid min-w-0 grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] items-start gap-3 py-3 first:pt-4 last:pb-4">
+      <span className="min-w-0 text-sm text-app-foreground-muted">{label}</span>
+      <span className="min-w-0 overflow-hidden text-right text-sm font-medium text-app-foreground">
         {value}
-      </dd>
+      </span>
     </div>
   );
 }
 
-function SummaryItem({ label, value }: { label: string; value: number }) {
+function JobsPreviewCard({
+  jobs,
+  run,
+  totalJobs,
+}: {
+  jobs: JobRun[];
+  run: WorkflowRun;
+  totalJobs: number;
+}) {
+  const visibleJobs = jobs.slice(0, 4);
+  const summary =
+    run.errored_job_count > 0
+      ? `${run.errored_job_count} job${run.errored_job_count === 1 ? "" : "s"} failed`
+      : `${run.succeeded_job_count} of ${totalJobs} jobs completed`;
+
   return (
-    <div className="rounded-lg border border-app-border bg-app-bg-elevated p-4">
-      <p className="text-sm text-app-foreground-muted">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-app-foreground">{value}</p>
-    </div>
+    <PreviewCard title="Jobs" summary={summary} footer="View all jobs">
+      {visibleJobs.length > 0 ? (
+        visibleJobs.map((job) => (
+          <PreviewRow
+            key={job.id}
+            label={
+              <span className="flex min-w-0 items-center gap-2">
+                <StatusIcon status={job.status} className="size-3.5 shrink-0" />
+                <span className="block truncate" title={job.job_id}>
+                  {job.job_id}
+                </span>
+              </span>
+            }
+            value={statusLabel(job.status)}
+          />
+        ))
+      ) : (
+        <p className="py-5 text-sm text-app-foreground-muted">No jobs recorded.</p>
+      )}
+    </PreviewCard>
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
+const previewFiles = [
+  { name: "results/summary.json", size: "48 KB" },
+  { name: "results/report.html", size: "2.1 MB" },
+  { name: "figures/overview.png", size: "18.3 MB" },
+  { name: "metadata/workflow.yaml", size: "12 KB" },
+];
+
+function DataPreviewCard() {
   return (
-    <span
-      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${statusClasses(status)}`}
+    <PreviewCard title="Data" summary="128 files · 42.1 GB" footer="Browse outputs">
+      <div>
+        {previewFiles.map((file) => (
+          <div
+            key={file.name}
+            className="flex min-w-0 items-center gap-3 py-3 first:pt-4 last:pb-4"
+          >
+            <Icon
+              aria-hidden
+              className="size-4 shrink-0 text-app-foreground-muted"
+              definition={iconDefinitions.file}
+            />
+            <span className="min-w-0 flex-1 truncate text-sm font-medium text-app-foreground">
+              {file.name}
+            </span>
+            <span className="shrink-0 text-xs text-app-foreground-muted">{file.size}</span>
+          </div>
+        ))}
+      </div>
+    </PreviewCard>
+  );
+}
+
+function LogsPreviewCard({ run }: { run: WorkflowRun }) {
+  return (
+    <PreviewCard
+      title="Logs"
+      summary={run.errored_job_count > 0 ? "Errors found in this run" : "No errors reported"}
+      footer="View run logs"
     >
-      {statusLabel(status)}
-    </span>
+      <PreviewRow label="Run status" value={statusLabel(run.status)} />
+      <PreviewRow label="Failed jobs" value={run.errored_job_count} />
+      <PreviewRow label="Last updated" value={formatDate(run.updated_at)} />
+      <p className="py-3 text-sm text-app-foreground-muted">
+        Detailed log entries are not available in this view.
+      </p>
+    </PreviewCard>
   );
-}
-
-function statusLabel(status: string): string {
-  return status.replace(/_/g, " ");
-}
-
-function statusClasses(status: string): string {
-  switch (status) {
-    case "succeeded":
-      return "bg-app-success/15 text-app-success";
-    case "running":
-      return "bg-app-warning/15 text-app-warning";
-    case "failed":
-    case "errored":
-      return "bg-app-danger/15 text-app-danger";
-    default:
-      return "bg-app-border/50 text-app-foreground-muted";
-  }
-}
-
-function useLiveClock(enabled: boolean): number {
-  const [now, setNow] = useState(() => dayjs().valueOf());
-
-  useEffect(() => {
-    if (!enabled) {
-      return;
-    }
-
-    const interval = setInterval(() => setNow(dayjs().valueOf()), 1000);
-    return () => clearInterval(interval);
-  }, [enabled]);
-
-  return now;
 }

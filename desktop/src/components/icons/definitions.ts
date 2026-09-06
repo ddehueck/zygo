@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Search, Tag, X, type LucideIcon } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileText, Search, Tag, X, type LucideIcon } from "lucide-react";
 
 export type OpticalContext = "inline" | "circle" | "square" | "pill";
 
@@ -15,6 +15,9 @@ export type IconDefinition = {
 export const iconDefinitions = {
   close: {
     icon: X,
+  },
+  file: {
+    icon: FileText,
   },
   next: {
     icon: ChevronRight,
