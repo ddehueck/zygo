@@ -136,7 +136,7 @@ function PreviewCard({
   footer: string;
 }) {
   return (
-    <section className="flex min-h-80 min-w-0 flex-col overflow-hidden rounded-xl border border-app-border bg-app-bg-surface p-5">
+    <section className="flex h-full min-h-80 min-w-0 flex-col overflow-hidden rounded-xl border border-app-border bg-app-bg-surface p-5 group-hover:border-app-accent group-hover:shadow-md motion-safe:transition-[box-shadow,border-color] motion-safe:duration-150 motion-safe:ease-out">
       <header className="pb-4">
         <Heading text={title} size="medium" />
         <p className="mt-1 text-sm text-app-foreground-muted">{summary}</p>
@@ -151,7 +151,7 @@ function PreviewCard({
 
 function PreviewRow({ label, value }: { label: ReactNode; value: ReactNode }) {
   return (
-    <div className="grid min-w-0 grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] items-start gap-3 py-3 first:pt-4 last:pb-4">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3 py-3 first:pt-4 last:pb-4">
       <span className="min-w-0 text-sm text-app-foreground-muted">{label}</span>
       <span className="min-w-0 overflow-hidden text-right text-sm font-medium text-app-foreground">
         {value}
@@ -176,26 +176,33 @@ function JobsPreviewCard({
       : `${run.succeeded_job_count} of ${totalJobs} jobs completed`;
 
   return (
-    <PreviewCard title="Jobs" summary={summary} footer="View all jobs">
-      {visibleJobs.length > 0 ? (
-        visibleJobs.map((job) => (
-          <PreviewRow
-            key={job.id}
-            label={
-              <span className="flex min-w-0 items-center gap-2">
-                <StatusIcon status={job.status} className="size-3.5 shrink-0" />
-                <span className="block truncate" title={job.job_id}>
-                  {job.job_id}
+    <Link
+      to="/runs/$workflowRunId/jobs"
+      params={{ workflowRunId: run.id }}
+      aria-label="View all jobs for this workflow run"
+      className="group block h-full rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-app-accent"
+    >
+      <PreviewCard title="Jobs" summary={summary} footer="View all jobs">
+        {visibleJobs.length > 0 ? (
+          visibleJobs.map((job) => (
+            <PreviewRow
+              key={job.id}
+              label={
+                <span className="flex min-w-0 items-center gap-2">
+                  <StatusIcon status={job.status} className="size-3.5 shrink-0" />
+                  <span className="block truncate" title={job.job_id}>
+                    {job.job_id}
+                  </span>
                 </span>
-              </span>
-            }
-            value={statusLabel(job.status)}
-          />
-        ))
-      ) : (
-        <p className="py-5 text-sm text-app-foreground-muted">No jobs recorded.</p>
-      )}
-    </PreviewCard>
+              }
+              value={statusLabel(job.status)}
+            />
+          ))
+        ) : (
+          <p className="py-5 text-sm text-app-foreground-muted">No jobs recorded.</p>
+        )}
+      </PreviewCard>
+    </Link>
   );
 }
 

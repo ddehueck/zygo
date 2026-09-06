@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Outlet, useRouterState } from "@tanstack/react-router";
 
 import { WorkflowRunDetails } from "@/features/workflow-runs/components/WorkflowRunDetails";
 import { shortRunId } from "@/features/workflow-runs/lib/id";
@@ -15,5 +15,11 @@ export const Route = createFileRoute("/runs/$workflowRunId")({
 
 function WorkflowRunRoute() {
   const { workflowRunId } = Route.useParams();
-  return <WorkflowRunDetails workflowRunId={workflowRunId} />;
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+
+  return pathname === `/runs/${workflowRunId}` ? (
+    <WorkflowRunDetails workflowRunId={workflowRunId} />
+  ) : (
+    <Outlet />
+  );
 }
