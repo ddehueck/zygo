@@ -12,6 +12,8 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as RunsRouteImport } from './routes/runs'
 import { Route as RunsWorkflowRunIdRouteImport } from './routes/runs/$workflowRunId'
+import { Route as RunsWorkflowRunIdJobsRouteImport } from './routes/runs/$workflowRunId/jobs'
+import { Route as RunsWorkflowRunIdJobsJobIdRouteImport } from './routes/runs/$workflowRunId/jobs/$jobId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -28,29 +30,62 @@ const RunsWorkflowRunIdRoute = RunsWorkflowRunIdRouteImport.update({
   path: '/$workflowRunId',
   getParentRoute: () => RunsRoute,
 } as any)
+const RunsWorkflowRunIdJobsRoute = RunsWorkflowRunIdJobsRouteImport.update({
+  id: '/jobs',
+  path: '/jobs',
+  getParentRoute: () => RunsWorkflowRunIdRoute,
+} as any)
+const RunsWorkflowRunIdJobsJobIdRoute =
+  RunsWorkflowRunIdJobsJobIdRouteImport.update({
+    id: '/$jobId',
+    path: '/$jobId',
+    getParentRoute: () => RunsWorkflowRunIdJobsRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/runs': typeof RunsRouteWithChildren
-  '/runs/$workflowRunId': typeof RunsWorkflowRunIdRoute
+  '/runs/$workflowRunId': typeof RunsWorkflowRunIdRouteWithChildren
+  '/runs/$workflowRunId/jobs': typeof RunsWorkflowRunIdJobsRouteWithChildren
+  '/runs/$workflowRunId/jobs/$jobId': typeof RunsWorkflowRunIdJobsJobIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/runs': typeof RunsRouteWithChildren
-  '/runs/$workflowRunId': typeof RunsWorkflowRunIdRoute
+  '/runs/$workflowRunId': typeof RunsWorkflowRunIdRouteWithChildren
+  '/runs/$workflowRunId/jobs': typeof RunsWorkflowRunIdJobsRouteWithChildren
+  '/runs/$workflowRunId/jobs/$jobId': typeof RunsWorkflowRunIdJobsJobIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/runs': typeof RunsRouteWithChildren
-  '/runs/$workflowRunId': typeof RunsWorkflowRunIdRoute
+  '/runs/$workflowRunId': typeof RunsWorkflowRunIdRouteWithChildren
+  '/runs/$workflowRunId/jobs': typeof RunsWorkflowRunIdJobsRouteWithChildren
+  '/runs/$workflowRunId/jobs/$jobId': typeof RunsWorkflowRunIdJobsJobIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/runs' | '/runs/$workflowRunId'
+  fullPaths:
+    | '/'
+    | '/runs'
+    | '/runs/$workflowRunId'
+    | '/runs/$workflowRunId/jobs'
+    | '/runs/$workflowRunId/jobs/$jobId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/runs' | '/runs/$workflowRunId'
-  id: '__root__' | '/' | '/runs' | '/runs/$workflowRunId'
+  to:
+    | '/'
+    | '/runs'
+    | '/runs/$workflowRunId'
+    | '/runs/$workflowRunId/jobs'
+    | '/runs/$workflowRunId/jobs/$jobId'
+  id:
+    | '__root__'
+    | '/'
+    | '/runs'
+    | '/runs/$workflowRunId'
+    | '/runs/$workflowRunId/jobs'
+    | '/runs/$workflowRunId/jobs/$jobId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -81,15 +116,53 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RunsWorkflowRunIdRouteImport
       parentRoute: typeof RunsRoute
     }
+    '/runs/$workflowRunId/jobs': {
+      id: '/runs/$workflowRunId/jobs'
+      path: '/jobs'
+      fullPath: '/runs/$workflowRunId/jobs'
+      preLoaderRoute: typeof RunsWorkflowRunIdJobsRouteImport
+      parentRoute: typeof RunsWorkflowRunIdRoute
+    }
+    '/runs/$workflowRunId/jobs/$jobId': {
+      id: '/runs/$workflowRunId/jobs/$jobId'
+      path: '/$jobId'
+      fullPath: '/runs/$workflowRunId/jobs/$jobId'
+      preLoaderRoute: typeof RunsWorkflowRunIdJobsJobIdRouteImport
+      parentRoute: typeof RunsWorkflowRunIdJobsRoute
+    }
   }
 }
 
+interface RunsWorkflowRunIdJobsRouteChildren {
+  RunsWorkflowRunIdJobsJobIdRoute: typeof RunsWorkflowRunIdJobsJobIdRoute
+}
+
+const RunsWorkflowRunIdJobsRouteChildren: RunsWorkflowRunIdJobsRouteChildren = {
+  RunsWorkflowRunIdJobsJobIdRoute: RunsWorkflowRunIdJobsJobIdRoute,
+}
+
+const RunsWorkflowRunIdJobsRouteWithChildren =
+  RunsWorkflowRunIdJobsRoute._addFileChildren(
+    RunsWorkflowRunIdJobsRouteChildren,
+  )
+
+interface RunsWorkflowRunIdRouteChildren {
+  RunsWorkflowRunIdJobsRoute: typeof RunsWorkflowRunIdJobsRouteWithChildren
+}
+
+const RunsWorkflowRunIdRouteChildren: RunsWorkflowRunIdRouteChildren = {
+  RunsWorkflowRunIdJobsRoute: RunsWorkflowRunIdJobsRouteWithChildren,
+}
+
+const RunsWorkflowRunIdRouteWithChildren =
+  RunsWorkflowRunIdRoute._addFileChildren(RunsWorkflowRunIdRouteChildren)
+
 interface RunsRouteChildren {
-  RunsWorkflowRunIdRoute: typeof RunsWorkflowRunIdRoute
+  RunsWorkflowRunIdRoute: typeof RunsWorkflowRunIdRouteWithChildren
 }
 
 const RunsRouteChildren: RunsRouteChildren = {
-  RunsWorkflowRunIdRoute: RunsWorkflowRunIdRoute,
+  RunsWorkflowRunIdRoute: RunsWorkflowRunIdRouteWithChildren,
 }
 
 const RunsRouteWithChildren = RunsRoute._addFileChildren(RunsRouteChildren)

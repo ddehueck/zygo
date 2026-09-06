@@ -4,7 +4,7 @@ import { useDuration } from "@/hooks/use-duration";
 import { shortRunId } from "@/features/workflow-runs/lib/id";
 import { JobCountsBadge } from "@/features/workflow-runs/components/JobCountsBadge";
 import { TagOverflowList } from "@/features/workflow-runs/components/TagOverflowList";
-import { Icons } from "@/components/icons";
+import { StatusIcon as StatusGlyph } from "./statuses";
 import type { WorkflowRunListData } from "@/features/workflow-runs/hooks/use-workflow-runs-list-data";
 import { useWorkflowRunListHotkeys } from "@/features/workflow-runs/hooks/use-workflow-run-list-hotkeys";
 import { useWorkflowRunSearch } from "@/features/workflow-runs/search/WorkflowRunSearchContext";
@@ -102,22 +102,6 @@ function StatusIcon({ status }: { status: string }) {
       <StatusGlyph status={status} className="size-5" />
     </span>
   );
-}
-
-function StatusGlyph({ status, className }: { status: string; className: string }) {
-  const iconProps = { "aria-hidden": true, className, strokeWidth: 2.25 } as const;
-
-  switch (status) {
-    case "succeeded":
-      return <Icons.Completed {...iconProps} />;
-    case "running":
-      return <Icons.InProgress {...iconProps} />;
-    case "failed":
-    case "errored":
-      return <Icons.Errored {...iconProps} />;
-    default:
-      return null;
-  }
 }
 
 function statusLabel(status: string): string {

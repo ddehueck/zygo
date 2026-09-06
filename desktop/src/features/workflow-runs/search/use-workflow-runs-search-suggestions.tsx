@@ -1,7 +1,7 @@
 import { concat, ilike, or } from "@tanstack/db";
 import { useLiveQuery } from "@tanstack/react-db";
 
-import { tags, workflowRuns } from "@/db/collections";
+import { tagsCollection, workflowRunsCollection } from "@/db/collections";
 import { WorkflowRunSearchSuggestion } from "./types";
 
 const defaultSuggestions: WorkflowRunSearchSuggestion[] = [
@@ -29,7 +29,7 @@ export function useWorkflowRunsSearchSuggestions({
   const { data, isLoading, isError, status } = useLiveQuery({
     query: (q) => {
       const runIdRows = q
-        .from({ run: workflowRuns })
+        .from({ run: workflowRunsCollection })
         .select(({ run }) => ({
           type: "workflowId" as const,
           text: run.workflow_id,
@@ -40,7 +40,7 @@ export function useWorkflowRunsSearchSuggestions({
         .limit(limit);
 
       const tagsRows = q
-        .from({ tag: tags })
+        .from({ tag: tagsCollection })
         .select(({ tag }) => ({
           type: "tag" as const,
           text: concat(tag.key, ":", tag.value),

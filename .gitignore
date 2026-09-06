@@ -116,3 +116,8 @@ logs/
 tmp/
 temp/
 .cache/
+
+# =============================================================================
+# AI (do whatever you want to write maintainable code but don't pollute the repo)
+# =============================================================================
+.agents/

@@ -1,18 +1,5 @@
-import { Search, Tag, X, type LucideProps } from "lucide-react";
-import { StatusIcon, type StatusIconProps } from "./StatusIcon";
-
-const statusIcon = (status: StatusIconProps["status"]) => (props: LucideProps) => (
-  <StatusIcon status={status} {...props} />
-);
-
-export const Icons = {
-  Completed: statusIcon("completed"),
-  InProgress: statusIcon("in-progress"),
-  Errored: statusIcon("errored"),
-  X: X,
-  Tag: Tag,
-  Search: Search,
-};
-
-export { StatusIcon };
+export { Icon } from "./Icon";
+export { StatusIcon } from "./StatusIcon";
+export { iconDefinitions } from "./definitions";
+export type { IconDefinition, OpticalContext } from "./definitions";
 export type { StatusIconProps, StatusIconStatus } from "./StatusIcon";

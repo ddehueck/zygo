@@ -1,4 +1,4 @@
-import { NavigationArrows } from "../NavigationArrows";
+import { ArrowNavigatioMenu } from "../ArrowNavigatioMenu";
 import { ThemeToggle } from "../ThemeToggle";
 import { cn } from "../utils";
 
@@ -23,7 +23,7 @@ function Titlebar() {
       )}
       data-tauri-drag-region
     >
-      <NavigationArrows />
+      <ArrowNavigatioMenu />
     </div>
   );
 }
