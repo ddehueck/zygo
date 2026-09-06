@@ -14,6 +14,10 @@ pub enum Error {
     UnsupportedTable(String),
     #[error("CDC row ID `{id}` for a tag association is not an integer")]
     InvalidTagId { id: String },
+    #[error("CDC row ID `{id}` for a data reference is not an integer")]
+    InvalidDataReferenceId { id: String },
+    #[error("failed to serialize a synchronized row: {0}")]
+    Serialization(#[from] serde_json::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

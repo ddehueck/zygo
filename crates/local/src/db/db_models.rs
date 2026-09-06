@@ -125,6 +125,36 @@ pub struct TagRow {
     pub created_at: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DataReferenceRow {
+    pub id: i64,
+    pub workflow_run_id: String,
+    pub job_run_id: String,
+    pub job_id: String,
+    pub uri: String,
+    pub version: String,
+    pub is_replay: bool,
+    pub inserted_at: String,
+    pub created_at: String,
+}
+
+impl DataReferenceRow {
+    pub fn from_row(row: &Row, rows: &Rows) -> Result<Self> {
+        let is_replay: i64 = row.get(rows.column_index("is_replay")?)?;
+        Ok(Self {
+            id: row.get(rows.column_index("id")?)?,
+            workflow_run_id: row.get(rows.column_index("workflow_run_id")?)?,
+            job_run_id: row.get(rows.column_index("job_run_id")?)?,
+            job_id: row.get(rows.column_index("job_id")?)?,
+            uri: row.get(rows.column_index("uri")?)?,
+            version: row.get(rows.column_index("version")?)?,
+            is_replay: is_replay != 0,
+            inserted_at: row.get(rows.column_index("inserted_at")?)?,
+            created_at: row.get(rows.column_index("created_at")?)?,
+        })
+    }
+}
+
 impl TagRow {
     pub fn from_row(row: &Row, rows: &Rows) -> Result<Self> {
         Ok(Self {

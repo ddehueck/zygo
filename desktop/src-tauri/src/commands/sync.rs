@@ -13,6 +13,7 @@ pub enum SyncEntityKind {
     WorkflowRun,
     JobRun,
     Tag,
+    DataReference,
 }
 
 #[derive(Debug, Serialize, Type)]
@@ -28,6 +29,7 @@ fn entity_kind(entity: SyncEntity) -> SyncEntityKind {
         SyncEntity::WorkflowRun => SyncEntityKind::WorkflowRun,
         SyncEntity::JobRun => SyncEntityKind::JobRun,
         SyncEntity::Tag => SyncEntityKind::Tag,
+        SyncEntity::DataReference => SyncEntityKind::DataReference,
     }
 }
 
@@ -64,6 +66,19 @@ impl TryFrom<Delta> for SyncDelta {
                         id,
                         data: serde_json::from_value(data)?,
                     },
+                    SyncEntity::DataReference => {
+                        let data = match data {
+                            serde_json::Value::Object(mut data) => {
+                                data.insert("id".to_owned(), serde_json::Value::String(id.clone()));
+                                serde_json::Value::Object(data)
+                            }
+                            data => data,
+                        };
+                        SyncUpsert::DataReference {
+                            id,
+                            data: serde_json::from_value(data)?,
+                        }
+                    }
                 };
 
                 Ok(Self::Upsert { payload })

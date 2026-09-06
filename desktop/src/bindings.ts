@@ -7,6 +7,8 @@ export const commands = {
   greet: (name: string, title: string) => __TAURI_INVOKE<string>("greet", { name, title }),
   loadData: (request: LoadDataRequest) =>
     typedError<LoadDataResponse, CommandError>(__TAURI_INVOKE("load_data", { request })),
+  loadDataReferences: (request: LoadDataReferencesRequest) =>
+    typedError<DataReference[], CommandError>(__TAURI_INVOKE("load_data_references", { request })),
   sync: (onEvent: Channel<SyncDelta>) =>
     typedError<null, CommandError>(__TAURI_INVOKE("sync", { onEvent })),
   watchLogs: (jobRunId: string, onBatch: Channel<LogBatch>) =>
@@ -19,6 +21,18 @@ export type CommandError =
   | { kind: "invalid_input"; field: string; message: string }
   | { kind: "internal"; code: string; message: string };
 
+export type DataReference = {
+  id: string;
+  workflow_run_id: string;
+  job_run_id: string;
+  job_id: string;
+  uri: string;
+  version: string;
+  is_replay: boolean;
+  inserted_at: string;
+  created_at: string;
+};
+
 export type JobRun = {
   id: string;
   workflow_run_id: string;
@@ -30,6 +44,11 @@ export type JobRun = {
   updated_at: string;
 };
 
+export type LoadDataReferencesRequest = {
+  workflow_run_id: string;
+  job_run_id: string;
+};
+
 export type LoadDataRequest = {
   cursor: string | null;
   limit: number;
@@ -39,6 +58,7 @@ export type LoadDataResponse = {
   workflow_runs: WorkflowRun[];
   job_runs: JobRun[];
   tags: Tag[];
+  data_references: DataReference[];
   next_cursor: string | null;
 };
 
@@ -52,12 +72,13 @@ export type SyncDelta =
   | { operation: "delete"; entity: SyncEntityKind; id: string }
   | { operation: "upsert"; payload: SyncUpsert };
 
-export type SyncEntityKind = "workflow_run" | "job_run" | "tag";
+export type SyncEntityKind = "workflow_run" | "job_run" | "tag" | "data_reference";
 
 export type SyncUpsert =
   | { entity: "workflow_run"; id: string; data: WorkflowRun }
   | { entity: "job_run"; id: string; data: JobRun }
-  | { entity: "tag"; id: string; data: Tag };
+  | { entity: "tag"; id: string; data: Tag }
+  | { entity: "data_reference"; id: string; data: DataReference };
 
 export type Tag = {
   id: string;

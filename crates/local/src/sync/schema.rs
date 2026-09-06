@@ -9,6 +9,7 @@ pub enum SyncEntity {
     WorkflowRun,
     JobRun,
     Tag,
+    DataReference,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -33,6 +34,7 @@ impl TryFrom<CdcRow> for Delta {
             "workflow_runs" => SyncEntity::WorkflowRun,
             "job_runs" => SyncEntity::JobRun,
             "tag_associations" => SyncEntity::Tag,
+            "data_references" => SyncEntity::DataReference,
             table_name => return Err(Error::UnsupportedTable(table_name.to_owned())),
         };
 

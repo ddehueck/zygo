@@ -7,8 +7,8 @@ use zygo_core::{Dependencies, Zygo};
 
 use crate::ZygoLocalConfig;
 use crate::db::{
-    CdcRepository, Db, JobRunRepository, KvRepository, LogsRepository, TagsRepository,
-    WorkflowRunRepository, WorkflowRunRow,
+    CdcRepository, DataReferenceRepository, Db, JobRunRepository, KvRepository, LogsRepository,
+    TagsRepository, WorkflowRunRepository, WorkflowRunRow,
 };
 use crate::paths;
 use crate::repos::Repos;
@@ -34,6 +34,7 @@ impl ZygoLocalService {
 
         let cdc = CdcRepository::new(database.clone());
         let tags = TagsRepository::new(database.clone());
+        let data_references = DataReferenceRepository::new(database.clone());
         let workflow_runs = WorkflowRunRepository::new(database.clone());
         let job_runs = JobRunRepository::new(database.clone());
         let logs = LogsRepository::new(database.clone());
@@ -47,6 +48,7 @@ impl ZygoLocalService {
                 cdc,
                 kv,
                 tags,
+                data_references,
                 workflow_runs,
                 job_runs,
                 logs,

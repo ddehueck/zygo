@@ -1,19 +1,26 @@
 import { Channel } from "@tauri-apps/api/core";
 import { commands, type SyncDelta, type SyncEntityKind, type SyncUpsert } from "@/bindings";
 import { deleteCollectionItem, upsertCollectionItem } from "@/db/collection-helpers";
-import { jobRunsCollection, tagsCollection, workflowRunsCollection } from "@/db/collections";
+import {
+  dataReferencesCollection,
+  jobRunsCollection,
+  tagsCollection,
+  workflowRunsCollection,
+} from "@/db/collections";
 import { assertNever } from "@/utils";
 
 type CollectionsByEntity = {
   workflow_run: typeof workflowRunsCollection;
   job_run: typeof jobRunsCollection;
   tag: typeof tagsCollection;
+  data_reference: typeof dataReferencesCollection;
 };
 
 const collections: CollectionsByEntity = {
   workflow_run: workflowRunsCollection,
   job_run: jobRunsCollection,
   tag: tagsCollection,
+  data_reference: dataReferencesCollection,
 };
 
 const SyncChannel = new Channel<SyncDelta>();
@@ -49,6 +56,9 @@ function applyUpsert(payload: SyncUpsert) {
       break;
     case "tag":
       upsertCollectionItem(tagsCollection, payload.data);
+      break;
+    case "data_reference":
+      upsertCollectionItem(dataReferencesCollection, payload.data);
       break;
     default:
       assertNever(payload);

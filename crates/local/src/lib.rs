@@ -18,9 +18,9 @@ use dates::format_database_timestamp;
 
 // Type re-exports only for convenience
 pub use db::{
-    CdcChangeType, CdcRepository, CdcRow, DbError, DbResult, JobRunRepository, JobRunRow,
-    KvRepository, LogRow, LogsRepository, TagRow, TagsRepository, WorkflowRunJobCounts,
-    WorkflowRunRepository, WorkflowRunRow,
+    CdcChangeType, CdcRepository, CdcRow, DataReferenceRepository, DataReferenceRow, DbError,
+    DbResult, JobRunRepository, JobRunRow, KvRepository, LogRow, LogsRepository, TagRow,
+    TagsRepository, WorkflowRunJobCounts, WorkflowRunRepository, WorkflowRunRow,
 };
 pub use log_watcher::LogWatcher;
 pub use repos::Repos;

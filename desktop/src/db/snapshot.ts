@@ -2,7 +2,12 @@ import { createTransaction } from "@tanstack/db";
 import { QueryClient } from "@tanstack/query-core";
 import { commands } from "../bindings";
 import { upsertCollectionItem } from "./collection-helpers";
-import { jobRunsCollection, tagsCollection, workflowRunsCollection } from "./collections";
+import {
+  dataReferencesCollection,
+  jobRunsCollection,
+  tagsCollection,
+  workflowRunsCollection,
+} from "./collections";
 
 const INITIAL_WORKFLOW_RUN_LIMIT = 500;
 
@@ -35,6 +40,7 @@ export async function loadSnapshot() {
       workflowRunsCollection.utils.acceptMutations(transaction);
       jobRunsCollection.utils.acceptMutations(transaction);
       tagsCollection.utils.acceptMutations(transaction);
+      dataReferencesCollection.utils.acceptMutations(transaction);
     },
   });
 
@@ -49,6 +55,10 @@ export async function loadSnapshot() {
 
     for (const tag of snapshot.tags) {
       upsertCollectionItem(tagsCollection, tag);
+    }
+
+    for (const reference of snapshot.data_references) {
+      upsertCollectionItem(dataReferencesCollection, reference);
     }
   });
 

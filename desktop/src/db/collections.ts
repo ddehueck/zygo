@@ -1,5 +1,5 @@
 import { BasicIndex, createCollection, localOnlyCollectionOptions } from "@tanstack/db";
-import type { JobRun, Tag, WorkflowRun } from "../bindings";
+import type { DataReference, JobRun, Tag, WorkflowRun } from "../bindings";
 
 export const workflowRunsCollection = createCollection(
   localOnlyCollectionOptions<WorkflowRun, string>({
@@ -13,6 +13,15 @@ export const workflowRunsCollection = createCollection(
 export const jobRunsCollection = createCollection(
   localOnlyCollectionOptions<JobRun, string>({
     id: "job_runs",
+    getKey: (item) => item.id,
+    defaultIndexType: BasicIndex,
+    autoIndex: "eager",
+  }),
+);
+
+export const dataReferencesCollection = createCollection(
+  localOnlyCollectionOptions<DataReference, string>({
+    id: "data_references",
     getKey: (item) => item.id,
     defaultIndexType: BasicIndex,
     autoIndex: "eager",

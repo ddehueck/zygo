@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::time::SystemTime;
 
 use zygo_core::engine::RunCursor;
-use zygo_core::models::{EventKind, StreamItem, WorkflowRunId, WorkflowRunStatus};
+use zygo_core::models::{EventKind, Source, StreamItem, WorkflowRunId, WorkflowRunStatus};
 use zygo_core::stream::{ReadResult, StreamReader};
 
 use crate::db::KvRepository;
@@ -78,7 +78,23 @@ impl LocalStreamProcessor {
                     .insert(&workflow_run_id, &data.name, &data.value)
                     .await?;
             }
-            EventKind::DataReferenceInserted(_) | EventKind::ChannelItemInserted(_) => {}
+            EventKind::DataReferenceInserted(data) => {
+                if let Source::JobRun(source) = &event.source {
+                    self.repos
+                        .data_references
+                        .insert(
+                            &workflow_run_id,
+                            &source.job_run_id.to_string(),
+                            &source.job_id.to_string(),
+                            &data.data_reference.uri,
+                            &data.data_reference.version,
+                            event.is_replay,
+                            &timestamp_value,
+                        )
+                        .await?;
+                }
+            }
+            EventKind::ChannelItemInserted(_) => {}
         }
 
         self.refresh_workflow_run(&workflow_run_id, &timestamp_value)

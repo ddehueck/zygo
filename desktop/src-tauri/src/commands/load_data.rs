@@ -5,7 +5,7 @@ use tauri::State;
 
 use crate::error::{CommandError, CommandResult};
 
-use super::{JobRun, Tag, WorkflowRun};
+use super::{DataReference, JobRun, Tag, WorkflowRun};
 
 const MAX_PAGE_SIZE: u32 = 1000;
 
@@ -20,6 +20,7 @@ pub struct LoadDataResponse {
     pub workflow_runs: Vec<WorkflowRun>,
     pub job_runs: Vec<JobRun>,
     pub tags: Vec<Tag>,
+    pub data_references: Vec<DataReference>,
     pub next_cursor: Option<String>,
 }
 
@@ -51,6 +52,22 @@ impl From<local::JobRunRow> for JobRun {
             retry_count: run.retry_count,
             created_at: run.created_at,
             updated_at: run.updated_at,
+        }
+    }
+}
+
+impl From<local::DataReferenceRow> for DataReference {
+    fn from(reference: local::DataReferenceRow) -> Self {
+        Self {
+            id: reference.id.to_string(),
+            workflow_run_id: reference.workflow_run_id,
+            job_run_id: reference.job_run_id,
+            job_id: reference.job_id,
+            uri: reference.uri,
+            version: reference.version,
+            is_replay: reference.is_replay,
+            inserted_at: reference.inserted_at,
+            created_at: reference.created_at,
         }
     }
 }
@@ -119,11 +136,21 @@ pub async fn load_data(
         .list_by_workflow_run_ids(&workflow_run_ids)
         .await
         .map_err(|error| CommandError::internal("load_data_failed", error.to_string()))?;
+    let data_references = state
+        .repos
+        .data_references
+        .list_by_workflow_run_ids(&workflow_run_ids)
+        .await
+        .map_err(|error| CommandError::internal("load_data_failed", error.to_string()))?;
 
     Ok(LoadDataResponse {
         workflow_runs: workflow_runs.into_iter().map(WorkflowRun::from).collect(),
         job_runs: job_runs.into_iter().map(JobRun::from).collect(),
         tags: tags.into_iter().map(Tag::from).collect(),
+        data_references: data_references
+            .into_iter()
+            .map(DataReference::from)
+            .collect(),
         next_cursor,
     })
 }

@@ -9,7 +9,12 @@ use crate::sync::batch::DeltaBatch;
 use crate::sync::error::Result;
 use crate::sync::schema::{Delta, SyncEntity};
 
-const SYNC_TABLES: [&str; 3] = ["workflow_runs", "job_runs", "tag_associations"];
+const SYNC_TABLES: [&str; 4] = [
+    "workflow_runs",
+    "job_runs",
+    "tag_associations",
+    "data_references",
+];
 
 #[derive(Clone)]
 pub struct SyncSubscription {
@@ -67,7 +72,8 @@ impl SyncSubscription {
 
         let mut hydrated_deltas = Vec::with_capacity(deltas.len());
         for delta in deltas {
-            hydrated_deltas.push(self.hydrate_tag_delta(delta).await?);
+            let delta = self.hydrate_tag_delta(delta).await?;
+            hydrated_deltas.push(self.hydrate_data_reference_delta(delta).await?);
         }
 
         Ok(DeltaBatch::new(max_change_id, hydrated_deltas))
@@ -110,6 +116,33 @@ impl SyncSubscription {
                 "value": tag.value,
                 "created_at": tag.created_at,
             }),
+        })
+    }
+
+    async fn hydrate_data_reference_delta(&self, delta: Delta) -> Result<Delta> {
+        let Delta::Upsert {
+            entity: SyncEntity::DataReference,
+            id,
+            ..
+        } = &delta
+        else {
+            return Ok(delta);
+        };
+
+        let id = id
+            .parse::<i64>()
+            .map_err(|_| super::error::Error::InvalidDataReferenceId { id: id.clone() })?;
+        let Some(reference) = self.repos.data_references.get_by_id(id).await? else {
+            return Ok(Delta::Delete {
+                entity: SyncEntity::DataReference,
+                id: id.to_string(),
+            });
+        };
+
+        Ok(Delta::Upsert {
+            entity: SyncEntity::DataReference,
+            id: reference.id.to_string(),
+            data: serde_json::to_value(reference).map_err(super::error::Error::from)?,
         })
     }
 

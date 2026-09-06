@@ -42,9 +42,23 @@ pub struct Tag {
 }
 
 #[derive(Debug, Serialize, Deserialize, Type)]
+pub struct DataReference {
+    pub id: String,
+    pub workflow_run_id: String,
+    pub job_run_id: String,
+    pub job_id: String,
+    pub uri: String,
+    pub version: String,
+    pub is_replay: bool,
+    pub inserted_at: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Type)]
 #[serde(tag = "entity", rename_all = "snake_case")]
 pub enum SyncUpsert {
     WorkflowRun { id: String, data: WorkflowRun },
     JobRun { id: String, data: JobRun },
     Tag { id: String, data: Tag },
+    DataReference { id: String, data: DataReference },
 }
