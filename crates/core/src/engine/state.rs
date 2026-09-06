@@ -6,21 +6,22 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     context::RunContext,
+    dependencies::{AppDeps, StorageProvider},
     models::{
         Event, EventId, EventKind, JobRunId, JobRunStatus, ResultCacheItem, SequenceId, Source,
         WorkflowRunStatus, WorkflowSchema,
     },
-    store::{StorageProvider, StoreKey, keyspace::KeySpace},
+    store::{KeySpace, StoreKey},
 };
 
 #[derive(Clone)]
-pub struct ResultCache<S: StorageProvider> {
-    pub context: RunContext<S>,
+pub struct ResultCache<D: AppDeps> {
+    pub context: RunContext<D>,
     pub schema: WorkflowSchema,
 }
 
-impl<S: StorageProvider> ResultCache<S> {
-    pub fn new(context: RunContext<S>, schema: WorkflowSchema) -> Self {
+impl<D: AppDeps> ResultCache<D> {
+    pub fn new(context: RunContext<D>, schema: WorkflowSchema) -> Self {
         Self { context, schema }
     }
 
@@ -30,7 +31,8 @@ impl<S: StorageProvider> ResultCache<S> {
     ) -> Result<Option<ResultCacheItem>, anyhow::Error> {
         let key = KeySpace::cache().result(job_run_id);
         self.context
-            .store
+            .deps
+            .store()
             .get(&key)
             .await?
             .map(serde_json::from_value)
@@ -49,7 +51,7 @@ impl<S: StorageProvider> ResultCache<S> {
     ) -> Result<(), anyhow::Error> {
         let key = KeySpace::cache().result(job_run_id);
         let value = serde_json::to_value(result_cache_item)?;
-        self.context.store.put(&[(key, value)]).await
+        self.context.deps.store().put(&[(key, value)]).await
     }
 
     pub fn make_replay_event(&self, kind: EventKind, source: Source) -> Event {

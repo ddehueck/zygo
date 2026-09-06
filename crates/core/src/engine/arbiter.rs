@@ -9,18 +9,18 @@ use crate::models::{
     JobStartedData, JobSucceededData, ReplayJobCommand, RunJobCommand, SetJobRunStatusCommand,
     Source, job_run_id,
 };
-use crate::store::{StorageProvider, StoreKey};
+use crate::{AppDeps, store::StoreKey};
 
 use super::state::ResultCache;
 
 pub struct Arbiter;
 
 impl Arbiter {
-    pub async fn arbitrate<S: StorageProvider>(
+    pub async fn arbitrate<D: AppDeps>(
         &self,
         event_key: &StoreKey,
         event: &Event,
-        cache: &ResultCache<S>,
+        cache: &ResultCache<D>,
     ) -> Result<Vec<Command>, anyhow::Error> {
         let mut commands = Vec::new();
 
@@ -56,10 +56,10 @@ impl Arbiter {
         Ok(commands)
     }
 
-    async fn handle_by_event_kind<S: StorageProvider>(
+    async fn handle_by_event_kind<D: AppDeps>(
         &self,
         event: &Event,
-        context: &ResultCache<S>,
+        context: &ResultCache<D>,
     ) -> Result<Vec<Command>, anyhow::Error> {
         match &event.kind {
             EventKind::JobStarted(data) => self.handle_job_started(data),
@@ -77,10 +77,10 @@ impl Arbiter {
         Ok(Vec::new())
     }
 
-    async fn handle_channel_item_inserted<S: StorageProvider>(
+    async fn handle_channel_item_inserted<D: AppDeps>(
         &self,
         data: &ChannelItemInsertedData,
-        context: &ResultCache<S>,
+        context: &ResultCache<D>,
     ) -> Result<Vec<Command>, anyhow::Error> {
         // Find all jobs that have the given channel as an input.
         // Request each job to be run.
@@ -99,11 +99,11 @@ impl Arbiter {
         Ok(commands)
     }
 
-    async fn resolve_job_request<S: StorageProvider>(
+    async fn resolve_job_request<D: AppDeps>(
         &self,
         job_id: &JobId,
         data_reference: &DataReference,
-        context: &ResultCache<S>,
+        context: &ResultCache<D>,
     ) -> Result<Command, anyhow::Error> {
         // When a job should be run, we first check if it is already in the result cache.
         // If it is, we replay the events of the latest succeeded run in sequence order.

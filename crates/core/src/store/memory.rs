@@ -3,7 +3,7 @@ use std::sync::{Arc, RwLock};
 
 use serde_json::Value;
 
-use super::StorageProvider;
+use crate::{dependencies::StorageProvider, store::StoreKey};
 
 #[derive(Debug, Clone, Default)]
 pub struct MemoryStore {
@@ -17,35 +17,38 @@ impl MemoryStore {
 }
 
 impl StorageProvider for MemoryStore {
-    async fn put(&self, entries: &[(&str, &Value)]) -> Result<(), anyhow::Error> {
+    async fn put(&self, entries: &[(StoreKey, Value)]) -> Result<(), anyhow::Error> {
         let mut stored_entries = self
             .entries
             .write()
             .map_err(|err| anyhow::anyhow!("memory store write lock poisoned: {err}"))?;
 
         for (key, value) in entries {
-            stored_entries.insert((*key).to_owned(), (*value).clone());
+            stored_entries.insert(key.as_str().to_owned(), value.clone());
         }
 
         Ok(())
     }
 
-    async fn get(&self, key: &str) -> Result<Option<Value>, anyhow::Error> {
+    async fn get(&self, key: &StoreKey) -> Result<Option<Value>, anyhow::Error> {
         let entries = self
             .entries
             .read()
             .map_err(|err| anyhow::anyhow!("memory store read lock poisoned: {err}"))?;
 
-        Ok(entries.get(key).cloned())
+        Ok(entries.get(key.as_str()).cloned())
     }
 
-    async fn get_many(&self, keys: &[&str]) -> Result<Vec<Option<Value>>, anyhow::Error> {
+    async fn get_many(&self, keys: &[StoreKey]) -> Result<Vec<Option<Value>>, anyhow::Error> {
         let entries = self
             .entries
             .read()
             .map_err(|err| anyhow::anyhow!("memory store read lock poisoned: {err}"))?;
 
-        Ok(keys.iter().map(|key| entries.get(*key).cloned()).collect())
+        Ok(keys
+            .iter()
+            .map(|key| entries.get(key.as_str()).cloned())
+            .collect())
     }
 }
 
@@ -53,8 +56,7 @@ impl StorageProvider for MemoryStore {
 mod tests {
     use serde_json::json;
 
-    use super::MemoryStore;
-    use crate::store::StorageProvider;
+    use super::{MemoryStore, StorageProvider, StoreKey};
 
     #[tokio::test]
     async fn stores_and_fetches_json_values() {
@@ -63,14 +65,24 @@ mod tests {
         let two = json!([2, "two"]);
         let three = json!(3);
 
+        let a = StoreKey::from("a");
+        let b = StoreKey::from("b");
+        let c = StoreKey::from("c");
         store
-            .put(&[("a", &one), ("b", &two), ("c", &three)])
+            .put(&[
+                (a.clone(), one.clone()),
+                (b.clone(), two),
+                (c.clone(), three.clone()),
+            ])
             .await
             .unwrap();
 
-        assert_eq!(store.get("a").await.unwrap(), Some(one));
+        assert_eq!(store.get(&a).await.unwrap(), Some(one));
         assert_eq!(
-            store.get_many(&["a", "missing", "c"]).await.unwrap(),
+            store
+                .get_many(&[a, StoreKey::from("missing"), c])
+                .await
+                .unwrap(),
             vec![Some(json!({ "name": "one" })), None, Some(three)]
         );
     }
@@ -81,8 +93,9 @@ mod tests {
         let cloned_store = store.clone();
         let value = json!({ "shared": true });
 
-        store.put(&[("key", &value)]).await.unwrap();
+        let key = StoreKey::from("key");
+        store.put(&[(key.clone(), value.clone())]).await.unwrap();
 
-        assert_eq!(cloned_store.get("key").await.unwrap(), Some(value));
+        assert_eq!(cloned_store.get(&key).await.unwrap(), Some(value));
     }
 }

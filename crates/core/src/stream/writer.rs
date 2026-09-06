@@ -1,9 +1,9 @@
 use anyhow::Result;
 
+use crate::AppDeps;
 use crate::context::RunContext;
 use crate::models::{StreamItem, StreamRecord};
-use crate::store::keyspace::{KeySpace, RunKeySpace};
-use crate::store::{StorageProvider, WriteSet};
+use crate::store::{KeySpace, RunKeySpace, WriteSet};
 
 use super::sequencer::StreamSequencer;
 
@@ -16,10 +16,10 @@ pub struct StreamWriter {
 }
 
 impl StreamWriter {
-    pub async fn init<S: StorageProvider>(context: &RunContext<S>) -> Result<Self> {
+    pub async fn init<D: AppDeps>(context: &RunContext<D>) -> Result<Self> {
         let keyspace = KeySpace::run(&context.run_id);
 
-        let sequencer = StreamSequencer::load(context.clone()).await?;
+        let sequencer = StreamSequencer::load((*context).clone()).await?;
 
         Ok(Self {
             keyspace,

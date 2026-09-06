@@ -1,7 +1,6 @@
 use serde_json::Value;
 
-use super::provider_interface::StorageProvider;
-use super::{Store, StoreKey};
+use super::{StorageProvider, StoreKey};
 
 pub trait WriteSetReservation: Send {
     fn add_writes(&self, entries: &mut Vec<(StoreKey, Value)>);
@@ -48,7 +47,7 @@ impl WriteSet {
         self
     }
 
-    pub async fn commit<S: StorageProvider>(mut self, store: &Store<S>) -> anyhow::Result<()> {
+    pub async fn commit<S: StorageProvider>(mut self, store: &S) -> anyhow::Result<()> {
         store.put(&self.entries).await?;
 
         if let Some(reservation) = &mut self.reservation {

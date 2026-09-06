@@ -38,7 +38,7 @@ impl ZygoLocalService {
         let job_runs = JobRunRepository::new(database.clone());
         let kv = KvRepository::new(database);
 
-        let store = zygo_core::store::Store::new(kv.clone());
+        let store = kv.clone();
 
         Ok(Self {
             base: Zygo::new(store, config.base),
@@ -52,11 +52,7 @@ impl ZygoLocalService {
         })
     }
 
-    pub async fn run(&self, input: DataReference, schema: WorkflowSchema) -> Result<WorkflowRunId> {
-        self.run_many(vec![input], schema).await
-    }
-
-    pub async fn run_many(
+    pub async fn run(
         &self,
         inputs: Vec<DataReference>,
         schema: WorkflowSchema,
@@ -80,7 +76,7 @@ impl ZygoLocalService {
             .insert(&workflow_run_id.to_string(), &workflow_id, &content_hash)
             .await?;
 
-        self.base.run_many(&workflow_run_id, inputs, schema).await?;
+        self.base.run(&workflow_run_id, inputs, schema).await?;
 
         Ok(workflow_run_id)
     }

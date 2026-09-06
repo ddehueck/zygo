@@ -2,7 +2,7 @@ use crate::{
     Result,
     engine::EngineSnapshot,
     models::{WorkflowRunId, WorkflowRunStatus, WorkflowSchema},
-    store::{StorageProvider, Store, keyspace::KeySpace},
+    store::{KeySpace, StorageProvider},
     stream::StreamReader,
 };
 
@@ -11,12 +11,12 @@ use crate::{
 /// This reader does not coordinate with the running actor. Each method returns the state committed to the store at the time of that read.
 #[derive(Clone)]
 pub struct WorkflowRunReader<S: StorageProvider> {
-    store: Store<S>,
+    store: S,
     run_id: WorkflowRunId,
 }
 
 impl<S: StorageProvider> WorkflowRunReader<S> {
-    pub fn new(store: Store<S>, run_id: WorkflowRunId) -> Self {
+    pub fn new(store: S, run_id: WorkflowRunId) -> Self {
         Self { store, run_id }
     }
 

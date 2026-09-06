@@ -1,31 +1,27 @@
-use std::{
-    fs,
-    io::{ErrorKind, stdout},
-    path::{Path, PathBuf},
-    process::Command,
-    time::Duration,
-};
+use std::fs;
+use std::io::{ErrorKind, stdout};
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::time::Duration;
 
-use crossterm::{
-    cursor::Show,
-    event::{
-        self, DisableMouseCapture, EnableMouseCapture, Event as TerminalEvent, KeyCode,
-        KeyEventKind, KeyModifiers, MouseButton, MouseEventKind,
-    },
-    execute,
-    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
+use crossterm::cursor::Show;
+use crossterm::event::{
+    self, DisableMouseCapture, EnableMouseCapture, Event as TerminalEvent, KeyCode, KeyEventKind,
+    KeyModifiers, MouseButton, MouseEventKind,
+};
+use crossterm::execute;
+use crossterm::terminal::{
+    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
 use local::{DEFAULT_DATABASE_BUSY_TIMEOUT, ZygoLocalConfig, ZygoLocalService};
-use ratatui::{
-    Terminal, TerminalOptions, Viewport, backend::CrosstermBackend, widgets::TableState,
-};
-use zygo_core::{
-    ZygoConfig,
-    engine::{EngineSnapshot, RunCursor},
-    ipc::v0::PythonCli,
-    models::{DataReference, Event, JobRunId, StreamItem},
-    workers::WorkerLogReader,
-};
+use ratatui::backend::CrosstermBackend;
+use ratatui::widgets::TableState;
+use ratatui::{Terminal, TerminalOptions, Viewport};
+use zygo_core::ZygoConfig;
+use zygo_core::engine::{EngineSnapshot, RunCursor};
+use zygo_core::ipc::v0::PythonCli;
+use zygo_core::models::{DataReference, Event, JobRunId, StreamItem};
+use zygo_core::workers::WorkerLogReader;
 
 use crate::tui::{JobLogView, WorkflowRunView, job_run_at_position};
 
@@ -278,7 +274,7 @@ pub async fn run_workflow(
     })
     .await?;
 
-    let run_id = service.run_many(inputs, schema).await?;
+    let run_id = service.run(inputs, schema).await?;
     // println!("run_id: {run_id:?}");
 
     // 5. Watch the engine state in an interactive fullscreen terminal view.
