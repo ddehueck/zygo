@@ -14,7 +14,7 @@ pub struct WorkflowRunSummary {
 
 pub struct JobRunSummary {
     pub job_id: String,
-    pub job_run_id: String,
+    pub public_id: String,
     pub status: String,
     pub started_at: Option<SystemTime>,
     pub ended_at: Option<SystemTime>,
@@ -52,7 +52,7 @@ impl WorkflowRunSummary {
                     let index = self.job_runs.len();
                     self.job_runs.push(JobRunSummary {
                         job_id,
-                        job_run_id: job_run_id.clone(),
+                        public_id: job_run_id.clone(),
                         status: "running".to_owned(),
                         started_at: Some(timestamp),
                         ended_at: None,
@@ -94,7 +94,7 @@ impl WorkflowRunSummary {
             let index = self.job_runs.len();
             self.job_runs.push(JobRunSummary {
                 job_id,
-                job_run_id: job_run_id.clone(),
+                public_id: job_run_id.clone(),
                 status: status.to_owned(),
                 started_at: None,
                 ended_at: Some(ended_at),

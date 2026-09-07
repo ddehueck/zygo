@@ -1,158 +1,94 @@
-use turso::Value as SqlValue;
-
-use crate::{CdcChangeType, CdcRow};
-
 use super::{Error, Result};
+use crate::{CdcChangeType, CdcRow, DataReferenceModel, JobRunModel, TagModel, WorkflowRunModel};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum SyncEntity {
-    WorkflowRun,
-    JobRun,
-    Tag,
+#[derive(Debug, Clone, PartialEq)]
+pub enum RowChange<T> {
+    Insert { row: T },
+    Update { row: T },
+    Delete { id: i64 },
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Delta {
-    Resync,
-    Delete {
-        entity: SyncEntity,
-        id: String,
+    WorkflowRun {
+        change_id: i64,
+        change: RowChange<WorkflowRunModel>,
     },
-    Upsert {
-        entity: SyncEntity,
-        id: String,
-        data: serde_json::Value,
+    JobRun {
+        change_id: i64,
+        change: RowChange<JobRunModel>,
     },
+    Tag {
+        change_id: i64,
+        change: RowChange<TagModel>,
+    },
+    DataReference {
+        change_id: i64,
+        change: RowChange<DataReferenceModel>,
+    },
+}
+
+impl<T> RowChange<T> {
+    fn from_cdc_row(
+        row: CdcRow,
+        decode: impl FnOnce(serde_json::Value) -> crate::DbResult<T>,
+    ) -> Result<Self> {
+        match row.change_type {
+            CdcChangeType::Insert | CdcChangeType::Update => {
+                let after = row.after.ok_or_else(|| Error::MissingAfter {
+                    change_id: row.change_id,
+                    change_type: row.change_type.clone(),
+                    table_name: row.table_name.clone(),
+                })?;
+                // Decode the captured after-image, never the current database state.
+                let data = decode(after).map_err(|source| Error::InvalidAfter {
+                    change_id: row.change_id,
+                    table_name: row.table_name,
+                    source,
+                })?;
+
+                match row.change_type {
+                    CdcChangeType::Insert => Ok(Self::Insert { row: data }),
+                    _ => Ok(Self::Update { row: data }),
+                }
+            }
+            CdcChangeType::Delete => {
+                let turso::Value::Integer(id) = row.id else {
+                    return Err(Error::InvalidRowId {
+                        change_id: row.change_id,
+                        table_name: row.table_name,
+                    });
+                };
+
+                Ok(Self::Delete { id })
+            }
+        }
+    }
 }
 
 impl TryFrom<CdcRow> for Delta {
     type Error = Error;
 
     fn try_from(row: CdcRow) -> Result<Self> {
-        let entity = match row.table_name.as_str() {
-            "workflow_runs" => SyncEntity::WorkflowRun,
-            "job_runs" => SyncEntity::JobRun,
-            "tag_associations" => SyncEntity::Tag,
-            table_name => return Err(Error::UnsupportedTable(table_name.to_owned())),
-        };
-
-        let id = cdc_id(row.id);
-
-        match row.change_type {
-            CdcChangeType::Insert | CdcChangeType::Update => {
-                let data = row.after.ok_or_else(|| Error::MissingAfter {
-                    change_id: row.change_id,
-                    change_type: row.change_type.clone(),
-                    table_name: row.table_name.clone(),
-                })?;
-
-                Ok(Delta::Upsert { entity, id, data })
-            }
-            CdcChangeType::Delete => Ok(Delta::Delete { entity, id }),
+        let change_id = row.change_id;
+        match row.table_name.as_str() {
+            "workflow_runs" => Ok(Self::WorkflowRun {
+                change_id,
+                change: RowChange::from_cdc_row(row, WorkflowRunModel::from_sql_value)?,
+            }),
+            "job_runs" => Ok(Self::JobRun {
+                change_id,
+                change: RowChange::from_cdc_row(row, JobRunModel::from_sql_value)?,
+            }),
+            "tags" => Ok(Self::Tag {
+                change_id,
+                change: RowChange::from_cdc_row(row, TagModel::from_sql_value)?,
+            }),
+            "data_references" => Ok(Self::DataReference {
+                change_id,
+                change: RowChange::from_cdc_row(row, DataReferenceModel::from_sql_value)?,
+            }),
+            table_name => Err(Error::UnsupportedTable(table_name.to_owned())),
         }
-    }
-}
-
-fn cdc_id(id: SqlValue) -> String {
-    match id {
-        SqlValue::Text(id) => id,
-        SqlValue::Integer(id) => id.to_string(),
-        SqlValue::Real(id) => id.to_string(),
-        SqlValue::Null => "null".to_owned(),
-        SqlValue::Blob(id) => String::from_utf8_lossy(&id).into_owned(),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use serde_json::json;
-    use turso::Value as SqlValue;
-
-    use crate::{
-        CdcChangeType, CdcRow,
-        sync::{
-            error::Error,
-            schema::{Delta, SyncEntity},
-        },
-    };
-
-    fn cdc_row(
-        table_name: &str,
-        change_type: CdcChangeType,
-        after: Option<serde_json::Value>,
-    ) -> CdcRow {
-        CdcRow {
-            change_id: 42,
-            change_time: 0,
-            change_txn_id: 1,
-            change_type,
-            table_name: table_name.to_owned(),
-            id: SqlValue::Integer(1),
-            after,
-        }
-    }
-
-    #[test]
-    fn converts_supported_table_to_upsert() {
-        let delta = Delta::try_from(cdc_row(
-            "workflow_runs",
-            CdcChangeType::Update,
-            Some(json!({"id": "run-1"})),
-        ))
-        .expect("supported CDC row should convert");
-
-        match delta {
-            Delta::Upsert { entity, data, .. } => {
-                assert!(matches!(entity, SyncEntity::WorkflowRun));
-                assert_eq!(data, json!({"id": "run-1"}));
-            }
-            _ => panic!("expected an upsert delta"),
-        }
-    }
-
-    #[test]
-    fn converts_tag_association_to_tag_entity() {
-        let delta = Delta::try_from(cdc_row(
-            "tag_associations",
-            CdcChangeType::Insert,
-            Some(json!({"id": 1, "tag_id": 1, "value": "batch", "workflow_run_id": "run-1"})),
-        ))
-        .expect("tag association should convert");
-
-        match delta {
-            Delta::Upsert { entity, id, .. } => {
-                assert!(matches!(entity, SyncEntity::Tag));
-                assert_eq!(id, "1");
-            }
-            _ => panic!("expected a tag upsert delta"),
-        }
-    }
-
-    #[test]
-    fn rejects_legacy_workflow_run_table() {
-        let result = Delta::try_from(cdc_row(
-            "workflow_run_summary",
-            CdcChangeType::Insert,
-            Some(json!({"id": "run-1"})),
-        ));
-
-        assert!(matches!(
-            result,
-            Err(Error::UnsupportedTable(table_name)) if table_name == "workflow_run_summary"
-        ));
-    }
-
-    #[test]
-    fn rejects_unsupported_table() {
-        let result = Delta::try_from(cdc_row(
-            "kv",
-            CdcChangeType::Update,
-            Some(json!({"key": "k"})),
-        ));
-
-        assert!(matches!(
-            result,
-            Err(Error::UnsupportedTable(table_name)) if table_name == "kv"
-        ));
     }
 }

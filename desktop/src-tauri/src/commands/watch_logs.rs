@@ -1,11 +1,14 @@
+use crate::error::CommandResult;
 use local::{LogWatcher, ZygoLocalService};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use specta::Type;
 use tauri::ipc::Channel;
 use tauri::{Manager, Resource, State, Webview};
-use zygo_core::models::JobRunId;
 
-use crate::error::{CommandError, CommandResult};
+#[derive(Deserialize, Type)]
+#[serde(transparent)]
+#[specta(inline)]
+pub struct DatabaseJobRunId(#[specta(type = specta_typescript::Number)] i64);
 
 #[derive(Serialize, Type)]
 pub struct LogBatch {
@@ -30,12 +33,10 @@ impl Drop for LogSubscription {
 pub fn watch_logs(
     state: State<'_, ZygoLocalService>,
     webview: Webview,
-    job_run_id: String,
+    job_run_id: DatabaseJobRunId,
     on_batch: Channel<LogBatch>,
 ) -> CommandResult<u32> {
-    let job_run_id = JobRunId::try_from(job_run_id)
-        .map_err(|error| CommandError::invalid_input("job_run_id", error.to_string()))?;
-    let mut watcher = LogWatcher::new(state.repos.logs.clone(), job_run_id);
+    let mut watcher = LogWatcher::new_by_id(state.repos.logs.clone(), job_run_id.0);
     let task = tauri::async_runtime::spawn(async move {
         loop {
             let batch = match watcher.next_batch().await {

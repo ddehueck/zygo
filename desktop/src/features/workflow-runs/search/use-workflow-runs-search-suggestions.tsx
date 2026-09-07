@@ -1,4 +1,4 @@
-import { concat, ilike, or } from "@tanstack/db";
+import { ilike } from "@tanstack/db";
 import { useLiveQuery } from "@tanstack/react-db";
 
 import { tagsCollection, workflowRunsCollection } from "@/db/collections";
@@ -43,12 +43,10 @@ export function useWorkflowRunsSearchSuggestions({
         .from({ tag: tagsCollection })
         .select(({ tag }) => ({
           type: "tag" as const,
-          text: concat(tag.key, ":", tag.value),
+          text: tag.value,
           created_at: tag.created_at,
         }))
-        .where(({ tag }) =>
-          or(ilike(tag.key, `${filterValue}%`), ilike(tag.value, `${filterValue}%`)),
-        )
+        .where(({ tag }) => ilike(tag.value, `${filterValue}%`))
         .orderBy(({ tag }) => tag.created_at, "asc")
         .limit(limit);
 
@@ -77,14 +75,11 @@ function createSuggestions(rows: SuggestionQueryResultItem[]): WorkflowRunSearch
       })),
     ...[...tagValues]
       .sort((left, right) => left.localeCompare(right))
-      .map((tagValue) => {
-        const [name, value] = tagValue.split(":");
-        return {
-          id: `tag:${tagValue}`,
-          type: "token" as const,
-          text: `@tag:${tagValue}`,
-          value: { entity: "tag" as const, name, value },
-        };
-      }),
+      .map((tagValue) => ({
+        id: `tag:${tagValue}`,
+        type: "token" as const,
+        text: `@tag:${tagValue}`,
+        value: { entity: "tag" as const, value: tagValue },
+      })),
   ];
 }

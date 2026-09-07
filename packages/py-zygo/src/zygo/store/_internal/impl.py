@@ -24,6 +24,12 @@ from zygo._internal.fsspec import FsspecUri
 from zygo.store import Reference, StoreProtocol
 from zygo.store.protocol import TmpFileProtocol
 
+from zygo._internal.ipc.v0.types import (
+    DataReferenceCreated,
+    DataReference,
+    write_stdout_ipc_message,
+)
+
 if TYPE_CHECKING:
     from types import TracebackType
 
@@ -134,6 +140,16 @@ class StoreImpl(StoreProtocol):
 
         with self._fs.open(uri, "wb") as f:  # type: ignore
             f.write(data)  # type: ignore
+
+        # Send an IPC message to the parent process to notify it of the new data reference.
+        write_stdout_ipc_message(
+            DataReferenceCreated(
+                data_reference=DataReference(
+                    uri=uri,
+                    version="0",
+                )
+            )
+        )
 
         return Reference(
             key=key,
@@ -268,9 +284,21 @@ def ingest(*, data_uri: FsspecUri, store_options: StoreOptions) -> Reference:
                 break
             sink.write(chunk)  # type: ignore[reportAny]
 
+    uri = FsspecUri(f"{store_options.root_uri.protocol}://{dest}")
+
+    # Send an IPC message to the parent process to notify it of the new data reference.
+    write_stdout_ipc_message(
+        DataReferenceCreated(
+            data_reference=DataReference(
+                uri=str(uri),
+                version="0",
+            )
+        )
+    )
+
     return Reference(
         key=key,
-        uri=FsspecUri(f"{store_options.root_uri.protocol}://{dest}"),
+        uri=uri,
     )
 
 

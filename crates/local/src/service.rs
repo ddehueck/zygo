@@ -7,11 +7,10 @@ use zygo_core::{Dependencies, Zygo};
 
 use crate::ZygoLocalConfig;
 use crate::db::{
-    CdcRepository, Db, JobRunRepository, KvRepository, LogsRepository, TagsRepository,
-    WorkflowRunRepository, WorkflowRunRow,
+    CdcRepository, DataReferenceRepository, Db, JobRunRepository, KvRepository, LogsRepository,
+    Repos, TagsRepository, WorkflowRunModel, WorkflowRunRepository,
 };
 use crate::paths;
-use crate::repos::Repos;
 use crate::stream_processor::LocalStreamProcessor;
 
 pub struct ZygoLocalService {
@@ -31,13 +30,19 @@ impl ZygoLocalService {
     pub async fn new(config: ZygoLocalConfig) -> Result<Self> {
         let path = Self::database_path()?.to_string_lossy().into_owned();
         let database = Db::open(&path, config.database_busy_timeout, true).await?;
+        let no_cdc_database = Db::open(&path, config.database_busy_timeout, false).await?;
 
-        let cdc = CdcRepository::new(database.clone());
+        // Everything that changes the core models should use a connection where CDC events are generated.
         let tags = TagsRepository::new(database.clone());
+        let data_references = DataReferenceRepository::new(database.clone());
         let workflow_runs = WorkflowRunRepository::new(database.clone());
         let job_runs = JobRunRepository::new(database.clone());
-        let logs = LogsRepository::new(database.clone());
-        let kv = KvRepository::new(database);
+
+        // These repos should not result in any CDC events being generated,
+        // so we open a separate database connection for them.
+        let logs = LogsRepository::new(no_cdc_database.clone());
+        let kv = KvRepository::new(no_cdc_database.clone());
+        let cdc = CdcRepository::new(no_cdc_database);
 
         let dependencies = Dependencies::new(kv.clone(), logs.clone());
 
@@ -47,6 +52,7 @@ impl ZygoLocalService {
                 cdc,
                 kv,
                 tags,
+                data_references,
                 workflow_runs,
                 job_runs,
                 logs,
@@ -96,7 +102,7 @@ impl ZygoLocalService {
     pub async fn list_workflow_runs(
         &self,
         filter: Option<(&str, &str)>,
-    ) -> Result<Vec<WorkflowRunRow>> {
+    ) -> Result<Vec<WorkflowRunModel>> {
         match filter {
             Some((key, value)) => Ok(self.repos.workflow_runs.list_by_tag(key, value).await?),
             None => Ok(self.repos.workflow_runs.list_all().await?),

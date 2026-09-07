@@ -52,10 +52,12 @@ impl CdcRow {
     }
 }
 
+// SQL rows retain literal storage encodings. Both query reads and CDC
+// deserialization go through their conversions into persisted models.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WorkflowRunRow {
-    pub row_id: i64,
-    pub id: String,
+pub struct WorkflowRunModel {
+    pub id: i64,
+    pub public_id: String,
     pub workflow_id: String,
     pub content_hash: String,
     pub status: String,
@@ -65,14 +67,39 @@ pub struct WorkflowRunRow {
     pub succeeded_job_count: i64,
     pub errored_job_count: i64,
     pub created_at: String,
-    pub updated_at: String,
 }
 
-impl WorkflowRunRow {
+impl WorkflowRunModel {
+    pub fn from_sql_value(value: Value) -> Result<Self> {
+        let sql_row: WorkflowRunSqlRow = serde_json::from_value(value)?;
+        Ok(sql_row.into())
+    }
+
     pub fn from_row(row: &Row, rows: &Rows) -> Result<Self> {
+        Ok(WorkflowRunSqlRow::from_row(row, rows)?.into())
+    }
+}
+
+#[derive(Deserialize)]
+struct WorkflowRunSqlRow {
+    id: i64,
+    public_id: String,
+    workflow_id: String,
+    content_hash: String,
+    status: String,
+    started_at: Option<String>,
+    completed_at: Option<String>,
+    active_job_count: i64,
+    succeeded_job_count: i64,
+    errored_job_count: i64,
+    created_at: String,
+}
+
+impl WorkflowRunSqlRow {
+    fn from_row(row: &Row, rows: &Rows) -> Result<Self> {
         Ok(Self {
-            row_id: row.get(rows.column_index("row_id")?)?,
             id: row.get(rows.column_index("id")?)?,
+            public_id: row.get(rows.column_index("public_id")?)?,
             workflow_id: row.get(rows.column_index("workflow_id")?)?,
             content_hash: row.get(rows.column_index("content_hash")?)?,
             status: row.get(rows.column_index("status")?)?,
@@ -82,54 +109,235 @@ impl WorkflowRunRow {
             succeeded_job_count: row.get(rows.column_index("succeeded_job_count")?)?,
             errored_job_count: row.get(rows.column_index("errored_job_count")?)?,
             created_at: row.get(rows.column_index("created_at")?)?,
-            updated_at: row.get(rows.column_index("updated_at")?)?,
         })
     }
 }
 
+impl From<WorkflowRunSqlRow> for WorkflowRunModel {
+    fn from(row: WorkflowRunSqlRow) -> Self {
+        Self {
+            id: row.id,
+            public_id: row.public_id,
+            workflow_id: row.workflow_id,
+            content_hash: row.content_hash,
+            status: row.status,
+            started_at: row.started_at,
+            completed_at: row.completed_at,
+            active_job_count: row.active_job_count,
+            succeeded_job_count: row.succeeded_job_count,
+            errored_job_count: row.errored_job_count,
+            created_at: row.created_at,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct JobRunRow {
-    pub row_id: i64,
-    pub id: String,
-    pub workflow_run_id: String,
+pub struct JobRunModel {
+    pub id: i64,
+    pub public_id: String,
+    pub workflow_run_id: i64,
     pub job_id: String,
     pub status: String,
     pub duration_ms: Option<i64>,
     pub retry_count: i64,
     pub created_at: String,
-    pub updated_at: String,
 }
 
-impl JobRunRow {
+impl JobRunModel {
+    pub fn from_sql_value(value: Value) -> Result<Self> {
+        let sql_row: JobRunSqlRow = serde_json::from_value(value)?;
+        Ok(sql_row.into())
+    }
+
     pub fn from_row(row: &Row, rows: &Rows) -> Result<Self> {
+        Ok(JobRunSqlRow::from_row(row, rows)?.into())
+    }
+}
+
+#[derive(Deserialize)]
+struct JobRunSqlRow {
+    id: i64,
+    public_id: String,
+    workflow_run_id: i64,
+    job_id: String,
+    status: String,
+    duration_ms: Option<i64>,
+    retry_count: i64,
+    created_at: String,
+}
+
+impl JobRunSqlRow {
+    fn from_row(row: &Row, rows: &Rows) -> Result<Self> {
         Ok(Self {
-            row_id: row.get(rows.column_index("row_id")?)?,
             id: row.get(rows.column_index("id")?)?,
+            public_id: row.get(rows.column_index("public_id")?)?,
             workflow_run_id: row.get(rows.column_index("workflow_run_id")?)?,
             job_id: row.get(rows.column_index("job_id")?)?,
             status: row.get(rows.column_index("status")?)?,
             duration_ms: row.get(rows.column_index("duration_ms")?)?,
             retry_count: row.get(rows.column_index("retry_count")?)?,
             created_at: row.get(rows.column_index("created_at")?)?,
-            updated_at: row.get(rows.column_index("updated_at")?)?,
         })
     }
 }
 
+impl From<JobRunSqlRow> for JobRunModel {
+    fn from(row: JobRunSqlRow) -> Self {
+        Self {
+            id: row.id,
+            public_id: row.public_id,
+            workflow_run_id: row.workflow_run_id,
+            job_id: row.job_id,
+            status: row.status,
+            duration_ms: row.duration_ms,
+            retry_count: row.retry_count,
+            created_at: row.created_at,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TagRow {
+pub struct TagModel {
     pub id: i64,
-    pub workflow_run_id: String,
-    pub key: String,
+    pub workflow_run_id: i64,
+    pub job_run_id: Option<i64>,
+    pub data_reference_id: Option<i64>,
     pub value: String,
     pub created_at: String,
 }
 
-impl TagRow {
+impl TagModel {
+    pub fn from_sql_value(value: Value) -> Result<Self> {
+        let sql_row: TagSqlRow = serde_json::from_value(value)?;
+        Ok(sql_row.into())
+    }
+
     pub fn from_row(row: &Row, rows: &Rows) -> Result<Self> {
+        Ok(TagSqlRow::from_row(row, rows)?.into())
+    }
+}
+
+#[derive(Deserialize)]
+struct TagSqlRow {
+    id: i64,
+    workflow_run_id: i64,
+    job_run_id: Option<i64>,
+    data_reference_id: Option<i64>,
+    value: String,
+    created_at: String,
+}
+
+impl TagSqlRow {
+    fn from_row(row: &Row, rows: &Rows) -> Result<Self> {
         Ok(Self {
             id: row.get(rows.column_index("id")?)?,
             workflow_run_id: row.get(rows.column_index("workflow_run_id")?)?,
+            job_run_id: row.get(rows.column_index("job_run_id")?)?,
+            data_reference_id: row.get(rows.column_index("data_reference_id")?)?,
+            value: row.get(rows.column_index("value")?)?,
+            created_at: row.get(rows.column_index("created_at")?)?,
+        })
+    }
+}
+
+impl From<TagSqlRow> for TagModel {
+    fn from(row: TagSqlRow) -> Self {
+        Self {
+            id: row.id,
+            workflow_run_id: row.workflow_run_id,
+            job_run_id: row.job_run_id,
+            data_reference_id: row.data_reference_id,
+            value: row.value,
+            created_at: row.created_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DataReferenceModel {
+    pub id: i64,
+    pub workflow_run_id: i64,
+    pub job_run_id: i64,
+    pub uri: String,
+    pub is_replay: bool,
+    pub created_at: String,
+}
+
+impl DataReferenceModel {
+    pub fn from_sql_value(value: Value) -> Result<Self> {
+        let sql_row: DataReferenceSqlRow = serde_json::from_value(value)?;
+        Ok(sql_row.into())
+    }
+
+    pub fn from_row(row: &Row, rows: &Rows) -> Result<Self> {
+        Ok(DataReferenceSqlRow::from_row(row, rows)?.into())
+    }
+}
+
+#[derive(Deserialize)]
+struct DataReferenceSqlRow {
+    id: i64,
+    workflow_run_id: i64,
+    job_run_id: i64,
+    uri: String,
+    is_replay: i64,
+    created_at: String,
+}
+
+impl DataReferenceSqlRow {
+    fn from_row(row: &Row, rows: &Rows) -> Result<Self> {
+        Ok(Self {
+            id: row.get(rows.column_index("id")?)?,
+            workflow_run_id: row.get(rows.column_index("workflow_run_id")?)?,
+            job_run_id: row.get(rows.column_index("job_run_id")?)?,
+            uri: row.get(rows.column_index("uri")?)?,
+            is_replay: row.get(rows.column_index("is_replay")?)?,
+            created_at: row.get(rows.column_index("created_at")?)?,
+        })
+    }
+}
+
+impl From<DataReferenceSqlRow> for DataReferenceModel {
+    fn from(row: DataReferenceSqlRow) -> Self {
+        Self {
+            id: row.id,
+            workflow_run_id: row.workflow_run_id,
+            job_run_id: row.job_run_id,
+            uri: row.uri,
+            is_replay: row.is_replay != 0,
+            created_at: row.created_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KvModel {
+    pub key: String,
+    pub value: Value,
+    pub created_at: String,
+}
+
+impl KvModel {
+    pub fn from_sql_value(value: Value) -> Result<Self> {
+        let sql_row: KvSqlRow = serde_json::from_value(value)?;
+        sql_row.try_into()
+    }
+
+    pub fn from_row(row: &Row, rows: &Rows) -> Result<Self> {
+        KvSqlRow::from_row(row, rows)?.try_into()
+    }
+}
+
+#[derive(Deserialize)]
+struct KvSqlRow {
+    key: String,
+    value: String,
+    created_at: String,
+}
+
+impl KvSqlRow {
+    fn from_row(row: &Row, rows: &Rows) -> Result<Self> {
+        Ok(Self {
             key: row.get(rows.column_index("key")?)?,
             value: row.get(rows.column_index("value")?)?,
             created_at: row.get(rows.column_index("created_at")?)?,
@@ -137,27 +345,19 @@ impl TagRow {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct KvRow {
-    pub key: String,
-    pub value: Value,
-    pub created_at: String,
-    pub updated_at: String,
-}
+impl TryFrom<KvSqlRow> for KvModel {
+    type Error = Error;
 
-impl KvRow {
-    pub fn from_row(row: &Row, rows: &Rows) -> Result<Self> {
-        let value: String = row.get(rows.column_index("value")?)?;
-
+    fn try_from(row: KvSqlRow) -> Result<Self> {
         Ok(Self {
-            key: row.get(rows.column_index("key")?)?,
-            value: serde_json::from_str(&value).map_err(Error::from)?,
-            created_at: row.get(rows.column_index("created_at")?)?,
-            updated_at: row.get(rows.column_index("updated_at")?)?,
+            key: row.key,
+            value: serde_json::from_str(&row.value)?,
+            created_at: row.created_at,
         })
     }
 }
 
+// TODO: remove this
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct WorkflowRunJobCounts {
     pub active_job_count: i64,

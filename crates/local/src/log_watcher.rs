@@ -8,6 +8,11 @@ use crate::{DbResult, LogRow, LogsRepository};
 const POLL_INTERVAL: Duration = Duration::from_millis(200);
 const PAGE_SIZE: u32 = 512;
 
+enum WatchedJobRun {
+    PublicId(String),
+    DatabaseId(i64),
+}
+
 /// Pages through a job's history, then polls for newly committed output.
 ///
 /// No background task is spawned: callers drive the watcher with `next_batch`.
@@ -15,16 +20,27 @@ const PAGE_SIZE: u32 = 512;
 /// because a final batch may be persisted after the completion event.
 pub struct LogWatcher {
     repository: LogsRepository,
-    job_run_id: String,
+    job_run_id: WatchedJobRun,
     after_order: i64,
     next_poll: Instant,
 }
 
 impl LogWatcher {
+    /// Watches by public ID for consumers such as the CLI.
     pub fn new(repository: LogsRepository, job_run_id: JobRunId) -> Self {
         Self {
             repository,
-            job_run_id: job_run_id.to_string(),
+            job_run_id: WatchedJobRun::PublicId(job_run_id.to_string()),
+            after_order: 0,
+            next_poll: Instant::now(),
+        }
+    }
+
+    /// Watches by the local database's numeric job run ID.
+    pub fn new_by_id(repository: LogsRepository, job_run_id: i64) -> Self {
+        Self {
+            repository,
+            job_run_id: WatchedJobRun::DatabaseId(job_run_id),
             after_order: 0,
             next_poll: Instant::now(),
         }
@@ -39,10 +55,18 @@ impl LogWatcher {
     /// batch is returned, so it can be used directly in `tokio::select!`.
     pub async fn next_batch(&mut self) -> DbResult<Vec<LogRow>> {
         sleep_until(self.next_poll).await;
-        let result = self
-            .repository
-            .list_after(&self.job_run_id, self.after_order, PAGE_SIZE)
-            .await;
+        let result = match &self.job_run_id {
+            WatchedJobRun::PublicId(job_run_id) => {
+                self.repository
+                    .list_after(job_run_id, self.after_order, PAGE_SIZE)
+                    .await
+            }
+            WatchedJobRun::DatabaseId(job_run_id) => {
+                self.repository
+                    .list_after_by_id(*job_run_id, self.after_order, PAGE_SIZE)
+                    .await
+            }
+        };
 
         self.next_poll = Instant::now() + POLL_INTERVAL;
         let rows = result?;

@@ -54,7 +54,6 @@ class ChannelItemInserted:
 @dataclass(frozen=True)
 class TagInserted:
     type: Literal["tag_inserted"] = field(default="tag_inserted", init=False)
-    name: str
     value: str
     data_reference: DataReference | None = None
 

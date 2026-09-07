@@ -4,7 +4,6 @@ mod db;
 mod log_watcher;
 mod log_writer;
 mod paths;
-mod repos;
 mod service;
 mod storage;
 mod stream_processor;
@@ -18,10 +17,10 @@ use dates::format_database_timestamp;
 
 // Type re-exports only for convenience
 pub use db::{
-    CdcChangeType, CdcRepository, CdcRow, DbError, DbResult, JobRunRepository, JobRunRow,
-    KvRepository, LogRow, LogsRepository, TagRow, TagsRepository, WorkflowRunJobCounts,
-    WorkflowRunRepository, WorkflowRunRow,
+    CdcChangeType, CdcRepository, CdcRow, Cursor, CursorPaginator, DataReferenceModel,
+    DataReferenceRepository, DbError, DbResult, JobRunModel, JobRunRepository, KvModel,
+    KvRepository, LogRow, LogsRepository, Page, Repos, TagModel, TagsRepository,
+    WorkflowRunJobCounts, WorkflowRunModel, WorkflowRunRepository,
 };
 pub use log_watcher::LogWatcher;
-pub use repos::Repos;
-pub use sync::{Delta, DeltaBatch, SyncEntity, SyncSubscription};
+pub use sync::{Delta, DeltaBatch, RowChange, SyncSubscription};

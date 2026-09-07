@@ -24,7 +24,7 @@ export function JobList({ jobs }: { jobs: JobRun[] }) {
             onClick={() =>
               void navigate({
                 to: "/runs/$workflowRunId/jobs/$jobId",
-                params: { workflowRunId: job.workflow_run_id, jobId: job.id },
+                params: { workflowRunId: String(job.workflow_run_id), jobId: String(job.id) },
               })
             }
           >

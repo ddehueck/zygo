@@ -169,15 +169,15 @@ impl TryFrom<StdoutIPCMessage> for EventKind {
                 data_reference: models::DataReference::from(data_reference),
             }),
             StdoutIPCMessage::TagInserted {
-                name,
                 value,
                 data_reference,
-            } => Self::TagInserted(TagInsertedData {
-                name,
-                value,
-                // todo: this conversion is funky
-                data_reference: data_reference.map(models::DataReference::from),
-            }),
+            } => {
+                Self::TagInserted(TagInsertedData {
+                    value,
+                    // todo: this conversion is funky
+                    data_reference: data_reference.map(models::DataReference::from),
+                })
+            }
         })
     }
 }

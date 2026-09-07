@@ -9,8 +9,7 @@ const filterSchema = z.discriminatedUnion("entity", [
   }),
   z.object({
     entity: z.literal("tag"),
-    name: z.string().min(1),
-    value: z.string().optional(),
+    value: z.string().min(1),
   }),
 ]) satisfies z.ZodType<WorkflowRunFilter>;
 

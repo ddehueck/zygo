@@ -28,11 +28,11 @@ export function WorkflowRunDetails({ workflowRunId }: WorkflowRunDetailsProps) {
     query: (q) => q.from({ tag: tagsCollection }),
   });
 
-  const workflowRun = runsQuery.data.find((run) => run.id === workflowRunId);
+  const workflowRun = runsQuery.data.find((run) => String(run.id) === workflowRunId);
   const jobs = jobsQuery.data
-    .filter((job) => job.workflow_run_id === workflowRunId)
+    .filter((job) => job.workflow_run_id === workflowRun?.id)
     .sort((a, b) => a.created_at.localeCompare(b.created_at));
-  const runTags = tagsQuery.data.filter((tag) => tag.workflow_run_id === workflowRunId);
+  const runTags = tagsQuery.data.filter((tag) => tag.workflow_run_id === workflowRun?.id);
 
   if (runsQuery.isLoading) {
     return (
@@ -109,7 +109,7 @@ function WorkflowRunOverview({
         {runTags.length > 0 && (
           <div className="mt-4 flex flex-wrap gap-x-3 gap-y-1 text-sm text-app-foreground-muted">
             {runTags.map((tag) => (
-              <TagBadge key={tag.id} name={tag.key} value={tag.value} />
+              <TagBadge key={tag.id} value={tag.value} />
             ))}
           </div>
         )}
@@ -178,7 +178,7 @@ function JobsPreviewCard({
   return (
     <Link
       to="/runs/$workflowRunId/jobs"
-      params={{ workflowRunId: run.id }}
+      params={{ workflowRunId: String(run.id) }}
       aria-label="View all jobs for this workflow run"
       className="group block h-full rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-app-accent"
     >
@@ -247,7 +247,7 @@ function LogsPreviewCard({ run }: { run: WorkflowRun }) {
     >
       <PreviewRow label="Run status" value={statusLabel(run.status)} />
       <PreviewRow label="Failed jobs" value={run.errored_job_count} />
-      <PreviewRow label="Last updated" value={formatDate(run.updated_at)} />
+      <PreviewRow label="Created" value={formatDate(run.created_at)} />
       <p className="py-3 text-sm text-app-foreground-muted">
         Detailed log entries are not available in this view.
       </p>

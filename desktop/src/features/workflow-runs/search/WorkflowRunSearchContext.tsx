@@ -41,10 +41,7 @@ export function WorkflowRunSearchProvider({
               case "workflow":
                 return workflowRun.workflow_id === filter.id;
               case "tag":
-                return tags.some(
-                  (tag) =>
-                    tag.key === filter.name && (filter.value == null || tag.value === filter.value),
-                );
+                return tags.some((tag) => tag.value === filter.value);
             }
           }),
         ),
@@ -102,9 +99,7 @@ function areFiltersEqual(left: WorkflowRunFilter[], right: WorkflowRunFilter[]) 
         case "workflow":
           return other.entity === "workflow" && filter.id === other.id;
         case "tag":
-          return (
-            other.entity === "tag" && filter.name === other.name && filter.value === other.value
-          );
+          return other.entity === "tag" && filter.value === other.value;
       }
     })
   );

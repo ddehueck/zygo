@@ -1,12 +1,11 @@
 import { createFileRoute, Outlet, useRouterState } from "@tanstack/react-router";
 
 import { WorkflowRunDetails } from "@/features/workflow-runs/components/WorkflowRunDetails";
-import { shortRunId } from "@/features/workflow-runs/lib/id";
 
 export const Route = createFileRoute("/runs/$workflowRunId")({
   beforeLoad: ({ params }) => ({
     breadcrumb: {
-      label: `Run (${shortRunId(params.workflowRunId)})`,
+      label: `Run (${params.workflowRunId})`,
       link: `/runs/${params.workflowRunId}`,
     },
   }),

@@ -5,16 +5,18 @@ and instantly see the run start on in the desktop app as well.
 
 ## Overview
 
-A client will subscribe to a broker that will hold a connection to the server. Through this connection they can receive a snapshot of the data
+A client will subscribe to a tauri channel holds a connection to the rust backend. Through this connection they can receive batches of delta objects that represent changes to the local database. The react app can then apply those changes to it's local tanstack db collection.
 
 ## Normalized Collections
 
 All clients will mirror the same normalized collections we have in the local db file. Then using tools like TanstackDB the client can decide the particular projection of data it needs to best serve it's usecase. This creates a clear separation between the client's unique data needs and the local crate's core concerns.
 
-Right now we have three:
+Right now we have:
 - Workflow Run
 - Job Run
 - Tag
+- Date References
+- Logs
 
 ## Implementation
 
@@ -37,6 +39,8 @@ Sync is built on top of [turso's change data capture (CDC) feature](https://docs
 | `updates` | `BLOB` | Per-column change details (mode: full) |
 
 This takes care of the core concern of what changed and how.
+
+**A note on CDC, persisted models, and raw rows**: The CDC repository returns raw `CdcRow` records, including their historical JSON after-values which match to a `*SqlRow` type. These are then converted into Rust-native `*Model` values. Normal repository queries use the same Row-to-Model conversions (for example, integer row values becomes a boolean as needed).
 
 ### Client Sync Protocol
 

@@ -1,7 +1,7 @@
 use serde_json::Value;
 use turso::transaction::TransactionBehavior;
 
-use super::{Db, db_models::KvRow, error::Result};
+use crate::db::{Db, DbResult as Result, KvModel};
 
 const UPSERT_SQL: &str = "
     INSERT INTO kv (key, value)
@@ -19,7 +19,7 @@ impl KvRepository {
         Self { database }
     }
 
-    pub async fn upsert(&self, entry: &KvRow) -> Result<()> {
+    pub async fn upsert(&self, entry: &KvModel) -> Result<()> {
         let value = serde_json::to_string(&entry.value)?;
         let mut connection = self.database.connection.lock().await;
         let tx = connection
@@ -49,11 +49,11 @@ impl KvRepository {
         Ok(())
     }
 
-    pub async fn get_by_key(&self, key: &str) -> Result<Option<KvRow>> {
+    pub async fn get_by_key(&self, key: &str) -> Result<Option<KvModel>> {
         let connection = self.database.connection.lock().await;
         let mut rows = connection
             .query(
-                "SELECT key, value, created_at, updated_at FROM kv WHERE key = ?1",
+                "SELECT key, value, created_at FROM kv WHERE key = ?1",
                 [key],
             )
             .await?;
@@ -62,15 +62,15 @@ impl KvRepository {
             return Ok(None);
         };
 
-        Ok(Some(KvRow::from_row(&row, &rows)?))
+        Ok(Some(KvModel::from_row(&row, &rows)?))
     }
 
-    pub async fn list(&self, limit: u32, offset: u32) -> Result<Vec<KvRow>> {
+    pub async fn list(&self, limit: u32, offset: u32) -> Result<Vec<KvModel>> {
         let connection = self.database.connection.lock().await;
         let mut rows = connection
             .query(
                 "
-                    SELECT key, value, created_at, updated_at
+                    SELECT key, value, created_at
                     FROM kv
                     ORDER BY key
                     LIMIT ?1 OFFSET ?2
@@ -81,7 +81,7 @@ impl KvRepository {
 
         let mut entries = Vec::new();
         while let Some(row) = rows.next().await? {
-            entries.push(KvRow::from_row(&row, &rows)?);
+            entries.push(KvModel::from_row(&row, &rows)?);
         }
 
         Ok(entries)

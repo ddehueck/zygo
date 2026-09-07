@@ -10,10 +10,23 @@ pub enum Error {
         change_type: CdcChangeType,
         table_name: String,
     },
+    #[error("CDC row {change_id} for table `{table_name}` has an invalid after state: {source}")]
+    InvalidAfter {
+        change_id: i64,
+        table_name: String,
+        #[source]
+        source: crate::DbError,
+    },
     #[error("CDC table `{0}` is not supported by local sync")]
     UnsupportedTable(String),
+    #[error("CDC row {change_id} for table `{table_name}` has a non-integer row ID")]
+    InvalidRowId { change_id: i64, table_name: String },
     #[error("CDC row ID `{id}` for a tag association is not an integer")]
     InvalidTagId { id: String },
+    #[error("CDC row ID `{id}` for a data reference is not an integer")]
+    InvalidDataReferenceId { id: String },
+    #[error("failed to serialize a synchronized row: {0}")]
+    Serialization(#[from] serde_json::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

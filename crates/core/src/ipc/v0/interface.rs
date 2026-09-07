@@ -66,7 +66,6 @@ pub enum StdoutIPCMessage {
         data_reference: DataReference,
     },
     TagInserted {
-        name: String,
         value: String,
         data_reference: Option<DataReference>,
     },

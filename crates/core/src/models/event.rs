@@ -52,7 +52,6 @@ pub struct DataReferenceInsertedData {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TagInsertedData {
-    pub name: String,
     pub value: String,
     pub data_reference: Option<DataReference>,
 }

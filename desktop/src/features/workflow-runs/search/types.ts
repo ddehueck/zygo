@@ -20,8 +20,7 @@ export type WorkflowRunFilter =
     }
   | {
       entity: "tag";
-      name: string;
-      value?: string;
+      value: string;
     };
 
 export type WorkflowSearchTokenSegment = TokenFieldSegment<WorkflowRunFilter>;
