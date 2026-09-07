@@ -1,10 +1,11 @@
-use turso::{Value, params, transaction::TransactionBehavior};
+use turso::transaction::TransactionBehavior;
+use turso::{Value, params};
 
 use super::paginator::{Cursor, CursorPaginator, Page};
 use crate::DbResult;
 use crate::db::Db;
-use crate::db::db_models::{JobRunRow, WorkflowRunJobCounts};
-use crate::db::error::Result;
+use crate::db::DbResult as Result;
+use crate::db::{JobRunModel, WorkflowRunJobCounts};
 
 const SELECT_COLUMNS: &str = "
     id, public_id, workflow_run_id, job_id,
@@ -17,7 +18,7 @@ pub struct JobRunRepository {
 }
 
 impl CursorPaginator for JobRunRepository {
-    type Item = JobRunRow;
+    type Item = JobRunModel;
 
     async fn list(&self, cursor: Option<Cursor>, limit: i64) -> DbResult<Page<Self::Item>> {
         let connection = self.database.connection.lock().await;
@@ -37,7 +38,7 @@ impl CursorPaginator for JobRunRepository {
         };
         let mut data = Vec::new();
         while let Some(row) = rows.next().await? {
-            data.push(JobRunRow::from_row(&row, &rows)?);
+            data.push(JobRunModel::from_row(&row, &rows)?);
         }
         let next = (limit > 0 && data.len() > limit as usize).then(|| {
             let next_id = data[..limit as usize]
@@ -57,7 +58,7 @@ impl JobRunRepository {
         Self { database }
     }
 
-    pub async fn upsert(&self, run: &JobRunRow) -> Result<()> {
+    pub async fn upsert(&self, run: &JobRunModel) -> Result<()> {
         let mut connection = self.database.connection.lock().await;
         let tx = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
@@ -116,7 +117,7 @@ impl JobRunRepository {
         })
     }
 
-    pub async fn get_by_id(&self, job_run_id: &str) -> Result<Option<JobRunRow>> {
+    pub async fn get_by_id(&self, job_run_id: &str) -> Result<Option<JobRunModel>> {
         let connection = self.database.connection.lock().await;
         let mut rows = connection
             .query(
@@ -127,13 +128,13 @@ impl JobRunRepository {
         let Some(row) = rows.next().await? else {
             return Ok(None);
         };
-        Ok(Some(JobRunRow::from_row(&row, &rows)?))
+        Ok(Some(JobRunModel::from_row(&row, &rows)?))
     }
 
     pub async fn list_by_workflow_run_ids(
         &self,
         workflow_run_ids: &[String],
-    ) -> Result<Vec<JobRunRow>> {
+    ) -> Result<Vec<JobRunModel>> {
         if workflow_run_ids.is_empty() {
             return Ok(Vec::new());
         }
@@ -150,12 +151,12 @@ impl JobRunRepository {
         let mut rows = connection.query(format!("SELECT {SELECT_COLUMNS} FROM job_runs WHERE workflow_run_id IN (SELECT id FROM workflow_runs WHERE public_id IN ({placeholders})) ORDER BY workflow_run_id ASC, created_at ASC, id ASC"), params).await?;
         let mut result = Vec::new();
         while let Some(row) = rows.next().await? {
-            result.push(JobRunRow::from_row(&row, &rows)?);
+            result.push(JobRunModel::from_row(&row, &rows)?);
         }
         Ok(result)
     }
 
-    pub async fn list_by_workflow_run_id(&self, workflow_run_id: &str) -> Result<Vec<JobRunRow>> {
+    pub async fn list_by_workflow_run_id(&self, workflow_run_id: &str) -> Result<Vec<JobRunModel>> {
         self.list_by_workflow_run_ids(&[workflow_run_id.to_owned()])
             .await
     }

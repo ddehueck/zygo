@@ -54,6 +54,27 @@ impl LogsRepository {
         Ok(())
     }
 
+    /// Reads logs using the local database's numeric job run ID.
+    pub async fn list_after_by_id(
+        &self,
+        job_run_id: i64,
+        after_order: i64,
+        limit: u32,
+    ) -> DbResult<Vec<LogRow>> {
+        let connection = self.database.connection.lock().await;
+        let mut rows = connection.query("SELECT job_runs.public_id, logs.\"order\", logs.content, logs.created_at FROM logs JOIN job_runs ON job_runs.id = logs.job_run_id WHERE logs.job_run_id = ?1 AND logs.\"order\" > ?2 ORDER BY logs.\"order\" ASC LIMIT ?3", params![job_run_id, after_order, i64::from(limit)]).await?;
+        let mut result = Vec::new();
+        while let Some(row) = rows.next().await? {
+            result.push(LogRow {
+                job_run_id: row.get(0)?,
+                order: row.get(1)?,
+                content: row.get(2)?,
+                created_at: row.get(3)?,
+            });
+        }
+        Ok(result)
+    }
+
     pub async fn list_after(
         &self,
         job_run_id: &str,

@@ -5,13 +5,13 @@ import { invoke as __TAURI_INVOKE, Channel } from "@tauri-apps/api/core";
 /** Commands */
 export const commands = {
   greet: (name: string, title: string) => __TAURI_INVOKE<string>("greet", { name, title }),
-  loadData: (request: LoadDataRequest) =>
-    typedError<LoadDataResponse, CommandError>(__TAURI_INVOKE("load_data", { request })),
-  loadDataReferences: (request: LoadDataReferencesRequest) =>
-    typedError<DataReference[], CommandError>(__TAURI_INVOKE("load_data_references", { request })),
-  sync: (onEvent: Channel<SyncDelta>) =>
-    typedError<null, CommandError>(__TAURI_INVOKE("sync", { onEvent })),
-  watchLogs: (jobRunId: string, onBatch: Channel<LogBatch>) =>
+  loadSyncableData: (request: LoadSyncableDataRequest) =>
+    typedError<LoadSyncableDataResponse, CommandError>(
+      __TAURI_INVOKE("load_syncable_data", { request }),
+    ),
+  openSyncChannel: (onEvent: Channel<SyncDelta>, onReady: Channel<null>) =>
+    typedError<null, CommandError>(__TAURI_INVOKE("open_sync_channel", { onEvent, onReady })),
+  watchLogs: (jobRunId: number, onBatch: Channel<LogBatch>) =>
     typedError<number, CommandError>(__TAURI_INVOKE("watch_logs", { jobRunId, onBatch })),
 };
 
@@ -23,68 +23,68 @@ export type CommandError =
 
 export type DataReference = {
   id: number;
-  workflow_run_id: string;
-  job_run_id: string;
-  job_id: string;
+  workflow_run_id: number;
+  job_run_id: number;
   uri: string;
-  version: string;
   is_replay: boolean;
-  inserted_at: string;
   created_at: string;
 };
 
 export type JobRun = {
   id: number;
   public_id: string;
-  workflow_run_id: string;
+  workflow_run_id: number;
   job_id: string;
   status: string;
   duration_ms: number | null;
   retry_count: number;
   created_at: string;
-  updated_at: string;
 };
 
-export type LoadDataReferencesRequest = {
-  workflow_run_id: string;
-  job_run_id: string;
-};
-
-export type LoadDataRequest = {
-  cursor: string | null;
+export type LoadSyncableDataRequest = {
+  entity: SyncEntityKind;
+  cursor: SyncCursor | null;
   limit: number;
 };
 
-export type LoadDataResponse = {
-  workflow_runs: WorkflowRun[];
-  job_runs: JobRun[];
-  tags: Tag[];
-  data_references: DataReference[];
-  next_cursor: string | null;
-};
+export type LoadSyncableDataResponse =
+  | { entity: "workflow_run"; page: SyncPage<WorkflowRun> }
+  | { entity: "job_run"; page: SyncPage<JobRun> }
+  | { entity: "tag"; page: SyncPage<Tag> }
+  | { entity: "data_reference"; page: SyncPage<DataReference> };
 
 export type LogBatch = {
   content: string;
   error: string | null;
 };
 
+export type RowChange<T> =
+  | { operation: "insert"; row: T }
+  | { operation: "update"; row: T }
+  | { operation: "delete"; id: number };
+
+export type SyncCursor = {
+  id: number;
+};
+
 export type SyncDelta =
-  | { operation: "resync" }
-  | { operation: "delete"; entity: SyncEntityKind; id: string }
-  | { operation: "upsert"; payload: SyncUpsert };
+  | { entity: "workflow_run"; change_id: number; change: RowChange<WorkflowRun> }
+  | { entity: "job_run"; change_id: number; change: RowChange<JobRun> }
+  | { entity: "tag"; change_id: number; change: RowChange<Tag> }
+  | { entity: "data_reference"; change_id: number; change: RowChange<DataReference> };
 
 export type SyncEntityKind = "workflow_run" | "job_run" | "tag" | "data_reference";
 
-export type SyncUpsert =
-  | { entity: "workflow_run"; id: number; data: WorkflowRun }
-  | { entity: "job_run"; id: number; data: JobRun }
-  | { entity: "tag"; id: number; data: Tag }
-  | { entity: "data_reference"; id: number; data: DataReference };
+export type SyncPage<T> = {
+  next: SyncCursor | null;
+  data: T[];
+};
 
 export type Tag = {
   id: number;
-  workflow_run_id: string;
-  key: string;
+  workflow_run_id: number;
+  job_run_id: number | null;
+  data_reference_id: number | null;
   value: string;
   created_at: string;
 };
@@ -100,7 +100,6 @@ export type WorkflowRun = {
   succeeded_job_count: number;
   errored_job_count: number;
   created_at: string;
-  updated_at: string;
 };
 
 /* Tauri Specta runtime */

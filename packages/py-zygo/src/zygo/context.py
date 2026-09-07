@@ -4,7 +4,8 @@ from zygo.store import StoreProtocol
 
 
 class TagsProtocol(Protocol):
-    def add(self, name: str, value: str) -> None: ...
+    """A tag is an alpha-numeric string that can only contain the characters `a-z`, `A-Z`, `0-9`, `_`, and `-`. Tags are used to filter jobs in the workflow system."""
+    def add(self, value: str) -> None: ...
 
 
 class JobContext(Protocol):

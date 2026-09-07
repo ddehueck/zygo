@@ -85,11 +85,8 @@ impl LocalStreamProcessor {
                         .insert(
                             &workflow_run_id,
                             &source.job_run_id.to_string(),
-                            &source.job_id.to_string(),
                             &data.data_reference.uri,
-                            &data.data_reference.version,
                             event.is_replay,
-                            &timestamp_value,
                         )
                         .await?;
                 }

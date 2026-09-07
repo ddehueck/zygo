@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 from typing import override
 
 from zygo._internal.ipc.v0.types import TagInserted, write_stdout_ipc_message
@@ -16,5 +17,7 @@ class JobContextImpl(JobContext):
 
 class TagsImpl(TagsProtocol):
     @override
-    def add(self, name: str, value: str) -> None:
-        write_stdout_ipc_message(TagInserted(name=name, value=value))
+    def add(self, value: str) -> None:
+        cleaned_value = value.strip()
+
+        write_stdout_ipc_message(TagInserted(value=cleaned_value))

@@ -1,75 +1,16 @@
-use local::{Delta, SyncEntity, SyncSubscription, ZygoLocalService};
-use serde::de::DeserializeOwned;
+use local::{Delta, SyncSubscription, ZygoLocalService};
 use tauri::State;
 
 use crate::error::{CommandError, CommandResult};
 
 use super::{RowChange, SyncDelta};
 
-fn deserialize_change<T: DeserializeOwned>(
-    change: RowChange<serde_json::Value>,
-) -> Result<RowChange<T>, serde_json::Error> {
-    match change {
-        RowChange::Insert { row } => Ok(RowChange::Insert {
-            row: serde_json::from_value(row)?,
-        }),
-        RowChange::Update { row } => Ok(RowChange::Update {
-            row: serde_json::from_value(row)?,
-        }),
-        RowChange::Delete { id } => Ok(RowChange::Delete { id }),
-    }
-}
-
-impl TryFrom<Delta> for SyncDelta {
-    type Error = serde_json::Error;
-
-    fn try_from(delta: Delta) -> Result<Self, Self::Error> {
-        let (entity, change_id, change) = match delta {
-            Delta::Insert {
-                change_id,
-                entity,
-                data,
-            } => (entity, change_id, RowChange::Insert { row: data }),
-            Delta::Update {
-                change_id,
-                entity,
-                data,
-            } => (entity, change_id, RowChange::Update { row: data }),
-            Delta::Delete {
-                change_id,
-                entity,
-                id,
-            } => (entity, change_id, RowChange::Delete { id }),
-        };
-
-        let delta = match entity {
-            SyncEntity::WorkflowRun => Self::WorkflowRun {
-                change_id,
-                change: deserialize_change(change)?,
-            },
-            SyncEntity::JobRun => Self::JobRun {
-                change_id,
-                change: deserialize_change(change)?,
-            },
-            SyncEntity::Tag => Self::Tag {
-                change_id,
-                change: deserialize_change(change)?,
-            },
-            SyncEntity::DataReference => Self::DataReference {
-                change_id,
-                change: deserialize_change(change)?,
-            },
-        };
-
-        Ok(delta)
-    }
-}
-
 #[tauri::command]
 #[specta::specta]
-pub async fn sync(
+pub async fn open_sync_channel(
     state: State<'_, ZygoLocalService>,
     on_event: tauri::ipc::Channel<SyncDelta>,
+    on_ready: tauri::ipc::Channel<()>,
 ) -> CommandResult<()> {
     const MAX_DELTAS: usize = 1000;
 
@@ -77,6 +18,12 @@ pub async fn sync(
     subscription.load_last_change_id().await;
     // todo: we don't really need need to spawn. the polling can just run here.
     subscription.spawn().await;
+
+    // The client must not start pagination until the stream cursor is fixed.
+    // Otherwise, the client may miss deltas.
+    on_ready
+        .send(())
+        .map_err(|error| CommandError::internal("sync_channel_failed", error.to_string()))?;
 
     loop {
         subscription.wait_for_changes().await;
@@ -91,12 +38,7 @@ pub async fn sync(
         let max_change_id = batch.max_change_id;
 
         for delta in batch.deltas {
-            let delta = SyncDelta::try_from(delta).map_err(|error| {
-                CommandError::internal(
-                    "invalid_sync_delta",
-                    format!("failed to parse sync payload: {error}"),
-                )
-            })?;
+            let delta = SyncDelta::from(delta);
 
             on_event.send(delta).map_err(|error| {
                 CommandError::internal("sync_channel_failed", error.to_string())
@@ -104,5 +46,38 @@ pub async fn sync(
         }
 
         subscription.set_last_confirmed_change_id(max_change_id);
+    }
+}
+
+impl<M, T: From<M>> From<local::RowChange<M>> for RowChange<T> {
+    fn from(change: local::RowChange<M>) -> Self {
+        match change {
+            local::RowChange::Insert { row } => Self::Insert { row: row.into() },
+            local::RowChange::Update { row } => Self::Update { row: row.into() },
+            local::RowChange::Delete { id } => Self::Delete { id },
+        }
+    }
+}
+
+impl From<Delta> for SyncDelta {
+    fn from(delta: Delta) -> Self {
+        match delta {
+            Delta::WorkflowRun { change_id, change } => Self::WorkflowRun {
+                change_id,
+                change: change.into(),
+            },
+            Delta::JobRun { change_id, change } => Self::JobRun {
+                change_id,
+                change: change.into(),
+            },
+            Delta::Tag { change_id, change } => Self::Tag {
+                change_id,
+                change: change.into(),
+            },
+            Delta::DataReference { change_id, change } => Self::DataReference {
+                change_id,
+                change: change.into(),
+            },
+        }
     }
 }

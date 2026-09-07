@@ -8,7 +8,7 @@ use zygo_core::{Dependencies, Zygo};
 use crate::ZygoLocalConfig;
 use crate::db::{
     CdcRepository, DataReferenceRepository, Db, JobRunRepository, KvRepository, LogsRepository,
-    Repos, TagsRepository, WorkflowRunRepository, WorkflowRunRow,
+    Repos, TagsRepository, WorkflowRunModel, WorkflowRunRepository,
 };
 use crate::paths;
 use crate::stream_processor::LocalStreamProcessor;
@@ -102,7 +102,7 @@ impl ZygoLocalService {
     pub async fn list_workflow_runs(
         &self,
         filter: Option<(&str, &str)>,
-    ) -> Result<Vec<WorkflowRunRow>> {
+    ) -> Result<Vec<WorkflowRunModel>> {
         match filter {
             Some((key, value)) => Ok(self.repos.workflow_runs.list_by_tag(key, value).await?),
             None => Ok(self.repos.workflow_runs.list_all().await?),

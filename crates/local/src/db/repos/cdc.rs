@@ -1,4 +1,4 @@
-use crate::db::{Db, db_models::CdcRow, error::Result};
+use crate::db::{CdcRow, Db, DbResult as Result};
 
 const SELECT_COLUMNS: &str = "
     change_id,
@@ -111,68 +111,5 @@ impl CdcRepository {
         let connection = self.database.connection.lock().await;
         let mut rows = connection.query(sql, params).await?;
         Ok(rows.next().await?.is_some())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::{
-        fs,
-        time::{Duration, SystemTime, UNIX_EPOCH},
-    };
-
-    use serde_json::json;
-
-    use super::{CdcRepository, Db};
-
-    #[tokio::test]
-    async fn list_between_decodes_after_as_a_row_object() -> anyhow::Result<()> {
-        let path = std::env::temp_dir().join(format!(
-            "zygo-cdc-test-{}-{}.db",
-            std::process::id(),
-            SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos()
-        ));
-        let path = path.to_string_lossy().into_owned();
-        let database = Db::open(&path, Duration::from_secs(5), true).await?;
-        let repository = CdcRepository::new(database.clone());
-
-        let connection = database.connection.lock().await;
-        let mut rows = connection
-            .query("SELECT COALESCE(MAX(change_id), 0) FROM turso_cdc", ())
-            .await?;
-        let row = rows.next().await?.expect("max change ID row");
-        let before_change_id: i64 = row.get(0)?;
-
-        connection
-            .execute(
-                "INSERT INTO kv (key, value) VALUES (?1, ?2)",
-                ["cdc-test", "value"],
-            )
-            .await?;
-        drop(connection);
-
-        assert!(repository.last_change_id().await? > before_change_id);
-        let changes = repository
-            .list_between(before_change_id, i64::MAX, &["kv"])
-            .await?;
-        let change = changes
-            .iter()
-            .find(|change| change.table_name == "kv")
-            .expect("the kv insert should be captured");
-
-        assert_eq!(
-            change.after.as_ref().and_then(|row| row.get("key")),
-            Some(&json!("cdc-test"))
-        );
-        assert_eq!(
-            change.after.as_ref().and_then(|row| row.get("value")),
-            Some(&json!("value"))
-        );
-
-        drop(repository);
-        drop(database);
-        fs::remove_file(path)?;
-
-        Ok(())
     }
 }

@@ -40,6 +40,8 @@ Sync is built on top of [turso's change data capture (CDC) feature](https://docs
 
 This takes care of the core concern of what changed and how.
 
+**A note on CDC, persisted models, and raw rows**: The CDC repository returns raw `CdcRow` records, including their historical JSON after-values which match to a `*SqlRow` type. These are then converted into Rust-native `*Model` values. Normal repository queries use the same Row-to-Model conversions (for example, integer row values becomes a boolean as needed).
+
 ### Client Sync Protocol
 
 When a client connects:

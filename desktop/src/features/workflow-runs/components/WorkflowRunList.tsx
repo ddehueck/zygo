@@ -42,14 +42,12 @@ export function WorkflowRunList({ runs }: WorkflowRunListProps) {
         })
       }
     >
-      {(workflowRun) => (
-        <WorkflowRunItem id={workflowRun.workflowRun.public_id} item={workflowRun} />
-      )}
+      {(workflowRun) => <WorkflowRunItem id={workflowRun.workflowRun.id} item={workflowRun} />}
     </GridList>
   );
 }
 
-function WorkflowRunItem({ id, item }: { id: string; item: WorkflowRunListRow }) {
+function WorkflowRunItem({ id, item }: { id: number; item: WorkflowRunListRow }) {
   const { workflowRun, tags } = item;
 
   const duration = useDuration({

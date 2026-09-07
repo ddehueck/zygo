@@ -4,9 +4,8 @@ use std::time::Duration;
 
 use tokio::sync::Notify;
 
+use super::{Delta, Result};
 use crate::Repos;
-use crate::sync::error::Result;
-use crate::sync::schema::Delta;
 
 const SYNC_TABLES: [&str; 4] = ["workflow_runs", "job_runs", "tags", "data_references"];
 

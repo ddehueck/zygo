@@ -1,10 +1,11 @@
-use turso::{Value, transaction::TransactionBehavior};
+use turso::Value;
+use turso::transaction::TransactionBehavior;
 
 use super::paginator::{Cursor, CursorPaginator, Page};
 use crate::DbResult;
 use crate::db::Db;
-use crate::db::db_models::TagRow;
-use crate::db::error::Result;
+use crate::db::DbResult as Result;
+use crate::db::TagModel;
 
 const INSERT_TAG_SQL: &str = "
     INSERT INTO tags (value, workflow_run_id, job_run_id, data_reference_id)
@@ -25,7 +26,7 @@ pub struct TagsRepository {
 }
 
 impl CursorPaginator for TagsRepository {
-    type Item = TagRow;
+    type Item = TagModel;
 
     async fn list(&self, cursor: Option<Cursor>, limit: i64) -> DbResult<Page<Self::Item>> {
         let connection = self.database.connection.lock().await;
@@ -49,7 +50,7 @@ impl CursorPaginator for TagsRepository {
         };
         let mut data = Vec::new();
         while let Some(row) = rows.next().await? {
-            data.push(TagRow::from_row(&row, &rows)?);
+            data.push(TagModel::from_row(&row, &rows)?);
         }
         let next = (limit > 0 && data.len() > limit as usize).then(|| {
             let next_id = data[..limit as usize]
@@ -96,7 +97,7 @@ impl TagsRepository {
         Ok(())
     }
 
-    pub async fn list(&self, workflow_run_id: &str) -> Result<Vec<TagRow>> {
+    pub async fn list(&self, workflow_run_id: &str) -> Result<Vec<TagModel>> {
         let connection = self.database.connection.lock().await;
         let mut rows = connection
             .query(
@@ -114,13 +115,13 @@ impl TagsRepository {
 
         let mut tags = Vec::new();
         while let Some(row) = rows.next().await? {
-            tags.push(TagRow::from_row(&row, &rows)?);
+            tags.push(TagModel::from_row(&row, &rows)?);
         }
 
         Ok(tags)
     }
 
-    pub async fn get_by_id(&self, id: i64) -> Result<Option<TagRow>> {
+    pub async fn get_by_id(&self, id: i64) -> Result<Option<TagModel>> {
         let connection = self.database.connection.lock().await;
         let mut rows = connection
             .query(
@@ -137,13 +138,13 @@ impl TagsRepository {
             return Ok(None);
         };
 
-        Ok(Some(TagRow::from_row(&row, &rows)?))
+        Ok(Some(TagModel::from_row(&row, &rows)?))
     }
 
     pub async fn list_by_workflow_run_ids(
         &self,
         workflow_run_ids: &[String],
-    ) -> Result<Vec<TagRow>> {
+    ) -> Result<Vec<TagModel>> {
         if workflow_run_ids.is_empty() {
             return Ok(Vec::new());
         }
@@ -172,7 +173,7 @@ impl TagsRepository {
 
         let mut tags = Vec::new();
         while let Some(row) = rows.next().await? {
-            tags.push(TagRow::from_row(&row, &rows)?);
+            tags.push(TagModel::from_row(&row, &rows)?);
         }
 
         Ok(tags)

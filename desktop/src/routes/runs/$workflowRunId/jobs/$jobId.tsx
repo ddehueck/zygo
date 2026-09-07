@@ -4,14 +4,17 @@ import { Channel, Resource } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 
 import { commands, type LogBatch } from "@/bindings";
-import { dataReferencesCollection } from "@/db/collections";
-import { upsertCollectionItem } from "@/db/collection-helpers";
+import {
+  dataReferencesCollection,
+  jobRunsCollection,
+  workflowRunsCollection,
+} from "@/db/collections";
 import { Description, Heading, Text } from "@/components/Text";
 
 export const Route = createFileRoute("/runs/$workflowRunId/jobs/$jobId")({
   beforeLoad: ({ params }) => ({
     breadcrumb: {
-      label: `Job (${params.jobId.slice(-4)})`,
+      label: `Job (${params.jobId})`,
       link: `/runs/${params.workflowRunId}/jobs/${params.jobId}`,
     },
   }),
@@ -45,48 +48,36 @@ function JobDataReferences({
   workflowRunId: string;
   jobRunId: string;
 }) {
-  const [loadError, setLoadError] = useState<string | null>(null);
-  useEffect(() => {
-    let disposed = false;
-    void commands
-      .loadDataReferences({ workflow_run_id: workflowRunId, job_run_id: jobRunId })
-      .then((result) => {
-        if (disposed) return;
-        if (result.status === "error") {
-          setLoadError(result.error.message);
-          return;
-        }
-        for (const reference of result.data) {
-          upsertCollectionItem(dataReferencesCollection, reference);
-        }
-      })
-      .catch((error: unknown) => {
-        if (!disposed) setLoadError(String(error));
-      });
-    return () => {
-      disposed = true;
-    };
-  }, [workflowRunId, jobRunId]);
+  const runsQuery = useLiveQuery({
+    query: (q) => q.from({ workflowRun: workflowRunsCollection }),
+  });
+  const jobsQuery = useLiveQuery({
+    query: (q) => q.from({ jobRun: jobRunsCollection }),
+  });
 
   const referencesQuery = useLiveQuery({
     query: (q) => q.from({ reference: dataReferencesCollection }),
   });
+  const workflowRun = runsQuery.data.find((run) => String(run.id) === workflowRunId);
+  const jobRun = jobsQuery.data.find(
+    (job) => String(job.id) === jobRunId && job.workflow_run_id === workflowRun?.id,
+  );
   const references = referencesQuery.data
     .filter(
       (reference) =>
-        reference.workflow_run_id === workflowRunId && reference.job_run_id === jobRunId,
+        reference.workflow_run_id === workflowRun?.id && reference.job_run_id === jobRun?.id,
     )
-    .sort((a, b) => a.inserted_at.localeCompare(b.inserted_at));
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
 
   return (
     <section aria-label="Data references" className="mt-8">
       <Heading size="medium">Data references</Heading>
       <Description className="mt-2">References inserted during this job.</Description>
-      {loadError ? (
+      {runsQuery.isError || jobsQuery.isError || referencesQuery.isError ? (
         <Text role="alert" variant="danger" size="small" className="mt-4 block">
-          Unable to load data references: {loadError}
+          Unable to load data references.
         </Text>
-      ) : referencesQuery.isLoading ? (
+      ) : runsQuery.isLoading || jobsQuery.isLoading || referencesQuery.isLoading ? (
         <Text variant="muted" size="small" className="mt-4 block">
           Loading data references…
         </Text>
@@ -102,7 +93,7 @@ function JobDataReferences({
                 {reference.uri}
               </Text>
               <Description className="mt-1">
-                Version {reference.version}
+                Created {reference.created_at}
                 {reference.is_replay ? " · Replayed" : ""}
               </Description>
             </li>
@@ -133,7 +124,11 @@ function JobLogs({ jobRunId }: { jobRunId: string }) {
       });
     };
 
-    void commands.watchLogs(jobRunId, onBatch).then(
+    const id = Number(jobRunId);
+    if (!Number.isSafeInteger(id) || id <= 0 || String(id) !== jobRunId)
+      throw new Error("Invalid job run ID.");
+
+    void commands.watchLogs(id, onBatch).then(
       (result) => {
         if (result.status === "error") {
           if (!disposed) setError(result.error.message);

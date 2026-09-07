@@ -44,13 +44,10 @@ CREATE TABLE IF NOT EXISTS data_references (
 );
 
 CREATE INDEX IF NOT EXISTS data_references_job_run_id
-ON data_references (workflow_run_id, job_run_id, inserted_at, id);
+ON data_references (workflow_run_id, job_run_id, id);
 
 CREATE INDEX IF NOT EXISTS data_references_workflow_run_id
-ON data_references (workflow_run_id, inserted_at, id);
-
-CREATE INDEX IF NOT EXISTS data_references_uri_version
-ON data_references (uri, version);
+ON data_references (workflow_run_id, id);
 
 -- Tags Table
 CREATE TABLE IF NOT EXISTS tags (

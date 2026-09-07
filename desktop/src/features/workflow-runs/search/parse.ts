@@ -33,8 +33,7 @@ export function toFilter(text: string): Result<WorkflowRunFilter, string> {
     case FILTER_PREFIXS.workflow:
       return ok({ entity: "workflow", id: rest });
     case FILTER_PREFIXS.tag:
-      const [name, value] = rest.split(":");
-      return ok({ entity: "tag", name, value });
+      return ok({ entity: "tag", value: rest });
     default:
       return err("Unknown filter prefix");
   }
@@ -47,9 +46,7 @@ export function toTokenSegment(filter: WorkflowRunFilter): TokenSegment {
       text = `${filterPrefix(filter.entity)}${filter.id}`;
       break;
     case "tag":
-      text = filter.value
-        ? `${filterPrefix(filter.entity)}${filter.name}:${filter.value}`
-        : `${filterPrefix(filter.entity)}${filter.name}`;
+      text = `${filterPrefix(filter.entity)}${filter.value}`;
       break;
     default:
       assertNever(filter);
@@ -59,8 +56,7 @@ export function toTokenSegment(filter: WorkflowRunFilter): TokenSegment {
 
 export function getFilterValue(text: string): string {
   if (text.includes(FILTER_DELIMITER)) {
-    const [_, value] = text.split(FILTER_DELIMITER);
-    return value;
+    return text.slice(text.indexOf(FILTER_DELIMITER) + FILTER_DELIMITER.length);
   }
   return text;
 }

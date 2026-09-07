@@ -2,9 +2,9 @@ use turso::{Value, params};
 
 use super::paginator::{Cursor, CursorPaginator, Page};
 use crate::DbResult;
+use crate::db::DataReferenceModel;
 use crate::db::Db;
-use crate::db::db_models::DataReferenceRow;
-use crate::db::error::Result;
+use crate::db::DbResult as Result;
 
 const SELECT_COLUMNS: &str = "
     id,
@@ -21,7 +21,7 @@ pub struct DataReferenceRepository {
 }
 
 impl CursorPaginator for DataReferenceRepository {
-    type Item = DataReferenceRow;
+    type Item = DataReferenceModel;
 
     async fn list(&self, cursor: Option<Cursor>, limit: i64) -> DbResult<Page<Self::Item>> {
         let connection = self.database.connection.lock().await;
@@ -62,18 +62,15 @@ impl DataReferenceRepository {
         &self,
         workflow_run_id: &str,
         job_run_id: &str,
-        job_id: &str,
         uri: &str,
-        version: &str,
         is_replay: bool,
-        inserted_at: &str,
     ) -> Result<()> {
         let connection = self.database.connection.lock().await;
-        connection.execute("INSERT INTO data_references (workflow_run_id, job_run_id, job_id, uri, version, is_replay, inserted_at) SELECT workflow_runs.id, job_runs.id, ?3, ?4, ?5, ?6, ?7 FROM workflow_runs JOIN job_runs ON job_runs.workflow_run_id = workflow_runs.id WHERE workflow_runs.public_id = ?1 AND job_runs.public_id = ?2 ON CONFLICT(workflow_run_id, job_run_id, uri, version) DO NOTHING", params![workflow_run_id, job_run_id, job_id, uri, version, i64::from(is_replay), inserted_at]).await?;
+        connection.execute("INSERT INTO data_references (workflow_run_id, job_run_id, uri, is_replay) SELECT workflow_runs.id, job_runs.id, ?3, ?4 FROM workflow_runs JOIN job_runs ON job_runs.workflow_run_id = workflow_runs.id WHERE workflow_runs.public_id = ?1 AND job_runs.public_id = ?2 ON CONFLICT(workflow_run_id, job_run_id, uri) DO NOTHING", params![workflow_run_id, job_run_id, uri, i64::from(is_replay)]).await?;
         Ok(())
     }
 
-    pub async fn get_by_id(&self, id: i64) -> Result<Option<DataReferenceRow>> {
+    pub async fn get_by_id(&self, id: i64) -> Result<Option<DataReferenceModel>> {
         let connection = self.database.connection.lock().await;
         let mut rows = connection
             .query(
@@ -84,14 +81,14 @@ impl DataReferenceRepository {
         let Some(row) = rows.next().await? else {
             return Ok(None);
         };
-        Ok(Some(DataReferenceRow::from_row(&row, &rows)?))
+        Ok(Some(DataReferenceModel::from_row(&row, &rows)?))
     }
 
     pub async fn list_by_job_run(
         &self,
         workflow_run_id: &str,
         job_run_id: &str,
-    ) -> Result<Vec<DataReferenceRow>> {
+    ) -> Result<Vec<DataReferenceModel>> {
         let connection = self.database.connection.lock().await;
         let mut rows = connection.query(&format!("SELECT {SELECT_COLUMNS} FROM data_references WHERE workflow_run_id = (SELECT id FROM workflow_runs WHERE public_id = ?1) AND job_run_id = (SELECT id FROM job_runs WHERE public_id = ?2) ORDER BY created_at ASC, id ASC"), [workflow_run_id, job_run_id]).await?;
         read_rows(&mut rows).await
@@ -100,7 +97,7 @@ impl DataReferenceRepository {
     pub async fn list_by_workflow_run_ids(
         &self,
         workflow_run_ids: &[String],
-    ) -> Result<Vec<DataReferenceRow>> {
+    ) -> Result<Vec<DataReferenceModel>> {
         if workflow_run_ids.is_empty() {
             return Ok(Vec::new());
         }
@@ -119,10 +116,10 @@ impl DataReferenceRepository {
     }
 }
 
-async fn read_rows(rows: &mut turso::Rows) -> Result<Vec<DataReferenceRow>> {
+async fn read_rows(rows: &mut turso::Rows) -> Result<Vec<DataReferenceModel>> {
     let mut result = Vec::new();
     while let Some(row) = rows.next().await? {
-        result.push(DataReferenceRow::from_row(&row, rows)?);
+        result.push(DataReferenceModel::from_row(&row, rows)?);
     }
     Ok(result)
 }

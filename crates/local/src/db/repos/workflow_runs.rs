@@ -1,12 +1,13 @@
-use turso::{params, transaction::TransactionBehavior};
+use turso::params;
+use turso::transaction::TransactionBehavior;
 
 use super::paginator::{Cursor, CursorPaginator, Page};
 use crate::DbResult;
-use crate::db::{Db, db_models::WorkflowRunRow, error::Result};
+use crate::db::{Db, DbResult as Result, WorkflowRunModel};
 
 const CREATE_SQL: &str = "
-    INSERT INTO workflow_runs (public_id, workflow_id, content_hash)
-    VALUES (?1, ?2, ?3)
+    INSERT INTO workflow_runs (public_id, workflow_id, content_hash, status)
+    VALUES (?1, ?2, ?3, ?4)
     ON CONFLICT(public_id) DO NOTHING
 ";
 
@@ -20,7 +21,7 @@ const UPDATE_SQL: &str = "
 const SELECT_COLUMNS: &str = "
     id, public_id, workflow_id, content_hash, status,
     started_at, completed_at, active_job_count, succeeded_job_count,
-    errored_job_count, created_at, updated_at
+    errored_job_count, created_at
 ";
 
 #[derive(Clone)]
@@ -29,7 +30,7 @@ pub struct WorkflowRunRepository {
 }
 
 impl CursorPaginator for WorkflowRunRepository {
-    type Item = WorkflowRunRow;
+    type Item = WorkflowRunModel;
 
     async fn list(&self, cursor: Option<Cursor>, limit: i64) -> DbResult<Page<Self::Item>> {
         let connection = self.database.connection.lock().await;
@@ -49,7 +50,7 @@ impl CursorPaginator for WorkflowRunRepository {
         };
         let mut data = Vec::new();
         while let Some(row) = rows.next().await? {
-            data.push(WorkflowRunRow::from_row(&row, &rows)?);
+            data.push(WorkflowRunModel::from_row(&row, &rows)?);
         }
         let next = (limit > 0 && data.len() > limit as usize).then(|| {
             let next_id = data[..limit as usize]
@@ -79,8 +80,11 @@ impl WorkflowRunRepository {
         let tx = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .await?;
-        tx.execute(CREATE_SQL, [workflow_run_id, workflow_id, content_hash])
-            .await?;
+        tx.execute(
+            CREATE_SQL,
+            [workflow_run_id, workflow_id, content_hash, "running"],
+        )
+        .await?;
         tx.commit().await?;
         Ok(())
     }
@@ -119,7 +123,7 @@ impl WorkflowRunRepository {
     pub async fn get_by_workflow_run_id(
         &self,
         workflow_run_id: &str,
-    ) -> Result<Option<WorkflowRunRow>> {
+    ) -> Result<Option<WorkflowRunModel>> {
         let connection = self.database.connection.lock().await;
         let mut rows = connection
             .query(
@@ -130,14 +134,14 @@ impl WorkflowRunRepository {
         let Some(row) = rows.next().await? else {
             return Ok(None);
         };
-        Ok(Some(WorkflowRunRow::from_row(&row, &rows)?))
+        Ok(Some(WorkflowRunModel::from_row(&row, &rows)?))
     }
 
-    pub async fn get_by_id(&self, workflow_run_id: &str) -> Result<Option<WorkflowRunRow>> {
+    pub async fn get_by_id(&self, workflow_run_id: &str) -> Result<Option<WorkflowRunModel>> {
         self.get_by_workflow_run_id(workflow_run_id).await
     }
 
-    pub async fn list_all(&self) -> Result<Vec<WorkflowRunRow>> {
+    pub async fn list_all(&self) -> Result<Vec<WorkflowRunModel>> {
         let connection = self.database.connection.lock().await;
         let mut rows = connection
             .query(
@@ -149,7 +153,7 @@ impl WorkflowRunRepository {
             .await?;
         let mut result = Vec::new();
         while let Some(row) = rows.next().await? {
-            result.push(WorkflowRunRow::from_row(&row, &rows)?);
+            result.push(WorkflowRunModel::from_row(&row, &rows)?);
         }
         Ok(result)
     }
@@ -158,7 +162,7 @@ impl WorkflowRunRepository {
         &self,
         cursor: Option<&str>,
         limit: u32,
-    ) -> Result<Vec<WorkflowRunRow>> {
+    ) -> Result<Vec<WorkflowRunModel>> {
         let connection = self.database.connection.lock().await;
         let limit = i64::from(limit);
         let mut rows = match cursor {
@@ -167,17 +171,17 @@ impl WorkflowRunRepository {
         };
         let mut result = Vec::new();
         while let Some(row) = rows.next().await? {
-            result.push(WorkflowRunRow::from_row(&row, &rows)?);
+            result.push(WorkflowRunModel::from_row(&row, &rows)?);
         }
         Ok(result)
     }
 
-    pub async fn list_by_tag(&self, _key: &str, value: &str) -> Result<Vec<WorkflowRunRow>> {
+    pub async fn list_by_tag(&self, _key: &str, value: &str) -> Result<Vec<WorkflowRunModel>> {
         let connection = self.database.connection.lock().await;
         let mut rows = connection.query(&format!("SELECT {SELECT_COLUMNS} FROM workflow_runs WHERE id IN (SELECT workflow_run_id FROM tags WHERE value = ?1) ORDER BY created_at ASC, id ASC"), [value]).await?;
         let mut result = Vec::new();
         while let Some(row) = rows.next().await? {
-            result.push(WorkflowRunRow::from_row(&row, &rows)?);
+            result.push(WorkflowRunModel::from_row(&row, &rows)?);
         }
         Ok(result)
     }

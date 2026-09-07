@@ -1,33 +1,46 @@
-use local::ZygoLocalService;
+use local::{CursorPaginator, ZygoLocalService};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use tauri::State;
 
 use crate::error::{CommandError, CommandResult};
 
-use super::{DataReference, JobRun, Tag, WorkflowRun};
+use super::{JobRun, SyncEntityKind, Tag, TauriDataReference, WorkflowRun};
 
 const MAX_PAGE_SIZE: u32 = 1000;
 
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, Type)]
+pub struct SyncCursor {
+    #[specta(type = specta_typescript::Number)]
+    pub id: i64,
+}
+
 #[derive(Debug, Deserialize, Type)]
-pub struct LoadDataRequest {
-    pub cursor: Option<String>,
+pub struct LoadSyncableDataRequest {
+    pub entity: SyncEntityKind,
+    pub cursor: Option<SyncCursor>,
     pub limit: u32,
 }
 
 #[derive(Debug, Serialize, Type)]
-pub struct LoadDataResponse {
-    pub workflow_runs: Vec<WorkflowRun>,
-    pub job_runs: Vec<JobRun>,
-    pub tags: Vec<Tag>,
-    pub data_references: Vec<DataReference>,
-    pub next_cursor: Option<String>,
+pub struct SyncPage<T> {
+    pub next: Option<SyncCursor>,
+    pub data: Vec<T>,
 }
 
-impl From<local::WorkflowRunRow> for WorkflowRun {
-    fn from(run: local::WorkflowRunRow) -> Self {
+#[derive(Debug, Serialize, Type)]
+#[serde(tag = "entity", rename_all = "snake_case")]
+pub enum LoadSyncableDataResponse {
+    WorkflowRun { page: SyncPage<WorkflowRun> },
+    JobRun { page: SyncPage<JobRun> },
+    Tag { page: SyncPage<Tag> },
+    DataReference { page: SyncPage<TauriDataReference> },
+}
+
+impl From<local::WorkflowRunModel> for WorkflowRun {
+    fn from(run: local::WorkflowRunModel) -> Self {
         Self {
-            id: run.row_id,
+            id: run.id,
             public_id: run.public_id,
             workflow_id: run.workflow_id,
             status: run.status,
@@ -37,15 +50,14 @@ impl From<local::WorkflowRunRow> for WorkflowRun {
             succeeded_job_count: run.succeeded_job_count,
             errored_job_count: run.errored_job_count,
             created_at: run.created_at,
-            updated_at: run.updated_at,
         }
     }
 }
 
-impl From<local::JobRunRow> for JobRun {
-    fn from(run: local::JobRunRow) -> Self {
+impl From<local::JobRunModel> for JobRun {
+    fn from(run: local::JobRunModel) -> Self {
         Self {
-            id: run.row_id,
+            id: run.id,
             public_id: run.public_id,
             workflow_run_id: run.workflow_run_id,
             job_id: run.job_id,
@@ -53,29 +65,25 @@ impl From<local::JobRunRow> for JobRun {
             duration_ms: run.duration_ms,
             retry_count: run.retry_count,
             created_at: run.created_at,
-            updated_at: run.updated_at,
         }
     }
 }
 
-impl From<local::DataReferenceRow> for DataReference {
-    fn from(reference: local::DataReferenceRow) -> Self {
+impl From<local::DataReferenceModel> for TauriDataReference {
+    fn from(reference: local::DataReferenceModel) -> Self {
         Self {
             id: reference.id,
             workflow_run_id: reference.workflow_run_id,
             job_run_id: reference.job_run_id,
-            job_id: reference.job_id,
             uri: reference.uri,
-            version: reference.version,
             is_replay: reference.is_replay,
-            inserted_at: reference.inserted_at,
             created_at: reference.created_at,
         }
     }
 }
 
-impl From<local::TagRow> for Tag {
-    fn from(tag: local::TagRow) -> Self {
+impl From<local::TagModel> for Tag {
+    fn from(tag: local::TagModel) -> Self {
         Self {
             id: tag.id,
             workflow_run_id: tag.workflow_run_id,
@@ -87,12 +95,32 @@ impl From<local::TagRow> for Tag {
     }
 }
 
+async fn load_page<R, T>(
+    repo: &R,
+    cursor: Option<local::Cursor>,
+    limit: i64,
+) -> CommandResult<SyncPage<T>>
+where
+    R: CursorPaginator,
+    T: From<R::Item>,
+{
+    let page = repo
+        .list(cursor, limit)
+        .await
+        .map_err(|error| CommandError::internal("load_syncable_data_failed", error.to_string()))?;
+
+    Ok(SyncPage {
+        next: page.next.map(|cursor| SyncCursor { id: cursor.id }),
+        data: page.data.into_iter().map(T::from).collect(),
+    })
+}
+
 #[tauri::command]
 #[specta::specta]
-pub async fn load_data(
+pub async fn load_syncable_data(
     state: State<'_, ZygoLocalService>,
-    request: LoadDataRequest,
-) -> CommandResult<LoadDataResponse> {
+    request: LoadSyncableDataRequest,
+) -> CommandResult<LoadSyncableDataResponse> {
     if request.limit == 0 {
         return Err(CommandError::invalid_input(
             "limit",
@@ -106,54 +134,24 @@ pub async fn load_data(
         ));
     }
 
-    let limit = request.limit;
-    let mut workflow_runs = state
-        .repos
-        .workflow_runs
-        .list_after_id(request.cursor.as_deref(), limit + 1)
-        .await
-        .map_err(|error| CommandError::internal("load_data_failed", error.to_string()))?;
+    let cursor = request.cursor.map(|cursor| local::Cursor { id: cursor.id });
+    let limit = i64::from(request.limit);
+    let repos = &state.repos;
 
-    let has_more = workflow_runs.len() > limit as usize;
-    if has_more {
-        workflow_runs.pop();
-    }
+    let response = match request.entity {
+        SyncEntityKind::WorkflowRun => LoadSyncableDataResponse::WorkflowRun {
+            page: load_page(&repos.workflow_runs, cursor, limit).await?,
+        },
+        SyncEntityKind::JobRun => LoadSyncableDataResponse::JobRun {
+            page: load_page(&repos.job_runs, cursor, limit).await?,
+        },
+        SyncEntityKind::Tag => LoadSyncableDataResponse::Tag {
+            page: load_page(&repos.tags, cursor, limit).await?,
+        },
+        SyncEntityKind::DataReference => LoadSyncableDataResponse::DataReference {
+            page: load_page(&repos.data_references, cursor, limit).await?,
+        },
+    };
 
-    let next_cursor = has_more
-        .then(|| workflow_runs.last().map(|run| run.public_id.clone()))
-        .flatten();
-    let workflow_run_ids = workflow_runs
-        .iter()
-        .map(|run| run.public_id.clone())
-        .collect::<Vec<_>>();
-
-    let job_runs = state
-        .repos
-        .job_runs
-        .list_by_workflow_run_ids(&workflow_run_ids)
-        .await
-        .map_err(|error| CommandError::internal("load_data_failed", error.to_string()))?;
-    let tags = state
-        .repos
-        .tags
-        .list_by_workflow_run_ids(&workflow_run_ids)
-        .await
-        .map_err(|error| CommandError::internal("load_data_failed", error.to_string()))?;
-    let data_references = state
-        .repos
-        .data_references
-        .list_by_workflow_run_ids(&workflow_run_ids)
-        .await
-        .map_err(|error| CommandError::internal("load_data_failed", error.to_string()))?;
-
-    Ok(LoadDataResponse {
-        workflow_runs: workflow_runs.into_iter().map(WorkflowRun::from).collect(),
-        job_runs: job_runs.into_iter().map(JobRun::from).collect(),
-        tags: tags.into_iter().map(Tag::from).collect(),
-        data_references: data_references
-            .into_iter()
-            .map(DataReference::from)
-            .collect(),
-        next_cursor,
-    })
+    Ok(response)
 }

@@ -10,6 +10,13 @@ pub enum Error {
         change_type: CdcChangeType,
         table_name: String,
     },
+    #[error("CDC row {change_id} for table `{table_name}` has an invalid after state: {source}")]
+    InvalidAfter {
+        change_id: i64,
+        table_name: String,
+        #[source]
+        source: crate::DbError,
+    },
     #[error("CDC table `{0}` is not supported by local sync")]
     UnsupportedTable(String),
     #[error("CDC row {change_id} for table `{table_name}` has a non-integer row ID")]

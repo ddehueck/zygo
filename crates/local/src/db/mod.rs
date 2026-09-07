@@ -6,8 +6,8 @@ mod repos;
 
 pub use database::Db;
 pub use db_models::{
-    CdcChangeType, CdcRow, DataReferenceRow, JobRunRow, TagRow, WorkflowRunJobCounts,
-    WorkflowRunRow,
+    CdcChangeType, CdcRow, DataReferenceModel, JobRunModel, KvModel, TagModel,
+    WorkflowRunJobCounts, WorkflowRunModel,
 };
 pub use error::{Error as DbError, Result as DbResult};
 

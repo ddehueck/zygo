@@ -1,19 +1,16 @@
 import { Icon, iconDefinitions } from "@/components/icons";
-import type { Maybe } from "@/utils";
+import { Text } from "@/components/Text";
 
 interface TagBadgeProps {
-  name: string;
-  value: Maybe<string>;
+  value: string;
   includeIcon?: boolean;
 }
 
-export function TagBadge({ name, value, includeIcon = false }: TagBadgeProps) {
-  const displayValue = value ?? "—";
-
+export function TagBadge({ value, includeIcon = false }: TagBadgeProps) {
   return (
     <span
-      title={`${name}: ${displayValue}`}
-      aria-label={`${name}: ${displayValue}`}
+      title={value}
+      aria-label={value}
       className="inline-flex max-w-full shrink-0 items-center rounded-md border border-app-border bg-app-bg-surface px-1 py-1 font-mono text-xs leading-none whitespace-nowrap"
     >
       {includeIcon && (
@@ -24,13 +21,9 @@ export function TagBadge({ name, value, includeIcon = false }: TagBadgeProps) {
           strokeWidth={2}
         />
       )}
-      <span className="truncate text-app-foreground-muted">{name}</span>
-      <span aria-hidden="true" className="text-app-foreground-muted">
-        :
-      </span>
-      <span className={value == null ? "text-app-foreground-muted" : "text-app-foreground"}>
-        {displayValue}
-      </span>
+      <Text size="small" className="truncate">
+        {value}
+      </Text>
     </span>
   );
 }

@@ -11,6 +11,7 @@ pub struct Page<T> {
     pub data: Vec<T>,
 }
 
+#[allow(async_fn_in_trait)]
 pub trait CursorPaginator {
     type Item;
 

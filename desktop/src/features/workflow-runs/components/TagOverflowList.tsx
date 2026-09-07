@@ -10,13 +10,13 @@ export function TagOverflowList({ tags }: TagOverflowListProps) {
       items={tags}
       maxRows={1}
       className="w-full min-w-0 justify-end gap-1"
-      renderItem={(tag) => <TagBadge name={tag.key} value={tag.value} includeIcon />}
+      renderItem={(tag) => <TagBadge value={tag.value} includeIcon />}
       renderOverflow={(hiddenTags) => (
         <span
           className="inline-flex shrink-0 items-center rounded-md border border-app-border bg-app-bg-surface px-2 py-1 font-mono text-xs leading-none whitespace-nowrap text-app-foreground-muted"
-          title={hiddenTags.map((tag) => `${tag.key}: ${tag.value}`).join(", ")}
+          title={hiddenTags.map((tag) => tag.value).join(", ")}
           aria-label={`${hiddenTags.length} more tag${hiddenTags.length === 1 ? "" : "s"}: ${hiddenTags
-            .map((tag) => `${tag.key}: ${tag.value}`)
+            .map((tag) => tag.value)
             .join(", ")}`}
         >
           +{hiddenTags.length} more
