@@ -50,6 +50,32 @@ pub struct Tag {
 }
 
 #[derive(Debug, Serialize, Deserialize, Type)]
+pub struct Log {
+    #[specta(type = specta_typescript::Number)]
+    pub id: i64,
+    #[specta(type = specta_typescript::Number)]
+    pub workflow_run_id: i64,
+    pub job_run_id: String,
+    #[specta(type = specta_typescript::Number)]
+    pub order: i64,
+    pub content: String,
+    pub created_at: String,
+}
+
+impl From<local::LogRow> for Log {
+    fn from(log: local::LogRow) -> Self {
+        Self {
+            id: log.id,
+            workflow_run_id: log.workflow_run_id,
+            job_run_id: log.job_run_id,
+            order: log.order,
+            content: log.content,
+            created_at: log.created_at,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Type)]
 pub struct TauriDataReference {
     #[specta(type = specta_typescript::Number)]
     pub id: i64,

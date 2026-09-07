@@ -1,15 +1,15 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useLiveQuery } from "@tanstack/react-db";
-import { Channel, Resource } from "@tauri-apps/api/core";
-import { useEffect, useState } from "react";
+import { eq } from "@tanstack/db";
 
-import { commands, type LogBatch } from "@/bindings";
 import {
   dataReferencesCollection,
   jobRunsCollection,
+  logsCollection,
   workflowRunsCollection,
 } from "@/db/collections";
 import { Description, Heading, Text } from "@/components/Text";
+import { useWatchLogs } from "@/hooks/use-watch-logs";
 
 export const Route = createFileRoute("/runs/$workflowRunId/jobs/$jobId")({
   beforeLoad: ({ params }) => ({
@@ -26,9 +26,9 @@ function JobRoute() {
 
   return (
     <main className="mx-auto w-full max-w-5xl px-6 py-10">
-      <Heading size="medium">Job logs</Heading>
-      <Description className="mt-2">{jobId}</Description>
-      <JobLogs key={jobId} jobRunId={jobId} />
+      <Heading size="medium">Workflow logs</Heading>
+      <Description className="mt-2">All jobs in run {workflowRunId}</Description>
+      <JobLogs workflowRunId={workflowRunId} />
       <JobDataReferences workflowRunId={workflowRunId} jobRunId={jobId} />
       <Link
         to="/runs/$workflowRunId"
@@ -58,6 +58,7 @@ function JobDataReferences({
   const referencesQuery = useLiveQuery({
     query: (q) => q.from({ reference: dataReferencesCollection }),
   });
+
   const workflowRun = runsQuery.data.find((run) => String(run.id) === workflowRunId);
   const jobRun = jobsQuery.data.find(
     (job) => String(job.id) === jobRunId && job.workflow_run_id === workflowRun?.id,
@@ -104,59 +105,33 @@ function JobDataReferences({
   );
 }
 
-function JobLogs({ jobRunId }: { jobRunId: string }) {
-  const [contents, setContents] = useState("");
-  const [error, setError] = useState<string | null>(null);
+function JobLogs({ workflowRunId }: { workflowRunId: string }) {
+  const id = Number(workflowRunId);
 
-  useEffect(() => {
-    let disposed = false;
-    let subscription: Resource | undefined;
-    const onBatch = new Channel<LogBatch>();
-    onBatch.onmessage = (batch) => {
-      if (disposed) return;
-      if (batch.content) setContents((current) => current + batch.content);
-      setError(batch.error);
-    };
+  useWatchLogs({ workflowRunId: id });
 
-    const close = (resource: Resource) => {
-      void resource.close().catch((error: unknown) => {
-        console.error("Could not stop log watcher", error);
-      });
-    };
+  const logsQuery = useLiveQuery({
+    query: (q) =>
+      q
+        .from({ logs: logsCollection })
+        .where(({ logs }) => eq(logs.workflow_run_id, id))
+        .orderBy(({ logs }) => logs.id, "asc"),
+  });
 
-    const id = Number(jobRunId);
-    if (!Number.isSafeInteger(id) || id <= 0 || String(id) !== jobRunId)
-      throw new Error("Invalid job run ID.");
+  const contents = logsQuery.data.map((log) => log.content).join("");
 
-    void commands.watchLogs(id, onBatch).then(
-      (result) => {
-        if (result.status === "error") {
-          if (!disposed) setError(result.error.message);
-          return;
-        }
-        subscription = new Resource(result.data);
-        if (disposed) close(subscription);
-      },
-      (error: unknown) => {
-        if (!disposed) setError(String(error));
-      },
-    );
-
-    return () => {
-      disposed = true;
-      if (subscription) close(subscription);
-    };
-  }, [jobRunId]);
-
+  // todo a table component with virtualization + pretextjs for height computation
   return (
-    <section aria-label="Job logs" className="mt-6">
-      {error && (
+    <section aria-label="Workflow logs" className="mt-6">
+      {logsQuery.isError && (
         <Text role="alert" size="small" variant="danger" className="mb-3 block">
-          {error}
+          Unable to load workflow logs.
         </Text>
       )}
       <pre className="max-h-[65vh] min-h-64 overflow-auto rounded-lg border border-app-border p-4">
-        <Text size="small">{contents || (error ? "" : "Waiting for logs…")}</Text>
+        <Text size="small">
+          {contents || (logsQuery.isLoading ? "Loading logs…" : "No logs recorded.")}
+        </Text>
       </pre>
     </section>
   );

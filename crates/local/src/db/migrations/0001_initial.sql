@@ -1,6 +1,6 @@
 -- Workflow Runs Table
 CREATE TABLE IF NOT EXISTS workflow_runs (
-    id INTEGER PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     public_id TEXT NOT NULL UNIQUE,
     workflow_id TEXT NOT NULL,
     content_hash TEXT NOT NULL,
@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS workflow_runs (
 
 -- Job Runs Table
 CREATE TABLE IF NOT EXISTS job_runs (
-    id INTEGER PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     public_id TEXT NOT NULL UNIQUE,
     workflow_run_id INTEGER NOT NULL,
     job_id TEXT NOT NULL,
@@ -31,7 +31,7 @@ CREATE INDEX IF NOT EXISTS job_runs_workflow_run_id ON job_runs (workflow_run_id
 
 -- Data References Table
 CREATE TABLE IF NOT EXISTS data_references (
-    id INTEGER PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     workflow_run_id INTEGER NOT NULL,
     job_run_id INTEGER NOT NULL,
     uri TEXT NOT NULL,
@@ -51,7 +51,7 @@ ON data_references (workflow_run_id, id);
 
 -- Tags Table
 CREATE TABLE IF NOT EXISTS tags (
-    id INTEGER PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     value TEXT NOT NULL,
     workflow_run_id INTEGER NOT NULL,
     job_run_id INTEGER,
