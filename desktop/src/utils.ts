@@ -9,6 +9,11 @@ class InvariantViolation extends Error {
   }
 }
 
+/**
+ * Throws an error if the condition is false. This function is used to enforce
+ * invariants in the code, and it will throw an `InvariantViolation` error if
+ * the condition is not met.
+ */
 export function invariant(condition: boolean, message?: string): asserts condition {
   if (!condition) {
     throw new InvariantViolation(message ?? "Invariant violation");
@@ -16,3 +21,10 @@ export function invariant(condition: boolean, message?: string): asserts conditi
 }
 
 export type Maybe<T> = T | undefined | null;
+
+export function errMsg(err: unknown): string {
+  if (err instanceof Error) {
+    return err.message;
+  }
+  return String(err);
+}
