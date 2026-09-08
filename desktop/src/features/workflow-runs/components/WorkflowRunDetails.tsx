@@ -284,11 +284,11 @@ function LogsPreviewCard({ run }: { run: WorkflowRun }) {
       >
         {logsQuery.data.length > 0 ? (
           logsQuery.data.map((log) => (
-            <PreviewRow
-              key={log.id}
-              label={<span className="text-xs text-app-foreground-muted">#{log.id}</span>}
-              value={<span className="block max-w-full truncate">{log.content}</span>}
-            />
+            <div key={log.id} className="min-w-0 py-3 first:pt-4 last:pb-4">
+              <span className="block truncate text-sm font-medium text-app-foreground">
+                {log.content.trimStart()}
+              </span>
+            </div>
           ))
         ) : (
           <Text

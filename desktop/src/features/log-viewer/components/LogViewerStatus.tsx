@@ -1,4 +1,5 @@
 import { Text } from "@/components/Text";
+import { pluralize } from "@/lib/string";
 
 export function LogViewerStatus({
   rowCount,
@@ -16,7 +17,7 @@ export function LogViewerStatus({
   return (
     <div className="flex min-h-8 shrink-0 items-center justify-between gap-4 border-t border-app-border px-3 py-1.5">
       <Text size="small" variant="muted">
-        {rowCount.toLocaleString()} loaded {rowCount === 1 ? "line" : "lines"}
+        Showing {rowCount.toLocaleString()} {pluralize(rowCount, "line", "lines")}
       </Text>
       <Text size="small" variant={error ? "danger" : "muted"} role={error ? "alert" : undefined}>
         {statusMessage({ error, isFetchingPreviousPage, isFollowing, hasPreviousPage })}

@@ -4,7 +4,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import type { Log } from "@/bindings";
 import { LOG_EDGE_THRESHOLD, LOG_OVERSCAN, LOG_ROW_ESTIMATED_HEIGHT } from "../constants";
 
-export function useLogVirtualizer(logs: Log[]) {
+export function useLogVirtualizer(logs: Log[], { followOnAppend }: { followOnAppend: boolean }) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const virtualizer = useVirtualizer({
@@ -14,7 +14,7 @@ export function useLogVirtualizer(logs: Log[]) {
     getScrollElement: () => scrollRef.current,
     overscan: LOG_OVERSCAN,
     anchorTo: "end",
-    followOnAppend: true,
+    followOnAppend,
     scrollEndThreshold: LOG_EDGE_THRESHOLD,
   });
 

@@ -49,6 +49,8 @@ export type QueryLogsRequest = {
 	after_id?: number | null,
 	/**  Exclusive upper bound for paging older history (DESC). */
 	before_id?: number | null,
+	/**  Full-text search against log content. Bounds are optional when searching. */
+	search?: string | null,
 };
 
 export type QueryLogsResponse = {

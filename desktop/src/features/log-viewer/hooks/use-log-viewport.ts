@@ -11,10 +11,12 @@ import { useLogVirtualizer } from "./use-log-virtualizer";
  */
 export function useLogViewport(workflowRunId: number) {
   const data = useLogViewportData(workflowRunId);
-  const { logs, hasPreviousPage, isFetchingPreviousPage, fetchPreviousPage } = data;
+  const { logs, hasPreviousPage, isFetchingPreviousPage, fetchPreviousPage, isSearching } = data;
 
-  const { scrollRef, virtualizer } = useLogVirtualizer(logs);
-  const didScrollToEnd = useScrollToEndOnMount(logs.length, scrollRef, virtualizer);
+  const { scrollRef, virtualizer } = useLogVirtualizer(logs, {
+    followOnAppend: !isSearching,
+  });
+  const didScrollToEnd = useScrollToEndOnMount(logs.length, scrollRef, virtualizer, !isSearching);
 
   const loadOlder = useCallback(() => {
     if (!hasPreviousPage || isFetchingPreviousPage) return;
@@ -33,7 +35,7 @@ export function useLogViewport(workflowRunId: number) {
     ...data,
     scrollRef,
     virtualizer,
-    isFollowing: virtualizer.isAtEnd(),
+    isFollowing: !isSearching && virtualizer.isAtEnd(),
     onScroll,
     loadOlder,
   };
@@ -44,11 +46,12 @@ function useScrollToEndOnMount(
   logCount: number,
   scrollRef: RefObject<HTMLDivElement | null>,
   virtualizer: Virtualizer<HTMLDivElement, Element>,
+  enabled: boolean,
 ) {
   const didScrollToEnd = useRef(false);
 
   useLayoutEffect(() => {
-    if (didScrollToEnd.current || logCount === 0) return;
+    if (!enabled || didScrollToEnd.current || logCount === 0) return;
 
     let cancelled = false;
     let frame = 0;
@@ -78,7 +81,7 @@ function useScrollToEndOnMount(
       cancelled = true;
       cancelAnimationFrame(frame);
     };
-  }, [logCount, scrollRef, virtualizer]);
+  }, [enabled, logCount, scrollRef, virtualizer]);
 
   return didScrollToEnd;
 }

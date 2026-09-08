@@ -9,6 +9,4 @@ CREATE TABLE IF NOT EXISTS logs (
 );
 
 CREATE INDEX IF NOT EXISTS logs_job_run_id ON logs (job_run_id, "order");
-
--- Temporarily disable to allow us to open the db file in outerbase.
--- CREATE INDEX logs_content_fts ON logs USING fts (content);
+CREATE INDEX logs_content_fts ON logs USING fts (content);
