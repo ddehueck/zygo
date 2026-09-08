@@ -14,11 +14,11 @@ import {
 
 import { Icon, iconDefinitions } from "@/components/icons";
 import { useDuration } from "@/hooks/use-duration";
-import { useWatchLogs } from "@/hooks/use-watch-logs";
+import { useWatchLogs } from "@/features/log-viewer/hooks/use-watch-logs";
 import { formatDate } from "@/lib/dates";
 import { RunStatus, StatusIcon, statusLabel } from "./statuses";
 import { TagBadge } from "./TagBadge";
-import { Heading } from "@/components/Text";
+import { Heading, Text } from "@/components/Text";
 import { sum } from "@/lib/math";
 
 type WorkflowRunDetailsProps = {
@@ -259,7 +259,7 @@ function DataPreviewCard({ run }: { run: WorkflowRun }) {
 }
 
 function LogsPreviewCard({ run }: { run: WorkflowRun }) {
-  useWatchLogs({ workflowRunId: run.id });
+  const watcher = useWatchLogs({ workflowRunId: run.id });
 
   const logsQuery = useLiveQuery({
     query: (q) =>
@@ -291,9 +291,18 @@ function LogsPreviewCard({ run }: { run: WorkflowRun }) {
             />
           ))
         ) : (
-          <p className="py-3 text-sm text-app-foreground-muted">
-            {logsQuery.isLoading ? "Loading logs…" : "No logs recorded."}
-          </p>
+          <Text
+            className="block py-3"
+            size="small"
+            variant={watcher.isError ? "danger" : "muted"}
+            role={watcher.isError ? "alert" : undefined}
+          >
+            {watcher.isPending
+              ? "Loading logs…"
+              : watcher.isError
+                ? "Unable to load logs."
+                : "No logs recorded."}
+          </Text>
         )}
       </PreviewCard>
     </Link>

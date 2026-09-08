@@ -4,123 +4,113 @@ import { invoke as __TAURI_INVOKE, Channel } from "@tauri-apps/api/core";
 
 /** Commands */
 export const commands = {
-  greet: (name: string, title: string) => __TAURI_INVOKE<string>("greet", { name, title }),
-  loadSyncableData: (request: LoadSyncableDataRequest) =>
-    typedError<LoadSyncableDataResponse, CommandError>(
-      __TAURI_INVOKE("load_syncable_data", { request }),
-    ),
-  openSyncChannel: (onEvent: Channel<SyncDelta>, onReady: Channel<null>) =>
-    typedError<null, CommandError>(__TAURI_INVOKE("open_sync_channel", { onEvent, onReady })),
-  queryLogs: (request: QueryLogsRequest) =>
-    typedError<Log[], CommandError>(__TAURI_INVOKE("query_logs", { request })),
+	greet: (name: string, title: string) => __TAURI_INVOKE<string>("greet", { name, title }),
+	loadSyncableData: (request: LoadSyncableDataRequest) => typedError<LoadSyncableDataResponse, CommandError>(__TAURI_INVOKE("load_syncable_data", { request })),
+	openSyncChannel: (onEvent: Channel<SyncDelta>, onReady: Channel<null>) => typedError<null, CommandError>(__TAURI_INVOKE("open_sync_channel", { onEvent, onReady })),
+	queryLogs: (request: QueryLogsRequest) => typedError<QueryLogsResponse, CommandError>(__TAURI_INVOKE("query_logs", { request })),
 };
 
 /* Types */
 /**  The error contract exposed by Tauri commands to the frontend. */
-export type CommandError =
-  | { kind: "invalid_input"; field: string; message: string }
-  | { kind: "internal"; code: string; message: string };
+export type CommandError = { kind: "invalid_input"; field: string; message: string } | { kind: "internal"; code: string; message: string };
 
 export type JobRun = {
-  id: number;
-  public_id: string;
-  workflow_run_id: number;
-  job_id: string;
-  status: string;
-  duration_ms: number | null;
-  retry_count: number;
-  created_at: string;
+	id: number,
+	public_id: string,
+	workflow_run_id: number,
+	job_id: string,
+	status: string,
+	duration_ms: number | null,
+	retry_count: number,
+	created_at: string,
 };
 
 export type LoadSyncableDataRequest = {
-  entity: SyncEntityKind;
-  cursor: SyncCursor | null;
-  limit: number;
+	entity: SyncEntityKind,
+	cursor: SyncCursor | null,
+	limit: number,
 };
 
-export type LoadSyncableDataResponse =
-  | { entity: "workflow_run"; page: SyncPage<WorkflowRun> }
-  | { entity: "job_run"; page: SyncPage<JobRun> }
-  | { entity: "tag"; page: SyncPage<Tag> }
-  | { entity: "data_reference"; page: SyncPage<TauriDataReference> };
+export type LoadSyncableDataResponse = { entity: "workflow_run"; page: SyncPage<WorkflowRun> } | { entity: "job_run"; page: SyncPage<JobRun> } | { entity: "tag"; page: SyncPage<Tag> } | { entity: "data_reference"; page: SyncPage<TauriDataReference> };
 
 export type Log = {
-  id: number;
-  workflow_run_id: number;
-  job_run_id: string;
-  order: number;
-  content: string;
-  created_at: string;
+	id: number,
+	workflow_run_id: number,
+	job_run_id: string,
+	order: number,
+	content: string,
+	created_at: string,
 };
 
 export type QueryLogsRequest = {
-  workflow_run_id: number;
-  limit: number;
-  offset: number;
-  after_id: number | null;
+	workflow_run_id: number,
+	limit: number,
+	/**  Exclusive lower bound. Present (including 0) pages forward (ASC); absent pages from the newest (DESC). */
+	after_id?: number | null,
+	/**  Exclusive upper bound for paging older history (DESC). */
+	before_id?: number | null,
 };
 
-export type RowChange<T> =
-  | { operation: "insert"; row: T }
-  | { operation: "update"; row: T }
-  | { operation: "delete"; id: number };
+export type QueryLogsResponse = {
+	logs: Log[],
+	has_more: boolean,
+	/**  Global ingestion high-water mark from the same read snapshot as the page. */
+	observed_through_id: number,
+};
+
+export type RowChange<T> = { operation: "insert"; row: T } | { operation: "update"; row: T } | { operation: "delete"; id: number };
 
 export type SyncCursor = {
-  id: number;
+	id: number,
 };
 
-export type SyncDelta =
-  | { entity: "workflow_run"; change_id: number; change: RowChange<WorkflowRun> }
-  | { entity: "job_run"; change_id: number; change: RowChange<JobRun> }
-  | { entity: "tag"; change_id: number; change: RowChange<Tag> }
-  | { entity: "data_reference"; change_id: number; change: RowChange<TauriDataReference> };
+export type SyncDelta = { entity: "workflow_run"; change_id: number; change: RowChange<WorkflowRun> } | { entity: "job_run"; change_id: number; change: RowChange<JobRun> } | { entity: "tag"; change_id: number; change: RowChange<Tag> } | { entity: "data_reference"; change_id: number; change: RowChange<TauriDataReference> };
 
 export type SyncEntityKind = "workflow_run" | "job_run" | "tag" | "data_reference";
 
 export type SyncPage<T> = {
-  next: SyncCursor | null;
-  data: T[];
+	next: SyncCursor | null,
+	data: T[],
 };
 
 export type Tag = {
-  id: number;
-  workflow_run_id: number;
-  job_run_id: number | null;
-  data_reference_id: number | null;
-  value: string;
-  created_at: string;
+	id: number,
+	workflow_run_id: number,
+	job_run_id: number | null,
+	data_reference_id: number | null,
+	value: string,
+	created_at: string,
 };
 
 export type TauriDataReference = {
-  id: number;
-  workflow_run_id: number;
-  job_run_id: number;
-  uri: string;
-  is_replay: boolean;
-  created_at: string;
+	id: number,
+	workflow_run_id: number,
+	job_run_id: number,
+	uri: string,
+	is_replay: boolean,
+	created_at: string,
 };
 
 export type WorkflowRun = {
-  id: number;
-  public_id: string;
-  workflow_id: string;
-  status: string;
-  started_at: string | null;
-  completed_at: string | null;
-  active_job_count: number;
-  succeeded_job_count: number;
-  errored_job_count: number;
-  created_at: string;
+	id: number,
+	public_id: string,
+	workflow_id: string,
+	status: string,
+	started_at: string | null,
+	completed_at: string | null,
+	active_job_count: number,
+	succeeded_job_count: number,
+	errored_job_count: number,
+	created_at: string,
 };
 
 /* Tauri Specta runtime */
-async function typedError<T, E>(
-  result: Promise<T>,
-): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {
-  try {
-    return { status: "ok", data: await result };
-  } catch (e) {
-    if (e instanceof Error) throw e;
-    return { status: "error", error: e as any };
-  }
+async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {
+    try {
+        return { status: "ok", data: await result };
+    } catch (e) {
+        if (e instanceof Error) throw e;
+        return { status: "error", error: e as any };
+    }
 }
+

@@ -1,49 +1,62 @@
-import { useRef, useState } from "react";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { useState } from "react";
 
-import type { Log } from "@/bindings";
 import { scrollAreaClassName } from "@/components/ScrollArea";
-import { Text } from "@/components/Text";
+import { Description, Text } from "@/components/Text";
 import { cn } from "@/components/utils";
-import { LOG_OVERSCAN, LOG_ROW_ESTIMATED_HEIGHT } from "../constants";
-import { useLogViewerScroll } from "../hooks/use-log-viewer-scroll";
+import { useLogViewport } from "../hooks/use-log-viewport";
 import { LogRow } from "./LogRow";
 import { LogViewerStatus } from "./LogViewerStatus";
 import { LogViewportHeader } from "./LogViewportHeader";
 
-export function LogViewport({
-  logs,
-  hasNextPage,
-  isFetchingNextPage,
-  fetchNextPage,
-  watchError,
-}: {
-  logs: Log[];
-  hasNextPage: boolean;
-  isFetchingNextPage: boolean;
-  fetchNextPage: () => Promise<void>;
-  watchError: unknown;
-}) {
-  const scrollRef = useRef<HTMLDivElement>(null);
+export function LogViewport({ workflowRunId }: { workflowRunId: number }) {
+  const {
+    logs,
+    hasPreviousPage,
+    isFetchingPreviousPage,
+    error,
+    isLoading,
+    isError,
+    scrollRef,
+    virtualizer,
+    isFollowing,
+    onScroll,
+    loadOlder,
+  } = useLogViewport(workflowRunId);
+
   const [showDate, setShowDate] = useState(true);
   const [showJobId, setShowJobId] = useState(true);
 
-  const virtualizer = useVirtualizer({
-    count: logs.length,
-    estimateSize: () => LOG_ROW_ESTIMATED_HEIGHT,
-    getItemKey: (index) => logs[index]?.id ?? index,
-    getScrollElement: () => scrollRef.current,
-    overscan: LOG_OVERSCAN,
-  });
+  if (isLoading) {
+    return (
+      <div className="flex min-h-64 flex-1 items-center justify-center">
+        <Text variant="muted">Loading workflow logs…</Text>
+      </div>
+    );
+  }
 
-  const { isFollowing, onScroll } = useLogViewerScroll({
-    scrollRef,
-    virtualizer,
-    logs,
-    hasNextPage,
-    isFetchingNextPage,
-    fetchNextPage,
-  });
+  if (isError) {
+    return (
+      <div className="flex min-h-64 flex-1 items-center justify-center">
+        <Text role="alert" size="small" variant="danger">
+          Unable to load workflow logs.
+        </Text>
+      </div>
+    );
+  }
+
+  if (logs.length === 0 && !hasPreviousPage) {
+    return (
+      <div className="flex min-h-64 flex-1 items-center justify-center">
+        {error ? (
+          <Text role="alert" size="small" variant="danger">
+            Unable to load logs.
+          </Text>
+        ) : (
+          <Description>No visible logs recorded for this workflow run.</Description>
+        )}
+      </div>
+    );
+  }
 
   return (
     <section
@@ -56,22 +69,27 @@ export function LogViewport({
         onToggleDate={() => setShowDate((visible) => !visible)}
         onToggleJobId={() => setShowJobId((visible) => !visible)}
       />
+      {hasPreviousPage && (
+        <button
+          type="button"
+          disabled={isFetchingPreviousPage}
+          className="shrink-0 py-2"
+          onClick={loadOlder}
+        >
+          <Text size="small" variant="muted">
+            {isFetchingPreviousPage ? "Loading older logs…" : "Load older logs"}
+          </Text>
+        </button>
+      )}
       <div
         ref={scrollRef}
         onScroll={onScroll}
-        className={cn(scrollAreaClassName, "relative overflow-y-auto overscroll-none")}
-      >
-        {isFetchingNextPage && (
-          <div className="sticky top-0 z-10 flex justify-center py-2" aria-live="polite">
-            <Text
-              size="small"
-              variant="muted"
-              className="rounded-full border border-app-border bg-app-bg-elevated px-3 py-1 shadow-sm"
-            >
-              Loading older logs…
-            </Text>
-          </div>
+        className={cn(
+          scrollAreaClassName,
+          "relative min-h-0 flex-1 overflow-y-auto overscroll-none",
         )}
+        style={{ overflowAnchor: "none" }}
+      >
         <div
           className="highlightable relative w-full"
           style={{ height: virtualizer.getTotalSize() }}
@@ -97,9 +115,9 @@ export function LogViewport({
       <LogViewerStatus
         rowCount={logs.length}
         isFollowing={isFollowing}
-        isFetchingOlder={isFetchingNextPage}
-        hasOlder={hasNextPage}
-        watchError={watchError}
+        isFetchingPreviousPage={isFetchingPreviousPage}
+        hasPreviousPage={hasPreviousPage}
+        error={error}
       />
     </section>
   );

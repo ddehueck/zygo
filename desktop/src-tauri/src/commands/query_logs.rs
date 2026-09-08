@@ -1,11 +1,10 @@
 use local::ZygoLocalService;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use specta::Type;
 use tauri::State;
 
+use super::Log;
 use crate::error::{CommandError, CommandResult};
-
-use super::types::Log;
 
 const MAX_PAGE_SIZE: u32 = 1000;
 
@@ -14,9 +13,23 @@ pub struct QueryLogsRequest {
     #[specta(type = specta_typescript::Number)]
     pub workflow_run_id: i64,
     pub limit: u32,
-    pub offset: u32,
+    /// Exclusive lower bound. Present (including 0) pages forward (ASC); absent pages from the newest (DESC).
+    #[serde(default)]
     #[specta(type = Option<specta_typescript::Number>)]
     pub after_id: Option<i64>,
+    /// Exclusive upper bound for paging older history (DESC).
+    #[serde(default)]
+    #[specta(type = Option<specta_typescript::Number>)]
+    pub before_id: Option<i64>,
+}
+
+#[derive(Serialize, Type)]
+pub struct QueryLogsResponse {
+    pub logs: Vec<Log>,
+    pub has_more: bool,
+    /// Global ingestion high-water mark from the same read snapshot as the page.
+    #[specta(type = specta_typescript::Number)]
+    pub observed_through_id: i64,
 }
 
 #[tauri::command]
@@ -24,7 +37,7 @@ pub struct QueryLogsRequest {
 pub async fn query_logs(
     state: State<'_, ZygoLocalService>,
     request: QueryLogsRequest,
-) -> CommandResult<Vec<Log>> {
+) -> CommandResult<QueryLogsResponse> {
     if request.workflow_run_id <= 0 {
         return Err(CommandError::invalid_input(
             "workflow_run_id",
@@ -37,36 +50,36 @@ pub async fn query_logs(
             format!("must be between 1 and {MAX_PAGE_SIZE}"),
         ));
     }
-
-    let rows = match request.after_id {
-        Some(after_id) => {
-            if after_id < 0 {
-                return Err(CommandError::invalid_input(
-                    "after_id",
-                    "must be greater than or equal to zero",
-                ));
-            }
-            if request.offset != 0 {
-                return Err(CommandError::invalid_input(
-                    "offset",
-                    "must be zero when after_id is provided",
-                ));
-            }
-            state
-                .repos
-                .logs
-                .list_after_by_workflow_run_id(request.workflow_run_id, after_id, request.limit)
-                .await
-        }
-        None => {
-            state
-                .repos
-                .logs
-                .list_by_workflow_run_id(request.workflow_run_id, request.offset, request.limit)
-                .await
-        }
-    };
-
-    rows.map(|rows| rows.into_iter().map(Log::from).collect())
-        .map_err(|error| CommandError::internal("query_logs_failed", error.to_string()))
+    if request.after_id.is_some_and(|id| id < 0)
+        || request.before_id.is_some_and(|id| id <= 0)
+        || matches!((request.after_id, request.before_id), (Some(after), Some(before)) if after >= before)
+    {
+        return Err(CommandError::invalid_input(
+            "bounds",
+            "must be nonnegative, ordered exclusive ID bounds",
+        ));
+    }
+    // after_id present (even 0) → ASC tail; otherwise DESC from newest / before_id.
+    let ascending = request.after_id.is_some();
+    let (mut rows, observed_through_id) = state
+        .repos
+        .logs
+        .page_by_workflow_run_id(
+            request.workflow_run_id,
+            request.after_id,
+            request.before_id,
+            ascending,
+            request.limit + 1,
+        )
+        .await
+        .map_err(|error| CommandError::internal("query_logs_failed", error.to_string()))?;
+    let has_more = rows.len() > request.limit as usize;
+    rows.truncate(request.limit as usize);
+    // Every response is in ingestion order, regardless of traversal direction.
+    rows.sort_by_key(|row| row.id);
+    Ok(QueryLogsResponse {
+        logs: rows.into_iter().map(Log::from).collect(),
+        has_more,
+        observed_through_id,
+    })
 }
