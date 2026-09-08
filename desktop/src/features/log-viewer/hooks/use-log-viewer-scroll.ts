@@ -67,7 +67,14 @@ export function useLogViewerScroll({
       didSetInitialPosition.current = true;
       previousNewestId.current = logs[logs.length - 1]?.id;
       virtualizer.scrollToIndex(logs.length - 1, { align: "end" });
-      return;
+
+      const frame = requestAnimationFrame(() => {
+        const element = scrollRef.current;
+        if (!element) return;
+        element.scrollTop = element.scrollHeight;
+      });
+
+      return () => cancelAnimationFrame(frame);
     }
 
     const snapshot = loadSnapshot.current;
@@ -82,7 +89,7 @@ export function useLogViewerScroll({
       previousNewestId.current = newestId;
       if (isFollowing) virtualizer.scrollToIndex(logs.length - 1, { align: "end" });
     }
-  }, [isFollowing, logs, virtualizer]);
+  }, [isFollowing, logs, scrollRef, virtualizer]);
 
   const setFollowing = useCallback(
     (shouldFollow: boolean) => {

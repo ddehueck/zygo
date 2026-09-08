@@ -1,4 +1,4 @@
-import { useLiveQuery } from "@tanstack/react-db";
+import { eq, useLiveQuery } from "@tanstack/react-db";
 import { createFileRoute, Link } from "@tanstack/react-router";
 
 import { Description, Heading, Text } from "@/components/Text";
@@ -19,10 +19,15 @@ export const Route = createFileRoute("/runs/$workflowRunId/logs")({
 function WorkflowRunLogsRoute() {
   const { workflowRunId } = Route.useParams();
   const numericWorkflowRunId = Number(workflowRunId);
+
   const runsQuery = useLiveQuery({
-    query: (q) => q.from({ workflowRun: workflowRunsCollection }),
+    query: (q) =>
+      q
+        .from({ workflowRun: workflowRunsCollection })
+        .where(({ workflowRun }) => eq(workflowRun.id, Number(workflowRunId)))
+        .findOne(),
   });
-  const workflowRun = runsQuery.data.find((run) => run.id === numericWorkflowRunId);
+  const workflowRun = runsQuery.data;
 
   if (runsQuery.isLoading) {
     return (
@@ -57,17 +62,7 @@ function WorkflowRunLogsRoute() {
     );
   }
 
-  return (
-    <main className="flex h-full min-h-[32rem] w-full flex-col px-4 py-4">
-      <header className="mb-4 shrink-0">
-        <Heading size="medium">Workflow logs</Heading>
-        <Description className="mt-1">
-          Live output for <span className="font-mono">{workflowRun.workflow_id}</span>
-        </Description>
-      </header>
-      <LogViewer workflowRunId={numericWorkflowRunId} />
-    </main>
-  );
+  return <LogViewer workflowRunId={numericWorkflowRunId} />;
 }
 
 function LogsPageShell({ children }: { children: React.ReactNode }) {

@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
 import type { Log } from "@/bindings";
@@ -7,7 +7,7 @@ import { LOG_OVERSCAN, LOG_ROW_ESTIMATED_HEIGHT } from "../constants";
 import { useLogViewerScroll } from "../hooks/use-log-viewer-scroll";
 import { LogRow } from "./LogRow";
 import { LogViewerStatus } from "./LogViewerStatus";
-import { LogViewerToolbar } from "./LogViewerToolbar";
+import { LogViewportHeader } from "./LogViewportHeader";
 
 export function LogViewport({
   logs,
@@ -23,6 +23,8 @@ export function LogViewport({
   watchError: unknown;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [showDate, setShowDate] = useState(true);
+  const [showJobId, setShowJobId] = useState(true);
 
   const virtualizer = useVirtualizer({
     count: logs.length,
@@ -32,7 +34,7 @@ export function LogViewport({
     overscan: LOG_OVERSCAN,
   });
 
-  const { isFollowing, onScroll, scrollToLatest, setFollowing } = useLogViewerScroll({
+  const { isFollowing, onScroll } = useLogViewerScroll({
     scrollRef,
     virtualizer,
     logs,
@@ -44,17 +46,18 @@ export function LogViewport({
   return (
     <section
       aria-label="Workflow run logs"
-      className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-app-border bg-app-bg-elevated"
+      className="flex min-h-0 flex-1 flex-col overflow-hidden bg-app-bg-elevated"
     >
-      <LogViewerToolbar
-        isFollowing={isFollowing}
-        onFollowChange={setFollowing}
-        onJumpToLatest={scrollToLatest}
+      <LogViewportHeader
+        showDate={showDate}
+        showJobId={showJobId}
+        onToggleDate={() => setShowDate((visible) => !visible)}
+        onToggleJobId={() => setShowJobId((visible) => !visible)}
       />
       <div
         ref={scrollRef}
         onScroll={onScroll}
-        className="relative min-h-0 flex-1 overflow-auto overscroll-contain"
+        className="relative min-h-0 flex-1 overflow-auto overscroll-none"
       >
         {isFetchingNextPage && (
           <div className="sticky top-0 z-10 flex justify-center py-2" aria-live="polite">
@@ -83,7 +86,7 @@ export function LogViewport({
                 className="absolute top-0 left-0 w-full"
                 style={{ transform: `translateY(${virtualRow.start}px)` }}
               >
-                <LogRow log={log} />
+                <LogRow log={log} showDate={showDate} showJobId={showJobId} />
               </div>
             );
           })}
