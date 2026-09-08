@@ -1,4 +1,5 @@
 @import url("@fontsource-variable/inter");
+@import url("@fontsource-variable/roboto-mono");
 
 *,
 *::before,
@@ -11,7 +12,9 @@
 input,
 textarea,
 [contenteditable="true"],
-[contenteditable="true"] * {
+[contenteditable="true"] *,
+.log-viewer-selectable,
+.log-viewer-selectable * {
   cursor: text;
   -webkit-user-select: text;
   user-select: text;

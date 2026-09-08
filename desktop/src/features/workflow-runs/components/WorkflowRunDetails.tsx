@@ -271,24 +271,31 @@ function LogsPreviewCard({ run }: { run: WorkflowRun }) {
   });
 
   return (
-    <PreviewCard
-      title="Logs"
-      summary={run.errored_job_count > 0 ? "Errors found in this run" : "No errors reported"}
-      footer="View run logs"
+    <Link
+      to="/runs/$workflowRunId/logs"
+      params={{ workflowRunId: String(run.id) }}
+      aria-label="View logs for this workflow run"
+      className="group block h-full rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-app-accent"
     >
-      {logsQuery.data.length > 0 ? (
-        logsQuery.data.map((log) => (
-          <PreviewRow
-            key={log.id}
-            label={<span className="text-xs text-app-foreground-muted">#{log.id}</span>}
-            value={<span className="block max-w-full truncate">{log.content}</span>}
-          />
-        ))
-      ) : (
-        <p className="py-3 text-sm text-app-foreground-muted">
-          {logsQuery.isLoading ? "Loading logs…" : "No logs recorded."}
-        </p>
-      )}
-    </PreviewCard>
+      <PreviewCard
+        title="Logs"
+        summary={run.errored_job_count > 0 ? "Errors found in this run" : "No errors reported"}
+        footer="View run logs"
+      >
+        {logsQuery.data.length > 0 ? (
+          logsQuery.data.map((log) => (
+            <PreviewRow
+              key={log.id}
+              label={<span className="text-xs text-app-foreground-muted">#{log.id}</span>}
+              value={<span className="block max-w-full truncate">{log.content}</span>}
+            />
+          ))
+        ) : (
+          <p className="py-3 text-sm text-app-foreground-muted">
+            {logsQuery.isLoading ? "Loading logs…" : "No logs recorded."}
+          </p>
+        )}
+      </PreviewCard>
+    </Link>
   );
 }
