@@ -5,6 +5,7 @@ import { type ReactNode } from "react";
 
 import type { JobRun, Tag, WorkflowRun } from "@/bindings";
 import {
+  dataReferencesCollection,
   jobRunsCollection,
   logsCollection,
   tagsCollection,
@@ -124,7 +125,7 @@ function WorkflowRunOverview({
 
       <section aria-label="Workflow run previews" className="mt-8 grid gap-4 lg:grid-cols-3">
         <JobsPreviewCard jobs={jobs} run={run} totalJobs={totalJobs} />
-        <DataPreviewCard />
+        <DataPreviewCard run={run} />
         <LogsPreviewCard run={run} />
       </section>
     </main>
@@ -213,20 +214,32 @@ function JobsPreviewCard({
   );
 }
 
-const previewFiles = [
-  { name: "results/summary.json", size: "48 KB" },
-  { name: "results/report.html", size: "2.1 MB" },
-  { name: "figures/overview.png", size: "18.3 MB" },
-  { name: "metadata/workflow.yaml", size: "12 KB" },
-];
+function getFileNameFromUri(uri: string) {
+  const parts = uri.split("/");
+  return parts[parts.length - 1] ?? uri;
+}
 
-function DataPreviewCard() {
+function DataPreviewCard({ run }: { run: WorkflowRun }) {
+  const referencesQuery = useLiveQuery({
+    query: (q) =>
+      q
+        .from({ reference: dataReferencesCollection })
+        .where(({ reference }) => eq(reference.workflow_run_id, run.id))
+        .orderBy(({ reference }) => reference.id, "desc")
+        .limit(5),
+  });
+  const visibleReferences = referencesQuery.data;
+
   return (
-    <PreviewCard title="Data" summary="128 files · 42.1 GB" footer="Browse outputs">
+    <PreviewCard
+      title="Data"
+      summary={`${referencesQuery.data.length} file${referencesQuery.data.length === 1 ? "" : "s"} · 42.1 GB`}
+      footer="Browse outputs"
+    >
       <div>
-        {previewFiles.map((file) => (
+        {visibleReferences.map((reference) => (
           <div
-            key={file.name}
+            key={reference.id}
             className="flex min-w-0 items-center gap-3 py-3 first:pt-4 last:pb-4"
           >
             <Icon
@@ -235,9 +248,9 @@ function DataPreviewCard() {
               definition={iconDefinitions.file}
             />
             <span className="min-w-0 flex-1 truncate text-sm font-medium text-app-foreground">
-              {file.name}
+              {getFileNameFromUri(reference.uri)}
             </span>
-            <span className="shrink-0 text-xs text-app-foreground-muted">{file.size}</span>
+            <span className="shrink-0 text-xs text-app-foreground-muted">48 KB</span>
           </div>
         ))}
       </div>
