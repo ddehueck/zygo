@@ -13,8 +13,8 @@ input,
 textarea,
 [contenteditable="true"],
 [contenteditable="true"] *,
-.log-viewer-selectable,
-.log-viewer-selectable * {
+.highlightable,
+.highlightable * {
   cursor: text;
   -webkit-user-select: text;
   user-select: text;

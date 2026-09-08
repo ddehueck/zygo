@@ -7,7 +7,7 @@ export const logRowClassName =
 export const logContentClassName = "min-w-0 break-words whitespace-pre-wrap";
 
 export function logGridTemplateColumns(showDate: boolean, showJobId: boolean) {
-  return `4rem ${showDate ? "10.5rem" : "0px"} ${showJobId ? "4rem" : "0px"} minmax(0, 1fr)`;
+  return [showDate && "10.5rem", showJobId && "4rem", "minmax(0, 1fr)"].filter(Boolean).join(" ");
 }
 
 export function LogRow({
@@ -24,20 +24,15 @@ export function LogRow({
       className={logRowClassName}
       style={{ gridTemplateColumns: logGridTemplateColumns(showDate, showJobId) }}
     >
-      <span className="text-left text-app-foreground-muted tabular-nums">{log.id}</span>
-      {showDate ? (
+      {showDate && (
         <time className="truncate text-app-foreground-muted" dateTime={log.created_at}>
           {log.created_at}
         </time>
-      ) : (
-        <span aria-hidden />
       )}
-      {showJobId ? (
+      {showJobId && (
         <span className="truncate text-app-foreground-secondary" title={log.job_run_id}>
           {shortRunId(log.job_run_id)}
         </span>
-      ) : (
-        <span aria-hidden />
       )}
       <span className={logContentClassName}>{log.content || " "}</span>
     </div>

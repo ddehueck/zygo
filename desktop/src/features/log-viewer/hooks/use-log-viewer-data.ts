@@ -5,6 +5,9 @@ import { logsCollection } from "@/db/collections";
 import { useWatchLogs } from "@/hooks/use-watch-logs";
 import { LOG_PAGE_SIZE } from "../constants";
 
+// Hide system-level IPC logs from the user-facing log view.
+const SYSTEM_LOG_PREFIX = "ZYGO_IPC=";
+
 export function useLogViewerData(workflowRunId: number) {
   const watcher = useWatchLogs({ workflowRunId });
   const query = useLiveInfiniteQuery(
@@ -18,7 +21,7 @@ export function useLogViewerData(workflowRunId: number) {
 
   return {
     ...query,
-    logs: [...query.data].reverse(),
+    logs: [...query.data].filter((log) => !log.content.startsWith(SYSTEM_LOG_PREFIX)).reverse(),
     watchError: watcher.error,
   };
 }

@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback } from "react";
 import { BreadcrumbHeaderLayout } from "../components/layout/BreadcrumbHeaderLayout";
+import { ScrollArea } from "@/components/ScrollArea";
 import { useWorkflowRunsListData } from "../features/workflow-runs/hooks/use-workflow-runs-list-data";
 import { WorkflowRunSearch } from "@/features/workflow-runs/search/WorkflowRunSearch";
 import { WorkflowRunList } from "@/features/workflow-runs/components/WorkflowRunList";
@@ -41,24 +42,28 @@ function IndexRoute() {
 
   return (
     <BreadcrumbHeaderLayout>
-      {isLoading && <p className="px-6 text-app-foreground-muted">Loading workflow runs…</p>}
-      {isError && (
-        <p className="mx-6 p-4 text-app-danger" role="alert">
-          Unable to load workflow runs (status: {status}).
-        </p>
-      )}
+      <ScrollArea>
+        {isLoading && <p className="px-6 text-app-foreground-muted">Loading workflow runs…</p>}
+        {isError && (
+          <p className="mx-6 p-4 text-app-danger" role="alert">
+            Unable to load workflow runs (status: {status}).
+          </p>
+        )}
 
-      {runs.length > 0 ? (
-        <WorkflowRunSearchProvider filters={filters} onFiltersChange={setFilters}>
-          <WorkflowRunSearch />
-          <WorkflowRunList runs={runs} />
-        </WorkflowRunSearchProvider>
-      ) : (
-        !isLoading &&
-        !isError && (
-          <p className="mx-6 p-8 text-center text-app-foreground-muted">No workflow runs loaded.</p>
-        )
-      )}
+        {runs.length > 0 ? (
+          <WorkflowRunSearchProvider filters={filters} onFiltersChange={setFilters}>
+            <WorkflowRunSearch />
+            <WorkflowRunList runs={runs} />
+          </WorkflowRunSearchProvider>
+        ) : (
+          !isLoading &&
+          !isError && (
+            <p className="mx-6 p-8 text-center text-app-foreground-muted">
+              No workflow runs loaded.
+            </p>
+          )
+        )}
+      </ScrollArea>
     </BreadcrumbHeaderLayout>
   );
 }

@@ -2,7 +2,9 @@ import { useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
 import type { Log } from "@/bindings";
+import { scrollAreaClassName } from "@/components/ScrollArea";
 import { Text } from "@/components/Text";
+import { cn } from "@/components/utils";
 import { LOG_OVERSCAN, LOG_ROW_ESTIMATED_HEIGHT } from "../constants";
 import { useLogViewerScroll } from "../hooks/use-log-viewer-scroll";
 import { LogRow } from "./LogRow";
@@ -46,7 +48,7 @@ export function LogViewport({
   return (
     <section
       aria-label="Workflow run logs"
-      className="flex min-h-0 flex-1 flex-col overflow-hidden bg-app-bg-elevated"
+      className="flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-app-bg-elevated"
     >
       <LogViewportHeader
         showDate={showDate}
@@ -57,7 +59,7 @@ export function LogViewport({
       <div
         ref={scrollRef}
         onScroll={onScroll}
-        className="relative min-h-0 flex-1 overflow-auto overscroll-none"
+        className={cn(scrollAreaClassName, "relative overflow-y-auto overscroll-none")}
       >
         {isFetchingNextPage && (
           <div className="sticky top-0 z-10 flex justify-center py-2" aria-live="polite">
@@ -71,7 +73,7 @@ export function LogViewport({
           </div>
         )}
         <div
-          className="log-viewer-selectable relative w-full"
+          className="highlightable relative w-full"
           style={{ height: virtualizer.getTotalSize() }}
         >
           {virtualizer.getVirtualItems().map((virtualRow) => {

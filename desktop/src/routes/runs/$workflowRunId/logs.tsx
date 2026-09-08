@@ -1,6 +1,8 @@
 import { eq, useLiveQuery } from "@tanstack/react-db";
 import { createFileRoute, Link } from "@tanstack/react-router";
 
+import { BreadcrumbHeaderLayout } from "@/components/layout/BreadcrumbHeaderLayout";
+import { ScrollArea } from "@/components/ScrollArea";
 import { Description, Heading, Text } from "@/components/Text";
 import { workflowRunsCollection } from "@/db/collections";
 import { LogViewer } from "@/features/log-viewer/components/LogViewer";
@@ -62,9 +64,19 @@ function WorkflowRunLogsRoute() {
     );
   }
 
-  return <LogViewer workflowRunId={numericWorkflowRunId} />;
+  return (
+    <BreadcrumbHeaderLayout>
+      <LogViewer workflowRunId={numericWorkflowRunId} />
+    </BreadcrumbHeaderLayout>
+  );
 }
 
 function LogsPageShell({ children }: { children: React.ReactNode }) {
-  return <main className="mx-auto w-full max-w-5xl px-6 py-10">{children}</main>;
+  return (
+    <BreadcrumbHeaderLayout>
+      <ScrollArea>
+        <main className="mx-auto w-full max-w-5xl px-6 py-10">{children}</main>
+      </ScrollArea>
+    </BreadcrumbHeaderLayout>
+  );
 }
