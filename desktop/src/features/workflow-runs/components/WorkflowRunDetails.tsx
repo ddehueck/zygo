@@ -1,12 +1,20 @@
 import { useLiveQuery } from "@tanstack/react-db";
+import { eq } from "@tanstack/db";
 import { Link } from "@tanstack/react-router";
 import { type ReactNode } from "react";
 
 import type { JobRun, Tag, WorkflowRun } from "@/bindings";
-import { jobRunsCollection, tagsCollection, workflowRunsCollection } from "@/db/collections";
+import {
+  dataReferencesCollection,
+  jobRunsCollection,
+  logsCollection,
+  tagsCollection,
+  workflowRunsCollection,
+} from "@/db/collections";
 
 import { Icon, iconDefinitions } from "@/components/icons";
 import { useDuration } from "@/hooks/use-duration";
+import { useWatchLogs } from "@/hooks/use-watch-logs";
 import { formatDate } from "@/lib/dates";
 import { RunStatus, StatusIcon, statusLabel } from "./statuses";
 import { TagBadge } from "./TagBadge";
@@ -117,7 +125,7 @@ function WorkflowRunOverview({
 
       <section aria-label="Workflow run previews" className="mt-8 grid gap-4 lg:grid-cols-3">
         <JobsPreviewCard jobs={jobs} run={run} totalJobs={totalJobs} />
-        <DataPreviewCard />
+        <DataPreviewCard run={run} />
         <LogsPreviewCard run={run} />
       </section>
     </main>
@@ -151,8 +159,8 @@ function PreviewCard({
 
 function PreviewRow({ label, value }: { label: ReactNode; value: ReactNode }) {
   return (
-    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3 py-3 first:pt-4 last:pb-4">
-      <span className="min-w-0 text-sm text-app-foreground-muted">{label}</span>
+    <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-3 py-3 first:pt-4 last:pb-4">
+      <span className="min-w-0 text-sm whitespace-nowrap text-app-foreground-muted">{label}</span>
       <span className="min-w-0 overflow-hidden text-right text-sm font-medium text-app-foreground">
         {value}
       </span>
@@ -206,20 +214,32 @@ function JobsPreviewCard({
   );
 }
 
-const previewFiles = [
-  { name: "results/summary.json", size: "48 KB" },
-  { name: "results/report.html", size: "2.1 MB" },
-  { name: "figures/overview.png", size: "18.3 MB" },
-  { name: "metadata/workflow.yaml", size: "12 KB" },
-];
+function getFileNameFromUri(uri: string) {
+  const parts = uri.split("/");
+  return parts[parts.length - 1] ?? uri;
+}
 
-function DataPreviewCard() {
+function DataPreviewCard({ run }: { run: WorkflowRun }) {
+  const referencesQuery = useLiveQuery({
+    query: (q) =>
+      q
+        .from({ reference: dataReferencesCollection })
+        .where(({ reference }) => eq(reference.workflow_run_id, run.id))
+        .orderBy(({ reference }) => reference.id, "desc")
+        .limit(5),
+  });
+  const visibleReferences = referencesQuery.data;
+
   return (
-    <PreviewCard title="Data" summary="128 files · 42.1 GB" footer="Browse outputs">
+    <PreviewCard
+      title="Data"
+      summary={`${referencesQuery.data.length} file${referencesQuery.data.length === 1 ? "" : "s"} · 42.1 GB`}
+      footer="Browse outputs"
+    >
       <div>
-        {previewFiles.map((file) => (
+        {visibleReferences.map((reference) => (
           <div
-            key={file.name}
+            key={reference.id}
             className="flex min-w-0 items-center gap-3 py-3 first:pt-4 last:pb-4"
           >
             <Icon
@@ -228,9 +248,9 @@ function DataPreviewCard() {
               definition={iconDefinitions.file}
             />
             <span className="min-w-0 flex-1 truncate text-sm font-medium text-app-foreground">
-              {file.name}
+              {getFileNameFromUri(reference.uri)}
             </span>
-            <span className="shrink-0 text-xs text-app-foreground-muted">{file.size}</span>
+            <span className="shrink-0 text-xs text-app-foreground-muted">48 KB</span>
           </div>
         ))}
       </div>
@@ -239,18 +259,36 @@ function DataPreviewCard() {
 }
 
 function LogsPreviewCard({ run }: { run: WorkflowRun }) {
+  useWatchLogs({ workflowRunId: run.id });
+
+  const logsQuery = useLiveQuery({
+    query: (q) =>
+      q
+        .from({ log: logsCollection })
+        .where(({ log }) => eq(log.workflow_run_id, run.id))
+        .orderBy(({ log }) => log.id, "desc")
+        .limit(5),
+  });
+
   return (
     <PreviewCard
       title="Logs"
       summary={run.errored_job_count > 0 ? "Errors found in this run" : "No errors reported"}
       footer="View run logs"
     >
-      <PreviewRow label="Run status" value={statusLabel(run.status)} />
-      <PreviewRow label="Failed jobs" value={run.errored_job_count} />
-      <PreviewRow label="Created" value={formatDate(run.created_at)} />
-      <p className="py-3 text-sm text-app-foreground-muted">
-        Detailed log entries are not available in this view.
-      </p>
+      {logsQuery.data.length > 0 ? (
+        logsQuery.data.map((log) => (
+          <PreviewRow
+            key={log.id}
+            label={<span className="text-xs text-app-foreground-muted">#{log.id}</span>}
+            value={<span className="block max-w-full truncate">{log.content}</span>}
+          />
+        ))
+      ) : (
+        <p className="py-3 text-sm text-app-foreground-muted">
+          {logsQuery.isLoading ? "Loading logs…" : "No logs recorded."}
+        </p>
+      )}
     </PreviewCard>
   );
 }

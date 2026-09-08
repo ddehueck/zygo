@@ -1,5 +1,9 @@
 import { Channel } from "@tauri-apps/api/core";
 import { commands, type RowChange, type SyncDelta, type SyncEntityKind } from "@/bindings";
+import { errMsg } from "@/utils";
+import { SyncError } from "./sync-error";
+
+export { SyncError } from "./sync-error";
 
 type RowsByEntity = {
   [D in SyncDelta as D["entity"]]: Extract<D["change"], { operation: "insert" }>["row"];
@@ -8,6 +12,11 @@ type RowsByEntity = {
 export type SyncRow<E extends SyncEntityKind> = RowsByEntity[E];
 
 type Listener = (delta: SyncDelta) => void;
+
+function asSyncError(error: unknown): SyncError {
+  if (error instanceof SyncError) return error;
+  return new SyncError(errMsg(error), "stream_failed");
+}
 
 class SyncClient {
   private channel = new Channel<SyncDelta>();
@@ -38,14 +47,15 @@ class SyncClient {
         .openSyncChannel(this.channel, onReady)
         .then((result) => {
           if (result.status === "error") {
-            throw Object.assign(new Error(result.error.message), { cause: result.error });
+            throw new SyncError(result.error.message, "stream_failed");
           }
-          throw new Error("Sync stream ended unexpectedly");
+          throw new SyncError("Sync stream ended unexpectedly", "stream_ended");
         })
         .catch((error: unknown) => {
+          const syncError = asSyncError(error);
           this.ready = undefined;
-          reject(error);
-          for (const listener of this.errorListeners) listener(error);
+          reject(syncError);
+          for (const listener of this.errorListeners) listener(syncError);
         });
     });
     return this.ready;

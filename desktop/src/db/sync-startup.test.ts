@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SyncConfig } from "@tanstack/db";
 import type { SyncCursor, SyncDelta, Tag } from "@/bindings";
+import { last } from "@/lib/arrays";
 
 const mocks = vi.hoisted(() => ({
   openSyncChannel: vi.fn(),
@@ -26,17 +27,21 @@ function deferred<T>() {
 
 type StreamResult = { status: "ok"; data: null } | { status: "error"; error: { message: string } };
 
-let stream: ReturnType<typeof deferred<StreamResult>>;
+let syncStream: ReturnType<typeof deferred<StreamResult>>;
 
-// Drain the finite startup/loading promise chain without timing-dependent sleeps.
+// Drain the finite startup/loading promise chain without sleeping for some time period.
 async function flushMicrotasks() {
   for (let i = 0; i < 10; i++) await Promise.resolve();
 }
 
-function channels(call = 0) {
+// Return the arguments of the nth call to openSyncChannel, asserting that it was called with the expected arguments.
+function openSyncChannelArgs(call = 0) {
   const args = mocks.openSyncChannel.mock.calls[call];
   expect(args).toHaveLength(2);
-  return args as [{ onmessage: (delta: SyncDelta) => void }, { onmessage: (ready: null) => void }];
+  return {
+    syncChannel: args[0] as { onmessage: (delta: SyncDelta) => void },
+    readyChannel: args[1] as { onmessage: (ready: null) => void },
+  };
 }
 
 function tag(id: number, value: string): Tag {
@@ -74,24 +79,36 @@ async function collection() {
 beforeEach(() => {
   vi.resetModules();
   vi.resetAllMocks();
-  stream = deferred<StreamResult>();
-  mocks.openSyncChannel.mockReturnValue(stream.promise);
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  syncStream = deferred<StreamResult>();
+  mocks.openSyncChannel.mockReturnValue(syncStream.promise);
   mocks.loadSyncableData.mockResolvedValue(page());
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 describe("sync startup readiness", () => {
   it("shares the pending and resolved readiness promise, not the stream lifetime", async () => {
     const { syncClient } = await import("./sync-client");
+
     const first = syncClient.start();
+
+    // Check singleton behavior of the startup promise.
     expect(first).toBeInstanceOf(Promise);
     expect(syncClient.start()).toBe(first);
+
     const settled = vi.fn();
     void first.then(settled);
+
     await flushMicrotasks();
     expect(settled).not.toHaveBeenCalled();
+    // .start() should open a sync channel only once, even with multiple calls
     expect(mocks.openSyncChannel).toHaveBeenCalledTimes(1);
 
-    channels()[1].onmessage(null);
+    // Mock recieving a ready channel message
+    openSyncChannelArgs().readyChannel.onmessage(null);
     await first;
     expect(settled).toHaveBeenCalledOnce();
     expect(syncClient.start()).toBe(first);
@@ -105,8 +122,11 @@ describe("sync startup readiness", () => {
     expect(target.markReady).not.toHaveBeenCalled();
     expect(target.begin).not.toHaveBeenCalled();
 
-    channels()[1].onmessage(null);
+    // Mock recieving a ready channel message
+    openSyncChannelArgs().readyChannel.onmessage(null);
     await flushMicrotasks();
+
+    // The collection should now be ready and have loaded the first page of data.
     expect(mocks.loadSyncableData).toHaveBeenCalledExactlyOnceWith({
       entity: "tag",
       cursor: null,
@@ -119,128 +139,180 @@ describe("sync startup readiness", () => {
 
   it("lets concurrent collections wait on one startup command", async () => {
     const [first, second] = await Promise.all([collection(), collection()]);
+
     await flushMicrotasks();
     expect(mocks.openSyncChannel).toHaveBeenCalledTimes(1);
     expect(mocks.loadSyncableData).not.toHaveBeenCalled();
     expect(first.markReady).not.toHaveBeenCalled();
     expect(second.markReady).not.toHaveBeenCalled();
 
-    channels()[1].onmessage(null);
+    // Mock recieving a ready channel message
+    openSyncChannelArgs().readyChannel.onmessage(null);
     await flushMicrotasks();
     expect(mocks.loadSyncableData).toHaveBeenCalledTimes(2);
     expect(first.markReady).toHaveBeenCalledOnce();
     expect(second.markReady).toHaveBeenCalledOnce();
+
     first.cleanup();
     second.cleanup();
   });
 
-  it("buffers events before readiness and during pagination, then replays them in order", async () => {
+  it("buffers events before ready message and during pagination, then replays them in order", async () => {
     const lastPage = deferred<ReturnType<typeof page>>();
     const original = tag(2, "snapshot");
     const updated = tag(2, "live");
     const inserted = tag(3, "new");
+
     mocks.loadSyncableData
       .mockResolvedValueOnce(page([original], { id: 2 }))
       .mockReturnValueOnce(lastPage.promise);
-    const target = await collection();
-    const [delta, ready] = channels();
-    delta.onmessage({ entity: "tag", change_id: 1, change: { operation: "update", row: updated } });
-    expect(target.write).not.toHaveBeenCalled();
-    ready.onmessage(null);
+
+    const tagCollection = await collection();
+    const { syncChannel, readyChannel } = openSyncChannelArgs();
+
+    // Sync channel recieves a message before ready message has been recieved
+    syncChannel.onmessage({
+      entity: "tag",
+      change_id: 1,
+      change: { operation: "update", row: updated },
+    });
+    expect(tagCollection.write).not.toHaveBeenCalled();
+
+    readyChannel.onmessage(null);
     await flushMicrotasks();
+
+    // Data has loaded to the second page and we recieve deltas concurrently
     expect(mocks.loadSyncableData).toHaveBeenNthCalledWith(2, {
       entity: "tag",
       cursor: { id: 2 },
       limit: 1000,
     });
-    delta.onmessage({
+    syncChannel.onmessage({
       entity: "tag",
       change_id: 2,
       change: { operation: "insert", row: inserted },
     });
-    delta.onmessage({ entity: "tag", change_id: 3, change: { operation: "delete", id: 2 } });
-    expect(target.write.mock.calls).toEqual([[{ type: "insert", value: original }]]);
-    expect(target.markReady).not.toHaveBeenCalled();
+    syncChannel.onmessage({ entity: "tag", change_id: 3, change: { operation: "delete", id: 2 } });
 
+    expect(tagCollection.write.mock.calls).toEqual([[{ type: "insert", value: original }]]);
+    expect(tagCollection.markReady).not.toHaveBeenCalled();
+
+    // Now we're done with loading the data snapshot
     lastPage.resolve(page());
     await flushMicrotasks();
-    expect(target.write.mock.calls).toEqual([
+
+    // Enforce order that we ended up writing to the collection
+    expect(tagCollection.write.mock.calls).toEqual([
       [{ type: "insert", value: original }],
       [{ type: "update", value: updated }],
       [{ type: "insert", value: inserted }],
       [{ type: "delete", key: 2 }],
     ]);
-    expect(target.markReady).toHaveBeenCalledOnce();
-    const commitOrder = target.commit.mock.invocationCallOrder;
-    expect(commitOrder[commitOrder.length - 1]).toBeLessThan(
-      target.markReady.mock.invocationCallOrder[0]!,
-    );
-    expect(target.markError).not.toHaveBeenCalled();
-    target.cleanup();
+
+    expect(tagCollection.markReady).toHaveBeenCalledOnce();
+    expect(tagCollection.markError).not.toHaveBeenCalled();
+
+    // Check that all commits were called befor markRead was.
+    const commitOrder = tagCollection.commit.mock.invocationCallOrder;
+    expect(last(commitOrder)).toBeLessThan(tagCollection.markReady.mock.invocationCallOrder[0]!);
+
+    tagCollection.cleanup();
   });
 
-  it("does not load a collection cleaned up before readiness", async () => {
-    const target = await collection();
-    target.cleanup();
-    channels()[1].onmessage(null);
+  it("aborts loading data when an error occurs before ready message is recieved", async () => {
+    const mockCollection = await collection();
+    mockCollection.cleanup();
+
+    openSyncChannelArgs().readyChannel.onmessage(null);
     await flushMicrotasks();
+
     expect(mocks.loadSyncableData).not.toHaveBeenCalled();
-    expect(target.write).not.toHaveBeenCalled();
-    expect(target.markReady).not.toHaveBeenCalled();
-    expect(target.markError).not.toHaveBeenCalled();
+    expect(mockCollection.write).not.toHaveBeenCalled();
+    expect(mockCollection.markReady).not.toHaveBeenCalled();
+    expect(mockCollection.markError).not.toHaveBeenCalled();
   });
 
   it.each(["rejection", "error result", "unexpected end"] as const)(
     "rejects startup and marks collections errored without loading on %s",
     async (failure) => {
-      const target = await collection();
-      const { syncClient } = await import("./sync-client");
+      const { SyncError, syncClient } = await import("./sync-client");
+
+      const mockCollection = await collection();
+
       const onError = vi.fn();
       const unsubscribe = syncClient.subscribe("tag", vi.fn(), onError);
-      const message =
-        failure === "unexpected end" ? "Sync stream ended unexpectedly" : "startup failed";
-      const rejection = expect(syncClient.start()).rejects.toThrow(message);
-      if (failure === "rejection") stream.reject(new Error(message));
-      else if (failure === "error result") stream.resolve({ status: "error", error: { message } });
-      else stream.resolve({ status: "ok", data: null });
-      await rejection;
+      const startupError = syncClient.start().catch((error: unknown) => error);
+
+      switch (failure) {
+        case "rejection":
+          syncStream.reject(new Error("startup failed"));
+          break;
+        case "error result":
+          syncStream.resolve({ status: "error", error: { message: "startup failed" } });
+          break;
+        case "unexpected end":
+          syncStream.resolve({ status: "ok", data: null });
+          break;
+      }
+
+      const error = await startupError;
       await flushMicrotasks();
-      expect(mocks.loadSyncableData).not.toHaveBeenCalled();
-      expect(target.markReady).not.toHaveBeenCalled();
-      expect(target.markError).toHaveBeenCalledExactlyOnceWith(
-        expect.objectContaining({ message }),
+
+      expect(error).toBeInstanceOf(SyncError);
+      expect(error).toHaveProperty(
+        "code",
+        failure === "unexpected end" ? "stream_ended" : "stream_failed",
       );
-      expect(onError).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ message }));
+      expect(mocks.loadSyncableData).not.toHaveBeenCalled();
+      expect(mockCollection.markReady).not.toHaveBeenCalled();
+      expect(mockCollection.markError).toHaveBeenCalledExactlyOnceWith(error);
+      expect(onError).toHaveBeenCalledExactlyOnceWith(error);
+
       unsubscribe();
-      target.cleanup();
+      mockCollection.cleanup();
     },
   );
 
-  it("notifies on failure after readiness and starts a fresh readiness wait on retry", async () => {
-    const { syncClient } = await import("./sync-client");
+  it("retries a failed open sync channel call properly", async () => {
+    const { SyncError, syncClient } = await import("./sync-client");
+
     const onError = vi.fn();
     const unsubscribe = syncClient.subscribe("tag", vi.fn(), onError);
     const first = syncClient.start();
-    channels()[1].onmessage(null);
+
+    // Receive ready message
+    openSyncChannelArgs().readyChannel.onmessage(null);
     await first;
-    const error = new Error("stream disconnected");
-    stream.reject(error);
+
+    // But then the sync stream breaks
+    syncStream.reject(new Error("stream disconnected"));
     await flushMicrotasks();
-    expect(onError).toHaveBeenCalledExactlyOnceWith(error);
+    expect(onError).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ code: "stream_failed" }),
+    );
+    expect(onError.mock.calls[0]![0]).toBeInstanceOf(SyncError);
     await expect(first).resolves.toBeUndefined();
 
+    // Set another return value in mock
     mocks.openSyncChannel.mockReturnValue(deferred<StreamResult>().promise);
+
+    // Retry should start a new sync channel and return a new promise
     const retry = syncClient.start();
     expect(retry).not.toBe(first);
     expect(syncClient.start()).toBe(retry);
     expect(mocks.openSyncChannel).toHaveBeenCalledTimes(2);
+
     const settled = vi.fn();
     void retry.then(settled);
+
     await flushMicrotasks();
     expect(settled).not.toHaveBeenCalled();
-    channels(1)[1].onmessage(null);
+
+    // Retry succeeds
+    openSyncChannelArgs(1).readyChannel.onmessage(null);
     await retry;
     expect(settled).toHaveBeenCalledOnce();
+
     unsubscribe();
   });
 });

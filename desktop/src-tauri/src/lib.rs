@@ -7,7 +7,7 @@ use zygo_core::ZygoConfig;
 mod commands;
 mod error;
 
-use commands::{load_syncable_data, open_sync_channel, watch_logs};
+use commands::{load_syncable_data, open_sync_channel, query_logs};
 
 const TYPESCRIPT_BINDINGS_PATH: &str = "../src/bindings.ts";
 
@@ -23,7 +23,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
         greet,
         load_syncable_data,
         open_sync_channel,
-        watch_logs
+        query_logs
     ])
 }
 

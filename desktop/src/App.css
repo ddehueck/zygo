@@ -4,6 +4,17 @@
 *::before,
 *::after {
   cursor: default;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+input,
+textarea,
+[contenteditable="true"],
+[contenteditable="true"] * {
+  cursor: text;
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 :root {

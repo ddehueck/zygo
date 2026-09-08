@@ -11,8 +11,8 @@ export const commands = {
     ),
   openSyncChannel: (onEvent: Channel<SyncDelta>, onReady: Channel<null>) =>
     typedError<null, CommandError>(__TAURI_INVOKE("open_sync_channel", { onEvent, onReady })),
-  watchLogs: (jobRunId: number, onBatch: Channel<LogBatch>) =>
-    typedError<number, CommandError>(__TAURI_INVOKE("watch_logs", { jobRunId, onBatch })),
+  queryLogs: (request: QueryLogsRequest) =>
+    typedError<Log[], CommandError>(__TAURI_INVOKE("query_logs", { request })),
 };
 
 /* Types */
@@ -20,15 +20,6 @@ export const commands = {
 export type CommandError =
   | { kind: "invalid_input"; field: string; message: string }
   | { kind: "internal"; code: string; message: string };
-
-export type DataReference = {
-  id: number;
-  workflow_run_id: number;
-  job_run_id: number;
-  uri: string;
-  is_replay: boolean;
-  created_at: string;
-};
 
 export type JobRun = {
   id: number;
@@ -51,11 +42,22 @@ export type LoadSyncableDataResponse =
   | { entity: "workflow_run"; page: SyncPage<WorkflowRun> }
   | { entity: "job_run"; page: SyncPage<JobRun> }
   | { entity: "tag"; page: SyncPage<Tag> }
-  | { entity: "data_reference"; page: SyncPage<DataReference> };
+  | { entity: "data_reference"; page: SyncPage<TauriDataReference> };
 
-export type LogBatch = {
+export type Log = {
+  id: number;
+  workflow_run_id: number;
+  job_run_id: string;
+  order: number;
   content: string;
-  error: string | null;
+  created_at: string;
+};
+
+export type QueryLogsRequest = {
+  workflow_run_id: number;
+  limit: number;
+  offset: number;
+  after_id: number | null;
 };
 
 export type RowChange<T> =
@@ -71,7 +73,7 @@ export type SyncDelta =
   | { entity: "workflow_run"; change_id: number; change: RowChange<WorkflowRun> }
   | { entity: "job_run"; change_id: number; change: RowChange<JobRun> }
   | { entity: "tag"; change_id: number; change: RowChange<Tag> }
-  | { entity: "data_reference"; change_id: number; change: RowChange<DataReference> };
+  | { entity: "data_reference"; change_id: number; change: RowChange<TauriDataReference> };
 
 export type SyncEntityKind = "workflow_run" | "job_run" | "tag" | "data_reference";
 
@@ -86,6 +88,15 @@ export type Tag = {
   job_run_id: number | null;
   data_reference_id: number | null;
   value: string;
+  created_at: string;
+};
+
+export type TauriDataReference = {
+  id: number;
+  workflow_run_id: number;
+  job_run_id: number;
+  uri: string;
+  is_replay: boolean;
   created_at: string;
 };
 
