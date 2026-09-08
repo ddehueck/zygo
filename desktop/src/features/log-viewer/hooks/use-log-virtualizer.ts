@@ -16,6 +16,8 @@ export function useLogVirtualizer(logs: Log[], { followOnAppend }: { followOnApp
     anchorTo: "end",
     followOnAppend,
     scrollEndThreshold: LOG_EDGE_THRESHOLD,
+    // React 19: flushSync during measure/ref attach warns when already rendering.
+    useFlushSync: false,
   });
 
   return { scrollRef, virtualizer };
