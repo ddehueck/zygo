@@ -1,6 +1,8 @@
 import { useLiveQuery } from "@tanstack/react-db";
 import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
 
+import { BreadcrumbHeaderLayout } from "@/components/layout/BreadcrumbHeaderLayout";
+import { ScrollArea } from "@/components/ScrollArea";
 import { Description, Heading, Text } from "@/components/Text";
 import { jobRunsCollection, workflowRunsCollection } from "@/db/collections";
 import { JobList } from "@/features/workflow-runs/components/JobList";
@@ -92,5 +94,11 @@ function JobsListPage({ workflowRunId }: { workflowRunId: string }) {
 }
 
 function JobsPageShell({ children }: { children: React.ReactNode }) {
-  return <main className="mx-auto w-full max-w-5xl px-6 py-10">{children}</main>;
+  return (
+    <BreadcrumbHeaderLayout>
+      <ScrollArea>
+        <main className="mx-auto w-full max-w-5xl px-6 py-10">{children}</main>
+      </ScrollArea>
+    </BreadcrumbHeaderLayout>
+  );
 }

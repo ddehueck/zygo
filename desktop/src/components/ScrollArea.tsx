@@ -4,7 +4,7 @@ import { cn } from "./utils";
 type ScrollAreaProps = ComponentProps<"div">;
 
 export const scrollAreaClassName = cn(
-  "overflow-auto supports-[overflow:overlay]:[overflow:overlay]",
+  "min-h-0 flex-1 overflow-auto supports-[overflow:overlay]:[overflow:overlay]",
   "[&::-webkit-scrollbar]:size-2.5 [&::-webkit-scrollbar]:bg-transparent",
   "[&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-track-piece]:bg-transparent",
   "[&::-webkit-scrollbar-button]:hidden [&::-webkit-scrollbar-corner]:bg-transparent",

@@ -4,9 +4,7 @@
   --color-*: initial;
 
   --font-sans: "Inter Variable", Inter, sans-serif;
-  --font-mono:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
-    monospace;
+  --font-mono: "Roboto Mono Variable", "Roboto Mono", monospace;
 
   /* Backgrounds */
   --color-app-bg-base: var(--app-bg-base);

@@ -1,5 +1,4 @@
 import { createFileRoute, Outlet } from "@tanstack/react-router";
-import { BreadcrumbHeaderLayout } from "../components/layout/BreadcrumbHeaderLayout";
 
 export const Route = createFileRoute("/runs")({
   component: RouteComponent,
@@ -12,9 +11,5 @@ export const Route = createFileRoute("/runs")({
 });
 
 function RouteComponent() {
-  return (
-    <BreadcrumbHeaderLayout>
-      <Outlet />
-    </BreadcrumbHeaderLayout>
-  );
+  return <Outlet />;
 }

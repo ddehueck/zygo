@@ -5,6 +5,7 @@ mod sync;
 mod types;
 
 pub use query_logs::query_logs;
+use types::Log;
 
 pub use types::{
     JobRun, RowChange, SyncDelta, SyncEntityKind, Tag, TauriDataReference, WorkflowRun,

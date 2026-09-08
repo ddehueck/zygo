@@ -14,11 +14,11 @@ import {
 
 import { Icon, iconDefinitions } from "@/components/icons";
 import { useDuration } from "@/hooks/use-duration";
-import { useWatchLogs } from "@/hooks/use-watch-logs";
+import { useWatchLogs } from "@/features/log-viewer/hooks/use-watch-logs";
 import { formatDate } from "@/lib/dates";
 import { RunStatus, StatusIcon, statusLabel } from "./statuses";
 import { TagBadge } from "./TagBadge";
-import { Heading } from "@/components/Text";
+import { Heading, Text } from "@/components/Text";
 import { sum } from "@/lib/math";
 
 type WorkflowRunDetailsProps = {
@@ -259,7 +259,7 @@ function DataPreviewCard({ run }: { run: WorkflowRun }) {
 }
 
 function LogsPreviewCard({ run }: { run: WorkflowRun }) {
-  useWatchLogs({ workflowRunId: run.id });
+  const watcher = useWatchLogs({ workflowRunId: run.id });
 
   const logsQuery = useLiveQuery({
     query: (q) =>
@@ -271,24 +271,40 @@ function LogsPreviewCard({ run }: { run: WorkflowRun }) {
   });
 
   return (
-    <PreviewCard
-      title="Logs"
-      summary={run.errored_job_count > 0 ? "Errors found in this run" : "No errors reported"}
-      footer="View run logs"
+    <Link
+      to="/runs/$workflowRunId/logs"
+      params={{ workflowRunId: String(run.id) }}
+      aria-label="View logs for this workflow run"
+      className="group block h-full rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-app-accent"
     >
-      {logsQuery.data.length > 0 ? (
-        logsQuery.data.map((log) => (
-          <PreviewRow
-            key={log.id}
-            label={<span className="text-xs text-app-foreground-muted">#{log.id}</span>}
-            value={<span className="block max-w-full truncate">{log.content}</span>}
-          />
-        ))
-      ) : (
-        <p className="py-3 text-sm text-app-foreground-muted">
-          {logsQuery.isLoading ? "Loading logs…" : "No logs recorded."}
-        </p>
-      )}
-    </PreviewCard>
+      <PreviewCard
+        title="Logs"
+        summary={run.errored_job_count > 0 ? "Errors found in this run" : "No errors reported"}
+        footer="View run logs"
+      >
+        {logsQuery.data.length > 0 ? (
+          logsQuery.data.map((log) => (
+            <PreviewRow
+              key={log.id}
+              label={<span className="text-xs text-app-foreground-muted">#{log.id}</span>}
+              value={<span className="block max-w-full truncate">{log.content}</span>}
+            />
+          ))
+        ) : (
+          <Text
+            className="block py-3"
+            size="small"
+            variant={watcher.isError ? "danger" : "muted"}
+            role={watcher.isError ? "alert" : undefined}
+          >
+            {watcher.isPending
+              ? "Loading logs…"
+              : watcher.isError
+                ? "Unable to load logs."
+                : "No logs recorded."}
+          </Text>
+        )}
+      </PreviewCard>
+    </Link>
   );
 }

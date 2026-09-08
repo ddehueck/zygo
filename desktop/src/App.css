@@ -1,4 +1,5 @@
 @import url("@fontsource-variable/inter");
+@import url("@fontsource-variable/roboto-mono");
 
 *,
 *::before,
@@ -11,7 +12,9 @@
 input,
 textarea,
 [contenteditable="true"],
-[contenteditable="true"] * {
+[contenteditable="true"] *,
+.highlightable,
+.highlightable * {
   cursor: text;
   -webkit-user-select: text;
   user-select: text;
@@ -24,6 +27,8 @@ textarea,
   --icon-swap-ease: ease-in-out;
   --theme-transition-dur: 250ms;
   --theme-transition-ease: ease-in-out;
+  --log-column-transition-dur: 180ms;
+  --log-column-transition-ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 html,
@@ -45,6 +50,11 @@ html.is-theme-transitioning #root * {
     box-shadow, caret-color, accent-color;
   transition-duration: var(--theme-transition-dur);
   transition-timing-function: var(--theme-transition-ease);
+}
+
+.log-viewer-grid {
+  transition: grid-template-columns var(--log-column-transition-dur)
+    var(--log-column-transition-ease);
 }
 
 .t-icon-swap {
@@ -89,7 +99,8 @@ html.is-theme-transitioning #root .t-icon-swap .t-icon {
     transition: none !important;
   }
 
-  .t-icon-swap .t-icon {
+  .t-icon-swap .t-icon,
+  .log-viewer-grid {
     transition: none !important;
   }
 }

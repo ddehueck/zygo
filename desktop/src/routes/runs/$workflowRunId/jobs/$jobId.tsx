@@ -1,15 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useLiveQuery } from "@tanstack/react-db";
-import { eq } from "@tanstack/db";
 
 import {
   dataReferencesCollection,
   jobRunsCollection,
-  logsCollection,
   workflowRunsCollection,
 } from "@/db/collections";
 import { Description, Heading, Text } from "@/components/Text";
-import { useWatchLogs } from "@/hooks/use-watch-logs";
 
 export const Route = createFileRoute("/runs/$workflowRunId/jobs/$jobId")({
   beforeLoad: ({ params }) => ({
@@ -26,9 +23,8 @@ function JobRoute() {
 
   return (
     <main className="mx-auto w-full max-w-5xl px-6 py-10">
-      <Heading size="medium">Workflow logs</Heading>
-      <Description className="mt-2">All jobs in run {workflowRunId}</Description>
-      <JobLogs workflowRunId={workflowRunId} />
+      <Heading size="medium">Job details</Heading>
+      <Description className="mt-2">Job {jobId}</Description>
       <JobDataReferences workflowRunId={workflowRunId} jobRunId={jobId} />
       <Link
         to="/runs/$workflowRunId"
@@ -101,38 +97,6 @@ function JobDataReferences({
           ))}
         </ul>
       )}
-    </section>
-  );
-}
-
-function JobLogs({ workflowRunId }: { workflowRunId: string }) {
-  const id = Number(workflowRunId);
-
-  useWatchLogs({ workflowRunId: id });
-
-  const logsQuery = useLiveQuery({
-    query: (q) =>
-      q
-        .from({ logs: logsCollection })
-        .where(({ logs }) => eq(logs.workflow_run_id, id))
-        .orderBy(({ logs }) => logs.id, "asc"),
-  });
-
-  const contents = logsQuery.data.map((log) => log.content).join("");
-
-  // todo a table component with virtualization + pretextjs for height computation
-  return (
-    <section aria-label="Workflow logs" className="mt-6">
-      {logsQuery.isError && (
-        <Text role="alert" size="small" variant="danger" className="mb-3 block">
-          Unable to load workflow logs.
-        </Text>
-      )}
-      <pre className="max-h-[65vh] min-h-64 overflow-auto rounded-lg border border-app-border p-4">
-        <Text size="small">
-          {contents || (logsQuery.isLoading ? "Loading logs…" : "No logs recorded.")}
-        </Text>
-      </pre>
     </section>
   );
 }
