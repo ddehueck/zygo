@@ -1,4 +1,4 @@
-export const LOG_PAGE_SIZE = 50;
+export const LOG_PAGE_SIZE = 500;
 export const LOG_SEARCH_PAGE_SIZE = 1000;
 export const LOG_SEARCH_DEBOUNCE_MS = 300;
 export const LOG_OVERSCAN = 20;

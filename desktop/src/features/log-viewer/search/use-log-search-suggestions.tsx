@@ -43,7 +43,7 @@ export function useLogSearchSuggestions({
       q
         .from({ jobRun: jobRunsCollection })
         .where(({ jobRun }) => eq(jobRun.workflow_run_id, workflowRunId))
-        .orderBy(({ jobRun }) => jobRun.created_at, "asc")
+        .orderBy(({ jobRun }) => jobRun.id, "asc")
         .limit(200),
   });
 

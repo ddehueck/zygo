@@ -31,8 +31,7 @@ export function useLogViewportData(workflowRunId: number) {
         .where(({ workflowRun }) => eq(workflowRun.id, workflowRunId))
         .findOne(),
   });
-  const isRunActive =
-    runQuery.data != null && !isTerminalWorkflowRunStatus(runQuery.data.status);
+  const isRunActive = runQuery.data != null && !isTerminalWorkflowRunStatus(runQuery.data.status);
 
   const pages = useInfiniteLogPages(workflowRunId);
   const initialPage = last(pages.data?.pages ?? []);
@@ -83,7 +82,6 @@ export function useLogViewportData(workflowRunId: number) {
     isSearching: isFiltering,
     isRunActive,
     hasPreviousPage: pages.hasPreviousPage,
-    hasNewer: watcher.data?.hasMore ?? false,
     isFetchingPreviousPage: pages.isFetchingPreviousPage,
     fetchPreviousPage: pages.fetchPreviousPage,
     error: pages.error ?? watcher.error,
