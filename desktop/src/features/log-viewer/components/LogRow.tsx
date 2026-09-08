@@ -1,7 +1,7 @@
 import type { Log } from "@/bindings";
 
 export const logRowClassName =
-  "grid grid-cols-[4rem_10.5rem_11rem_minmax(0,1fr)] items-start gap-3 border-b border-app-border/60 px-3 py-1 font-mono text-xs leading-[18px] text-app-foreground last:border-b-0";
+  "grid grid-cols-[4rem_10.5rem_11rem_minmax(0,1fr)] items-start gap-3 border-b border-app-border/60 px-3 py-1 font-mono text-xs leading-[18px] text-app-foreground";
 
 export const logContentClassName = "min-w-0 break-words whitespace-pre-wrap";
 
