@@ -1,12 +1,19 @@
 import { useLiveQuery } from "@tanstack/react-db";
+import { eq } from "@tanstack/db";
 import { Link } from "@tanstack/react-router";
 import { type ReactNode } from "react";
 
 import type { JobRun, Tag, WorkflowRun } from "@/bindings";
-import { jobRunsCollection, tagsCollection, workflowRunsCollection } from "@/db/collections";
+import {
+  jobRunsCollection,
+  logsCollection,
+  tagsCollection,
+  workflowRunsCollection,
+} from "@/db/collections";
 
 import { Icon, iconDefinitions } from "@/components/icons";
 import { useDuration } from "@/hooks/use-duration";
+import { useWatchLogs } from "@/hooks/use-watch-logs";
 import { formatDate } from "@/lib/dates";
 import { RunStatus, StatusIcon, statusLabel } from "./statuses";
 import { TagBadge } from "./TagBadge";
@@ -151,8 +158,8 @@ function PreviewCard({
 
 function PreviewRow({ label, value }: { label: ReactNode; value: ReactNode }) {
   return (
-    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3 py-3 first:pt-4 last:pb-4">
-      <span className="min-w-0 text-sm text-app-foreground-muted">{label}</span>
+    <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-3 py-3 first:pt-4 last:pb-4">
+      <span className="min-w-0 text-sm whitespace-nowrap text-app-foreground-muted">{label}</span>
       <span className="min-w-0 overflow-hidden text-right text-sm font-medium text-app-foreground">
         {value}
       </span>
@@ -239,18 +246,36 @@ function DataPreviewCard() {
 }
 
 function LogsPreviewCard({ run }: { run: WorkflowRun }) {
+  useWatchLogs({ workflowRunId: run.id });
+
+  const logsQuery = useLiveQuery({
+    query: (q) =>
+      q
+        .from({ log: logsCollection })
+        .where(({ log }) => eq(log.workflow_run_id, run.id))
+        .orderBy(({ log }) => log.id, "desc")
+        .limit(5),
+  });
+
   return (
     <PreviewCard
       title="Logs"
       summary={run.errored_job_count > 0 ? "Errors found in this run" : "No errors reported"}
       footer="View run logs"
     >
-      <PreviewRow label="Run status" value={statusLabel(run.status)} />
-      <PreviewRow label="Failed jobs" value={run.errored_job_count} />
-      <PreviewRow label="Created" value={formatDate(run.created_at)} />
-      <p className="py-3 text-sm text-app-foreground-muted">
-        Detailed log entries are not available in this view.
-      </p>
+      {logsQuery.data.length > 0 ? (
+        logsQuery.data.map((log) => (
+          <PreviewRow
+            key={log.id}
+            label={<span className="text-xs text-app-foreground-muted">#{log.id}</span>}
+            value={<span className="block max-w-full truncate">{log.content}</span>}
+          />
+        ))
+      ) : (
+        <p className="py-3 text-sm text-app-foreground-muted">
+          {logsQuery.isLoading ? "Loading logs…" : "No logs recorded."}
+        </p>
+      )}
     </PreviewCard>
   );
 }
