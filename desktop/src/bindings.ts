@@ -54,8 +54,8 @@ export type QueryLogsRequest = {
 export type QueryLogsResponse = {
 	logs: Log[],
 	has_more: boolean,
-	/**  Global ingestion high-water mark from the same read snapshot as the page. */
-	observed_through_id: number,
+	/**  Global watermark log ID from the same read snapshot as the page. */
+	global_watermark_id: number,
 };
 
 export type RowChange<T> = { operation: "insert"; row: T } | { operation: "update"; row: T } | { operation: "delete"; id: number };

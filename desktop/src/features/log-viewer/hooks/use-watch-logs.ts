@@ -16,6 +16,7 @@ export function useWatchLogs({
   initialAfterId?: number;
 }) {
   const queryKey = ["log-watch", workflowRunId] as const;
+
   return useQuery({
     queryKey,
     enabled,

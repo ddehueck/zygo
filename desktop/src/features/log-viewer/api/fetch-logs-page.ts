@@ -50,8 +50,8 @@ export async function fetchLogsPage(request: QueryLogsRequest): Promise<LogPage>
 // i.e. don't cache forever if we are watching a range at the log tail
 export function logsPageStaleTime(
   beforeId: number | null,
-  page: Pick<QueryLogsResponse, "observed_through_id"> | undefined,
+  page: Pick<QueryLogsResponse, "global_watermark_id"> | undefined,
 ): number {
   if (beforeId === null) return 0;
-  return beforeId - 1 <= (page?.observed_through_id ?? -1) ? Infinity : 0;
+  return beforeId - 1 <= (page?.global_watermark_id ?? -1) ? Infinity : 0;
 }

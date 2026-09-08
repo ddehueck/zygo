@@ -1,7 +1,7 @@
 import { Clock, EyeOff, Tag } from "lucide-react";
 
 import { IconButton } from "@/components/IconButton";
-import { logGridTemplateColumns } from "./LogRow";
+import { cn } from "@/components/utils";
 
 export interface LogViewportHeaderProps {
   showDate: boolean;
@@ -29,7 +29,11 @@ export function LogViewportHeader({
     >
       <div
         className="log-viewer-grid grid items-center gap-3"
-        style={{ gridTemplateColumns: logGridTemplateColumns(showDate, showJobId) }}
+        style={{
+          gridTemplateColumns: [showDate && "10.5rem", showJobId && "4rem", "minmax(0, 1fr)"]
+            .filter(Boolean)
+            .join(" "),
+        }}
       >
         {showDate && (
           <div className={columnLabelClassName}>
@@ -42,7 +46,7 @@ export function LogViewportHeader({
               type="button"
               onClick={onToggleDate}
               aria-label="Hide log dates"
-              className={`${iconButtonClassName} ${columnHideButtonClassName}`}
+              className={cn(iconButtonClassName, columnHideButtonClassName)}
             >
               <EyeOff aria-hidden size={10} />
             </IconButton>
@@ -59,7 +63,7 @@ export function LogViewportHeader({
               type="button"
               onClick={onToggleJobId}
               aria-label="Hide job IDs"
-              className={`${iconButtonClassName} ${columnHideButtonClassName}`}
+              className={cn(iconButtonClassName, columnHideButtonClassName)}
             >
               <EyeOff aria-hidden size={10} />
             </IconButton>

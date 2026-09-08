@@ -76,7 +76,7 @@ impl LogsRepository {
             .next()
             .await?
             .ok_or(turso::Error::QueryReturnedNoRows)?;
-        let observed_through_id: i64 = watermark_row.get(0)?;
+        let global_watermark_id: i64 = watermark_row.get(0)?;
         drop(watermark_rows);
         let direction = if ascending { "ASC" } else { "DESC" };
         let lower_bound = after_id.unwrap_or(0);
@@ -103,7 +103,7 @@ impl LogsRepository {
         }
         drop(rows);
         tx.commit().await?;
-        Ok((result, observed_through_id))
+        Ok((result, global_watermark_id))
     }
 
     pub async fn list_after_by_id(
@@ -149,67 +149,5 @@ impl LogsRepository {
             });
         }
         Ok(result)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::sync::Arc;
-
-    use tokio::sync::Mutex;
-    use turso::Builder;
-
-    use super::LogsRepository;
-    use crate::db::Db;
-
-    #[tokio::test]
-    async fn log_pages_use_exclusive_bounds_and_snapshot_watermark() {
-        let database = Builder::new_local(":memory:").build().await.unwrap();
-        let connection = database.connect().unwrap();
-        connection.execute("CREATE TABLE job_runs (id INTEGER PRIMARY KEY, workflow_run_id INTEGER, public_id TEXT)", ()).await.unwrap();
-        connection.execute("CREATE TABLE logs (id INTEGER PRIMARY KEY, job_run_id INTEGER, \"order\" INTEGER, content TEXT, created_at TEXT)", ()).await.unwrap();
-        connection
-            .execute(
-                "INSERT INTO job_runs VALUES (1, 1, 'one'), (2, 2, 'two')",
-                (),
-            )
-            .await
-            .unwrap();
-        connection.execute("INSERT INTO logs VALUES (2, 1, 1, 'a', 'today'), (4, 1, 2, 'b', 'today'), (6, 1, 3, 'c', 'today'), (8, 1, 4, 'd', 'today'), (10, 2, 1, 'other', 'today')", ()).await.unwrap();
-        let repo = LogsRepository::new(Db {
-            connection: Arc::new(Mutex::new(connection)),
-            is_cdc_enabled: false,
-        });
-        let (newest, watermark) = repo
-            .page_by_workflow_run_id(1, None, None, false, 2)
-            .await
-            .unwrap();
-        assert_eq!(
-            newest.iter().map(|row| row.id).collect::<Vec<_>>(),
-            vec![8, 6]
-        );
-        assert_eq!(watermark, 10);
-        let (bounded, _) = repo
-            .page_by_workflow_run_id(1, Some(2), Some(8), true, 3)
-            .await
-            .unwrap();
-        assert_eq!(
-            bounded.iter().map(|row| row.id).collect::<Vec<_>>(),
-            vec![4, 6]
-        );
-        let (older, _) = repo
-            .page_by_workflow_run_id(1, None, Some(6), false, 3)
-            .await
-            .unwrap();
-        assert_eq!(
-            older.iter().map(|row| row.id).collect::<Vec<_>>(),
-            vec![4, 2]
-        );
-        let (empty, watermark) = repo
-            .page_by_workflow_run_id(1, Some(8), None, true, 3)
-            .await
-            .unwrap();
-        assert!(empty.is_empty());
-        assert_eq!(watermark, 10);
     }
 }

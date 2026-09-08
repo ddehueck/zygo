@@ -19,16 +19,26 @@ export function LogViewerStatus({
         {rowCount.toLocaleString()} loaded {rowCount === 1 ? "line" : "lines"}
       </Text>
       <Text size="small" variant={error ? "danger" : "muted"} role={error ? "alert" : undefined}>
-        {error
-          ? "Unable to load some logs"
-          : isFetchingPreviousPage
-            ? "Loading older logs…"
-            : isFollowing
-              ? "Following live output"
-              : hasPreviousPage
-                ? "Scroll to the top to load older logs"
-                : "Viewing saved output"}
+        {statusMessage({ error, isFetchingPreviousPage, isFollowing, hasPreviousPage })}
       </Text>
     </div>
   );
+}
+
+function statusMessage({
+  error,
+  isFetchingPreviousPage,
+  isFollowing,
+  hasPreviousPage,
+}: {
+  error: unknown;
+  isFetchingPreviousPage: boolean;
+  isFollowing: boolean;
+  hasPreviousPage: boolean;
+}) {
+  if (error) return "Unable to load some logs";
+  if (isFetchingPreviousPage) return "Loading older logs…";
+  if (isFollowing) return "Following live output";
+  if (hasPreviousPage) return "Scroll to the top to load older logs";
+  return "Viewing saved output";
 }

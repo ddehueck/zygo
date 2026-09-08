@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import { eq, like, not } from "@tanstack/db";
 import { useLiveQuery } from "@tanstack/react-db";
 
@@ -19,11 +18,6 @@ export function useLogViewportData(workflowRunId: number) {
     initialAfterId: last(initialPage?.logs ?? [])?.id,
   });
 
-  // An empty terminal page must not expose another viewer's cached history.
-  const lower = pages.data?.pages.find((page) => page.logs.length > 0)?.logs[0]?.id ?? 0;
-
-  // Keep the live query stable while paging; the per-view lower bound is applied
-  // below so shared row writes do not prepend another viewer's cached history.
   const query = useLiveQuery(
     (q) =>
       q
@@ -34,12 +28,10 @@ export function useLogViewportData(workflowRunId: number) {
     [workflowRunId],
   );
 
-  const logs = useMemo(() => query.data.filter((log) => log.id >= lower), [query.data, lower]);
-
   return {
     isLoading: pages.isPending,
     isError: pages.isError && pages.data === undefined,
-    logs,
+    logs: query.data,
     hasPreviousPage: pages.hasPreviousPage,
     hasNewer: watcher.data?.hasMore ?? false,
     isFetchingPreviousPage: pages.isFetchingPreviousPage,

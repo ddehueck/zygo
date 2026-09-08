@@ -27,9 +27,9 @@ pub struct QueryLogsRequest {
 pub struct QueryLogsResponse {
     pub logs: Vec<Log>,
     pub has_more: bool,
-    /// Global ingestion high-water mark from the same read snapshot as the page.
+    /// Global watermark log ID from the same read snapshot as the page.
     #[specta(type = specta_typescript::Number)]
-    pub observed_through_id: i64,
+    pub global_watermark_id: i64,
 }
 
 #[tauri::command]
@@ -61,7 +61,7 @@ pub async fn query_logs(
     }
     // after_id present (even 0) → ASC tail; otherwise DESC from newest / before_id.
     let ascending = request.after_id.is_some();
-    let (mut rows, observed_through_id) = state
+    let (mut rows, global_watermark_id) = state
         .repos
         .logs
         .page_by_workflow_run_id(
@@ -80,6 +80,6 @@ pub async fn query_logs(
     Ok(QueryLogsResponse {
         logs: rows.into_iter().map(Log::from).collect(),
         has_more,
-        observed_through_id,
+        global_watermark_id,
     })
 }
