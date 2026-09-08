@@ -3,6 +3,7 @@ import { createContext, useContext, useMemo, useState, type ReactNode } from "re
 type LogSearchContextValue = {
   query: string;
   setQuery: (query: string) => void;
+  cleanedQuery: string;
 };
 
 const LogSearchContext = createContext<LogSearchContextValue | null>(null);
@@ -10,7 +11,14 @@ const LogSearchContext = createContext<LogSearchContextValue | null>(null);
 export function LogSearchProvider({ children }: { children: ReactNode }) {
   const [query, setQuery] = useState("");
 
-  const contextValue = useMemo(() => ({ query, setQuery }), [query]);
+  const contextValue = useMemo(
+    () => ({
+      query,
+      setQuery,
+      cleanedQuery: query.trim(),
+    }),
+    [query],
+  );
 
   return <LogSearchContext.Provider value={contextValue}>{children}</LogSearchContext.Provider>;
 }
