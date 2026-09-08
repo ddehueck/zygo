@@ -16,10 +16,15 @@ export function LogViewerStatus({
 }) {
   return (
     <div className="flex min-h-8 shrink-0 items-center justify-between gap-4 border-t border-app-border px-3 py-1.5">
-      <Text size="small" variant="muted">
+      <Text size="small" variant="muted" className="text-xs">
         Showing {rowCount.toLocaleString()} {pluralize(rowCount, "line", "lines")}
       </Text>
-      <Text size="small" variant={error ? "danger" : "muted"} role={error ? "alert" : undefined}>
+      <Text
+        size="small"
+        variant={error ? "danger" : "muted"}
+        className="text-xs"
+        role={error ? "alert" : undefined}
+      >
         {statusMessage({ error, isFetchingPreviousPage, isFollowing, hasPreviousPage })}
       </Text>
     </div>

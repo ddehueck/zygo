@@ -16,7 +16,7 @@ import { Icon, iconDefinitions } from "@/components/icons";
 import { useDuration } from "@/hooks/use-duration";
 import { useWatchLogs } from "@/features/log-viewer/hooks/use-watch-logs";
 import { formatDate } from "@/lib/dates";
-import { RunStatus, StatusIcon, statusLabel } from "./statuses";
+import { RunStatus, StatusIcon, isTerminalWorkflowRunStatus, statusLabel } from "./statuses";
 import { TagBadge } from "./TagBadge";
 import { Heading, Text } from "@/components/Text";
 import { sum } from "@/lib/math";
@@ -259,7 +259,10 @@ function DataPreviewCard({ run }: { run: WorkflowRun }) {
 }
 
 function LogsPreviewCard({ run }: { run: WorkflowRun }) {
-  const watcher = useWatchLogs({ workflowRunId: run.id });
+  const watcher = useWatchLogs({
+    workflowRunId: run.id,
+    enabled: !isTerminalWorkflowRunStatus(run.status),
+  });
 
   const logsQuery = useLiveQuery({
     query: (q) =>

@@ -51,6 +51,8 @@ export type QueryLogsRequest = {
 	before_id?: number | null,
 	/**  Full-text search against log content. Bounds are optional when searching. */
 	search?: string | null,
+	/**  Filter by job run database id (`job_runs.id`). */
+	job_run_id?: number | null,
 };
 
 export type QueryLogsResponse = {

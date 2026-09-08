@@ -1,14 +1,14 @@
 import { ilike } from "@tanstack/db";
 import { useLiveQuery } from "@tanstack/react-db";
 
+import { filterPrefix } from "@/components/search";
 import { tagsCollection, workflowRunsCollection } from "@/db/collections";
 import { WorkflowRunSearchSuggestion } from "./types";
 
 const defaultSuggestions: WorkflowRunSearchSuggestion[] = [
-  { id: "workflow-search-prefix", type: "prefix" as const, text: "@workflow:" },
-  { id: "tag-search-prefix", type: "prefix" as const, text: "@tag:" },
+  { id: "workflow-search-prefix", type: "prefix" as const, text: filterPrefix("workflow") },
+  { id: "tag-search-prefix", type: "prefix" as const, text: filterPrefix("tag") },
 ];
-
 type SuggestionQueryResultItem = {
   type: "workflowId" | "tag";
   text: string;
@@ -70,7 +70,7 @@ function createSuggestions(rows: SuggestionQueryResultItem[]): WorkflowRunSearch
       .map((workflowId) => ({
         id: `workflow:${workflowId}`,
         type: "token" as const,
-        text: `@workflow:${workflowId}`,
+        text: `${filterPrefix("workflow")}${workflowId}`,
         value: { entity: "workflow" as const, id: workflowId },
       })),
     ...[...tagValues]
@@ -78,7 +78,7 @@ function createSuggestions(rows: SuggestionQueryResultItem[]): WorkflowRunSearch
       .map((tagValue) => ({
         id: `tag:${tagValue}`,
         type: "token" as const,
-        text: `@tag:${tagValue}`,
+        text: `${filterPrefix("tag")}${tagValue}`,
         value: { entity: "tag" as const, value: tagValue },
       })),
   ];

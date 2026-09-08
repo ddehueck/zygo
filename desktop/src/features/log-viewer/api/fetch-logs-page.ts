@@ -13,6 +13,7 @@ const logPageRequestSchema = z
     after_id: z.int().nonnegative().nullish(),
     before_id: z.int().positive().nullish(),
     search: z.string().nullish(),
+    job_run_id: z.int().positive().nullish(),
   })
   .refine((request) => request.before_id == null || request.before_id > (request.after_id ?? 0), {
     path: ["before_id"],
@@ -24,10 +25,11 @@ export async function fetchLogsPage(request: QueryLogsRequest): Promise<LogPage>
   const after_id = parsed.after_id ?? null;
   const before_id = parsed.before_id ?? null;
   const search = parsed.search?.trim() || null;
+  const job_run_id = parsed.job_run_id ?? null;
 
   const page = await queryClient.query({
-    queryKey: ["logs-page", { ...parsed, after_id, before_id, search }],
-    staleTime: (query) => logsPageStaleTime(before_id, search, query.state.data),
+    queryKey: ["logs-page", { ...parsed, after_id, before_id, search, job_run_id }],
+    staleTime: (query) => logsPageStaleTime(before_id, search, job_run_id, query.state.data),
     gcTime: 5 * 60_000,
     networkMode: "always",
     queryFn: async () => {
@@ -37,6 +39,7 @@ export async function fetchLogsPage(request: QueryLogsRequest): Promise<LogPage>
         after_id,
         before_id,
         search,
+        job_run_id,
       });
       if (result.status === "error") throw new Error(result.error.message);
       return result.data;
@@ -54,8 +57,9 @@ export async function fetchLogsPage(request: QueryLogsRequest): Promise<LogPage>
 export function logsPageStaleTime(
   beforeId: number | null,
   search: string | null,
+  jobRunId: number | null,
   page: Pick<QueryLogsResponse, "global_watermark_id"> | undefined,
 ): number {
-  if (search !== null || beforeId === null) return 0;
+  if (search !== null || jobRunId !== null || beforeId === null) return 0;
   return beforeId - 1 <= (page?.global_watermark_id ?? -1) ? Infinity : 0;
 }

@@ -1,5 +1,7 @@
 import type { Log } from "@/bindings";
+import { cn } from "@/components/utils";
 import { shortRunId } from "@/features/workflow-runs/lib/id";
+import { useLogSearchContext } from "../search/LogSearchContext";
 
 export function LogRow({
   log,
@@ -10,9 +12,13 @@ export function LogRow({
   showDate?: boolean;
   showJobId?: boolean;
 }) {
+  const { applyJobRunFilter, jobRunPublicId } = useLogSearchContext();
+  const shortId = shortRunId(log.job_run_id);
+  const isActiveFilter = jobRunPublicId != null && log.job_run_id === jobRunPublicId;
+
   return (
     <div
-      className="log-viewer-grid grid items-start gap-3 border-b border-app-border/60 px-3 py-1 font-mono text-xs leading-[18px] text-app-foreground"
+      className="log-viewer-grid grid items-start gap-3 border-b border-app-border/25 px-3 py-1 font-mono text-xs leading-[18px] text-app-foreground"
       style={{
         gridTemplateColumns: [showDate && "10.5rem", showJobId && "4rem", "minmax(0, 1fr)"]
           .filter(Boolean)
@@ -25,11 +31,23 @@ export function LogRow({
         </time>
       )}
       {showJobId && (
-        <span className="truncate text-app-foreground-secondary" title={log.job_run_id}>
-          {shortRunId(log.job_run_id)}
-        </span>
+        <button
+          type="button"
+          title={log.job_run_id}
+          aria-label={`Filter logs by job run ${shortId}`}
+          aria-pressed={isActiveFilter}
+          className={cn(
+            "truncate text-left select-none hover:underline",
+            isActiveFilter
+              ? "text-app-accent"
+              : "text-app-foreground-secondary hover:text-app-accent",
+          )}
+          onClick={() => applyJobRunFilter(log.job_run_id)}
+        >
+          {shortId}
+        </button>
       )}
-      <span className="min-w-0 break-words whitespace-pre-wrap">{log.content || " "}</span>
+      <span className="min-w-0 wrap-break-word whitespace-pre-wrap">{log.content || " "}</span>
     </div>
   );
 }

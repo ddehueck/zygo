@@ -4,9 +4,9 @@ import { Search } from "./Search";
 
 export function LogViewer({ workflowRunId }: { workflowRunId: number }) {
   return (
-    <LogSearchProvider>
+    <LogSearchProvider workflowRunId={workflowRunId}>
       <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
-        <Search />
+        <Search workflowRunId={workflowRunId} />
         <LogViewport key={workflowRunId} workflowRunId={workflowRunId} />
       </div>
     </LogSearchProvider>
