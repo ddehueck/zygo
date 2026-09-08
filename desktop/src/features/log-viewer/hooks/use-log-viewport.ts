@@ -11,10 +11,25 @@ import { useLogVirtualizer } from "./use-log-virtualizer";
  */
 export function useLogViewport(workflowRunId: number) {
   const data = useLogViewportData(workflowRunId);
-  const { logs, hasPreviousPage, isFetchingPreviousPage, fetchPreviousPage } = data;
+  const {
+    logs,
+    hasPreviousPage,
+    isFetchingPreviousPage,
+    fetchPreviousPage,
+    isSearching,
+    isRunActive,
+  } = data;
 
-  const { scrollRef, virtualizer } = useLogVirtualizer(logs);
-  const didScrollToEnd = useScrollToEndOnMount(logs.length, scrollRef, virtualizer);
+  const showStartBoundary = logs.length > 0 && !hasPreviousPage;
+  const showEndBoundary = logs.length > 0;
+  const shouldFollow = isRunActive && !isSearching;
+
+  const { scrollRef, virtualizer } = useLogVirtualizer(logs, {
+    followOnAppend: shouldFollow,
+    showStartBoundary,
+    showEndBoundary,
+  });
+  const didScrollToEnd = useScrollToEndOnMount(logs.length, scrollRef, virtualizer, shouldFollow);
 
   const loadOlder = useCallback(() => {
     if (!hasPreviousPage || isFetchingPreviousPage) return;
@@ -23,19 +38,24 @@ export function useLogViewport(workflowRunId: number) {
   }, [fetchPreviousPage, hasPreviousPage, isFetchingPreviousPage]);
 
   const onScroll = useCallback(() => {
-    const element = scrollRef.current;
-    if (!element || !didScrollToEnd.current) return;
-    if (virtualizer.isAtEnd()) return;
-    if (element.scrollTop <= LOG_EDGE_THRESHOLD) loadOlder();
-  }, [didScrollToEnd, loadOlder, scrollRef, virtualizer]);
+    if (!scrollRef.current) return;
+    // While pinning to the live tail on mount, ignore top-edge fetches until settled.
+    if (shouldFollow && !didScrollToEnd.current) return;
+
+    // Content shorter than the viewport is "at end", not a deliberate scroll to older history.
+    const atTop = scrollRef.current.scrollTop <= LOG_EDGE_THRESHOLD && !virtualizer.isAtEnd();
+    if (atTop) loadOlder();
+  }, [didScrollToEnd, loadOlder, scrollRef, shouldFollow, virtualizer]);
+
+  const isFollowing = shouldFollow && virtualizer.isAtEnd();
 
   return {
     ...data,
     scrollRef,
     virtualizer,
-    isFollowing: virtualizer.isAtEnd(),
+    isFollowing,
+    showStartBoundary,
     onScroll,
-    loadOlder,
   };
 }
 
@@ -44,11 +64,12 @@ function useScrollToEndOnMount(
   logCount: number,
   scrollRef: RefObject<HTMLDivElement | null>,
   virtualizer: Virtualizer<HTMLDivElement, Element>,
+  enabled: boolean,
 ) {
   const didScrollToEnd = useRef(false);
 
   useLayoutEffect(() => {
-    if (didScrollToEnd.current || logCount === 0) return;
+    if (!enabled || didScrollToEnd.current || logCount === 0) return;
 
     let cancelled = false;
     let frame = 0;
@@ -78,7 +99,7 @@ function useScrollToEndOnMount(
       cancelled = true;
       cancelAnimationFrame(frame);
     };
-  }, [logCount, scrollRef, virtualizer]);
+  }, [enabled, logCount, scrollRef, virtualizer]);
 
   return didScrollToEnd;
 }

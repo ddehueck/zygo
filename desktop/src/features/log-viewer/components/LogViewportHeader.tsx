@@ -25,7 +25,7 @@ export function LogViewportHeader({
   return (
     <header
       aria-label="Log display options"
-      className="sticky top-0 z-20 w-full shrink-0 border-b border-app-border/60 bg-app-bg-elevated px-3 py-1"
+      className="sticky top-0 z-20 w-full shrink-0 border-b border-app-border bg-app-bg-elevated px-3 py-1"
     >
       <div
         className="log-viewer-grid grid items-center gap-3"

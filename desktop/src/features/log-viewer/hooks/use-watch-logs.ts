@@ -1,10 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { logsCollection } from "@/db/collections";
 import { queryClient } from "@/db/query-client";
+import { last } from "@/lib/arrays";
 import { fetchLogsPage } from "../api/fetch-logs-page";
 import { LOG_PAGE_SIZE, NEW_LOGS_CHECK_INTERVAL_MS } from "../constants";
 
-type Progress = { afterId: number; hasMore: boolean };
+type Progress = { afterId: number };
 
 export function useWatchLogs({
   workflowRunId,
@@ -23,25 +23,39 @@ export function useWatchLogs({
     networkMode: "always",
     refetchIntervalInBackground: true,
     refetchInterval: (query) =>
-      query.state.status !== "error" && query.state.data?.hasMore ? 1 : NEW_LOGS_CHECK_INTERVAL_MS,
+      query.state.status === "error" ? false : NEW_LOGS_CHECK_INTERVAL_MS,
     queryFn: async (): Promise<Progress> => {
-      const cached =
-        queryClient.getQueryData<Progress>(queryKey) ??
-        (initialAfterId === undefined ? undefined : { afterId: initialAfterId, hasMore: false });
+      // `after_id` present (including 0) pages ASC from that bound. Absent pages
+      // DESC from the newest. Never default a missing cursor to 0 — that would
+      // drain the entire history on every cold start.
+      let afterId: number | undefined =
+        queryClient.getQueryData<Progress>(queryKey)?.afterId ?? initialAfterId;
 
-      const previous =
-        cached && (cached.afterId === 0 || logsCollection.has(cached.afterId)) ? cached : undefined;
+      if (afterId === undefined) {
+        const page = await fetchLogsPage({
+          workflow_run_id: workflowRunId,
+          limit: LOG_PAGE_SIZE,
+        });
+        return { afterId: last(page.logs)?.id ?? 0 };
+      }
 
-      const page = await fetchLogsPage({
-        workflow_run_id: workflowRunId,
-        after_id: previous?.afterId,
-        limit: previous ? 1000 : LOG_PAGE_SIZE,
-      });
+      // Known cursor: drain anything newer inside this query instead of
+      // refetchInterval: 1 (which freezes the UI with per-ms React updates).
+      let hasMore = false;
+      do {
+        const page = await fetchLogsPage({
+          workflow_run_id: workflowRunId,
+          after_id: afterId,
+          limit: 1000,
+        });
+        afterId = last(page.logs)?.id ?? afterId;
+        hasMore = page.has_more;
+        if (hasMore) {
+          await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        }
+      } while (hasMore);
 
-      return {
-        afterId: page.logs[page.logs.length - 1]?.id ?? previous?.afterId ?? 0,
-        hasMore: previous !== undefined && page.has_more,
-      };
+      return { afterId };
     },
   });
 }

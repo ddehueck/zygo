@@ -64,6 +64,8 @@ impl LogsRepository {
         before_id: Option<i64>,
         ascending: bool,
         limit: u32,
+        search: Option<&str>,
+        job_run_id: Option<i64>,
     ) -> DbResult<(Vec<LogRow>, i64)> {
         let mut connection = self.database.connection.lock().await;
         let tx = connection
@@ -81,27 +83,88 @@ impl LogsRepository {
         let direction = if ascending { "ASC" } else { "DESC" };
         let lower_bound = after_id.unwrap_or(0);
         let upper_bound = before_id.map(|id| id.saturating_sub(1)).unwrap_or(i64::MAX);
-        let sql = format!(
-            "SELECT logs.id, job_runs.workflow_run_id, job_runs.public_id, logs.\"order\", logs.content, logs.created_at FROM logs JOIN job_runs ON job_runs.id = logs.job_run_id WHERE job_runs.workflow_run_id = ?1 AND logs.id > ?2 AND logs.id <= ?3 ORDER BY logs.id {direction} LIMIT ?4"
-        );
-        let mut rows = tx
-            .query(
-                &sql,
-                params![workflow_run_id, lower_bound, upper_bound, i64::from(limit)],
-            )
-            .await?;
+        let search = search.map(str::trim).filter(|query| !query.is_empty());
+        let select = "SELECT logs.id, job_runs.workflow_run_id, job_runs.public_id, logs.\"order\", logs.content, logs.created_at FROM logs JOIN job_runs ON job_runs.id = logs.job_run_id WHERE job_runs.workflow_run_id = ?1 AND logs.id > ?2 AND logs.id <= ?3";
         let mut result = Vec::new();
-        while let Some(row) = rows.next().await? {
-            result.push(LogRow {
-                id: row.get(0)?,
-                workflow_run_id: row.get(1)?,
-                job_run_id: row.get(2)?,
-                order: row.get(3)?,
-                content: row.get(4)?,
-                created_at: row.get(5)?,
-            });
+        match (search, job_run_id) {
+            (Some(query), Some(job_run_id)) => {
+                let sql = format!(
+                    "{select} AND fts_match(logs.content, ?5) AND logs.job_run_id = ?6 ORDER BY logs.id {direction} LIMIT ?4"
+                );
+                let mut rows = tx
+                    .query(
+                        &sql,
+                        params![
+                            workflow_run_id,
+                            lower_bound,
+                            upper_bound,
+                            i64::from(limit),
+                            query,
+                            job_run_id
+                        ],
+                    )
+                    .await?;
+                while let Some(row) = rows.next().await? {
+                    result.push(log_row_from_query_row(&row)?);
+                }
+                drop(rows);
+            }
+            (Some(query), None) => {
+                let sql = format!(
+                    "{select} AND fts_match(logs.content, ?5) ORDER BY logs.id {direction} LIMIT ?4"
+                );
+                let mut rows = tx
+                    .query(
+                        &sql,
+                        params![
+                            workflow_run_id,
+                            lower_bound,
+                            upper_bound,
+                            i64::from(limit),
+                            query
+                        ],
+                    )
+                    .await?;
+                while let Some(row) = rows.next().await? {
+                    result.push(log_row_from_query_row(&row)?);
+                }
+                drop(rows);
+            }
+            (None, Some(job_run_id)) => {
+                let sql = format!(
+                    "{select} AND logs.job_run_id = ?5 ORDER BY logs.id {direction} LIMIT ?4"
+                );
+                let mut rows = tx
+                    .query(
+                        &sql,
+                        params![
+                            workflow_run_id,
+                            lower_bound,
+                            upper_bound,
+                            i64::from(limit),
+                            job_run_id
+                        ],
+                    )
+                    .await?;
+                while let Some(row) = rows.next().await? {
+                    result.push(log_row_from_query_row(&row)?);
+                }
+                drop(rows);
+            }
+            (None, None) => {
+                let sql = format!("{select} ORDER BY logs.id {direction} LIMIT ?4");
+                let mut rows = tx
+                    .query(
+                        &sql,
+                        params![workflow_run_id, lower_bound, upper_bound, i64::from(limit)],
+                    )
+                    .await?;
+                while let Some(row) = rows.next().await? {
+                    result.push(log_row_from_query_row(&row)?);
+                }
+                drop(rows);
+            }
         }
-        drop(rows);
         tx.commit().await?;
         Ok((result, global_watermark_id))
     }
@@ -150,4 +213,15 @@ impl LogsRepository {
         }
         Ok(result)
     }
+}
+
+fn log_row_from_query_row(row: &turso::Row) -> DbResult<LogRow> {
+    Ok(LogRow {
+        id: row.get(0)?,
+        workflow_run_id: row.get(1)?,
+        job_run_id: row.get(2)?,
+        order: row.get(3)?,
+        content: row.get(4)?,
+        created_at: row.get(5)?,
+    })
 }

@@ -15,9 +15,11 @@ export function useWorkflowRunsListData() {
             q
               .from({ tag: tagsCollection })
               .where(({ tag }) => eq(workflowRun.id, tag.workflow_run_id))
-              .orderBy(({ tag }) => tag.created_at, "asc"),
+
+              .orderBy(({ tag }) => tag.value, "asc")
+              .orderBy(({ tag }) => tag.id, "asc"),
           ),
         }))
-        .orderBy(({ workflowRun }) => workflowRun.created_at, "desc"),
+        .orderBy(({ workflowRun }) => workflowRun.id, "desc"),
   });
 }

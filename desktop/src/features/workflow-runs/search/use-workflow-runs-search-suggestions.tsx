@@ -1,18 +1,18 @@
 import { ilike } from "@tanstack/db";
 import { useLiveQuery } from "@tanstack/react-db";
 
+import { filterPrefix } from "@/components/search";
 import { tagsCollection, workflowRunsCollection } from "@/db/collections";
 import { WorkflowRunSearchSuggestion } from "./types";
 
 const defaultSuggestions: WorkflowRunSearchSuggestion[] = [
-  { id: "workflow-search-prefix", type: "prefix" as const, text: "@workflow:" },
-  { id: "tag-search-prefix", type: "prefix" as const, text: "@tag:" },
+  { id: "workflow-search-prefix", type: "prefix" as const, text: filterPrefix("workflow") },
+  { id: "tag-search-prefix", type: "prefix" as const, text: filterPrefix("tag") },
 ];
-
 type SuggestionQueryResultItem = {
   type: "workflowId" | "tag";
   text: string;
-  created_at: string;
+  sort_id: number;
 };
 
 /**
@@ -33,10 +33,11 @@ export function useWorkflowRunsSearchSuggestions({
         .select(({ run }) => ({
           type: "workflowId" as const,
           text: run.workflow_id,
-          created_at: run.created_at,
+          sort_id: run.id,
         }))
         .where(({ run }) => ilike(run.workflow_id, `${filterValue}%`))
-        .orderBy(({ run }) => run.created_at, "asc")
+        // Unique numeric keys — `created_at` ties can destabilize live orderBy.
+        .orderBy(({ run }) => run.id, "asc")
         .limit(limit);
 
       const tagsRows = q
@@ -44,13 +45,13 @@ export function useWorkflowRunsSearchSuggestions({
         .select(({ tag }) => ({
           type: "tag" as const,
           text: tag.value,
-          created_at: tag.created_at,
+          sort_id: tag.id,
         }))
         .where(({ tag }) => ilike(tag.value, `${filterValue}%`))
-        .orderBy(({ tag }) => tag.created_at, "asc")
+        .orderBy(({ tag }) => tag.id, "asc")
         .limit(limit);
 
-      return q.unionAll(runIdRows, tagsRows).orderBy(({ created_at }) => created_at);
+      return q.unionAll(runIdRows, tagsRows).orderBy(({ sort_id }) => sort_id);
     },
   });
 
@@ -65,20 +66,20 @@ function createSuggestions(rows: SuggestionQueryResultItem[]): WorkflowRunSearch
 
   return [
     ...defaultSuggestions,
-    ...[...workflowIds]
+    ...[...new Set(workflowIds)]
       .sort((left, right) => left.localeCompare(right))
       .map((workflowId) => ({
         id: `workflow:${workflowId}`,
         type: "token" as const,
-        text: `@workflow:${workflowId}`,
+        text: `${filterPrefix("workflow")}${workflowId}`,
         value: { entity: "workflow" as const, id: workflowId },
       })),
-    ...[...tagValues]
+    ...[...new Set(tagValues)]
       .sort((left, right) => left.localeCompare(right))
       .map((tagValue) => ({
         id: `tag:${tagValue}`,
         type: "token" as const,
-        text: `@tag:${tagValue}`,
+        text: `${filterPrefix("tag")}${tagValue}`,
         value: { entity: "tag" as const, value: tagValue },
       })),
   ];

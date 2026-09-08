@@ -21,6 +21,13 @@ pub struct QueryLogsRequest {
     #[serde(default)]
     #[specta(type = Option<specta_typescript::Number>)]
     pub before_id: Option<i64>,
+    /// Full-text search against log content. Bounds are optional when searching.
+    #[serde(default)]
+    pub search: Option<String>,
+    /// Filter by job run database id (`job_runs.id`).
+    #[serde(default)]
+    #[specta(type = Option<specta_typescript::Number>)]
+    pub job_run_id: Option<i64>,
 }
 
 #[derive(Serialize, Type)]
@@ -59,6 +66,17 @@ pub async fn query_logs(
             "must be nonnegative, ordered exclusive ID bounds",
         ));
     }
+    let search = request
+        .search
+        .as_deref()
+        .map(str::trim)
+        .filter(|query| !query.is_empty());
+    if request.job_run_id.is_some_and(|id| id <= 0) {
+        return Err(CommandError::invalid_input(
+            "job_run_id",
+            "must be greater than zero",
+        ));
+    }
     // after_id present (even 0) → ASC tail; otherwise DESC from newest / before_id.
     let ascending = request.after_id.is_some();
     let (mut rows, global_watermark_id) = state
@@ -70,6 +88,8 @@ pub async fn query_logs(
             request.before_id,
             ascending,
             request.limit + 1,
+            search,
+            request.job_run_id,
         )
         .await
         .map_err(|error| CommandError::internal("query_logs_failed", error.to_string()))?;

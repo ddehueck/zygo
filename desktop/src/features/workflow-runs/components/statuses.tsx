@@ -22,6 +22,11 @@ export function statusLabel(status: string): string {
   return status.replace(/_/g, " ").replace(/^./, (letter) => letter.toUpperCase());
 }
 
+/** Matches `WorkflowRunStatus::is_terminal` in the core models. */
+export function isTerminalWorkflowRunStatus(status: string): boolean {
+  return status === "succeeded" || status === "failed";
+}
+
 function statusIconStatus(status: string): StatusIconStatus | null {
   switch (status) {
     case "succeeded":

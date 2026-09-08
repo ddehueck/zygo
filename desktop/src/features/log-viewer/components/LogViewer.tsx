@@ -1,6 +1,14 @@
+import { LogSearchProvider } from "../search/LogSearchContext";
 import { LogViewport } from "./LogViewport";
+import { Search } from "./Search";
 
 export function LogViewer({ workflowRunId }: { workflowRunId: number }) {
-  // TODO: Add search
-  return <LogViewport key={workflowRunId} workflowRunId={workflowRunId} />;
+  return (
+    <LogSearchProvider workflowRunId={workflowRunId}>
+      <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+        <Search workflowRunId={workflowRunId} />
+        <LogViewport key={workflowRunId} workflowRunId={workflowRunId} />
+      </div>
+    </LogSearchProvider>
+  );
 }

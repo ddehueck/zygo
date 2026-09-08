@@ -16,7 +16,7 @@ import { Icon, iconDefinitions } from "@/components/icons";
 import { useDuration } from "@/hooks/use-duration";
 import { useWatchLogs } from "@/features/log-viewer/hooks/use-watch-logs";
 import { formatDate } from "@/lib/dates";
-import { RunStatus, StatusIcon, statusLabel } from "./statuses";
+import { RunStatus, StatusIcon, isTerminalWorkflowRunStatus, statusLabel } from "./statuses";
 import { TagBadge } from "./TagBadge";
 import { Heading, Text } from "@/components/Text";
 import { sum } from "@/lib/math";
@@ -259,7 +259,10 @@ function DataPreviewCard({ run }: { run: WorkflowRun }) {
 }
 
 function LogsPreviewCard({ run }: { run: WorkflowRun }) {
-  const watcher = useWatchLogs({ workflowRunId: run.id });
+  const watcher = useWatchLogs({
+    workflowRunId: run.id,
+    enabled: !isTerminalWorkflowRunStatus(run.status),
+  });
 
   const logsQuery = useLiveQuery({
     query: (q) =>
@@ -284,11 +287,11 @@ function LogsPreviewCard({ run }: { run: WorkflowRun }) {
       >
         {logsQuery.data.length > 0 ? (
           logsQuery.data.map((log) => (
-            <PreviewRow
-              key={log.id}
-              label={<span className="text-xs text-app-foreground-muted">#{log.id}</span>}
-              value={<span className="block max-w-full truncate">{log.content}</span>}
-            />
+            <div key={log.id} className="min-w-0 py-3 first:pt-4 last:pb-4">
+              <span className="block truncate text-sm font-medium text-app-foreground">
+                {log.content.trimStart()}
+              </span>
+            </div>
           ))
         ) : (
           <Text

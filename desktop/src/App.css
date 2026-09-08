@@ -1,23 +1,30 @@
 @import url("@fontsource-variable/inter");
 @import url("@fontsource-variable/roboto-mono");
 
-*,
-*::before,
-*::after {
-  cursor: default;
-  -webkit-user-select: none;
-  user-select: none;
-}
+/* In @layer base so Tailwind cursor/select utilities can override. */
+@layer base {
+  *,
+  *::before,
+  *::after {
+    cursor: default;
+    -webkit-user-select: none;
+    user-select: none;
+  }
 
-input,
-textarea,
-[contenteditable="true"],
-[contenteditable="true"] *,
-.highlightable,
-.highlightable * {
-  cursor: text;
-  -webkit-user-select: text;
-  user-select: text;
+  input,
+  textarea,
+  [contenteditable="true"],
+  [contenteditable="true"] * {
+    cursor: text;
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  .highlightable,
+  .highlightable * {
+    -webkit-user-select: text;
+    user-select: text;
+  }
 }
 
 :root {

@@ -4,6 +4,8 @@ import { scrollAreaClassName } from "@/components/ScrollArea";
 import { Description, Text } from "@/components/Text";
 import { cn } from "@/components/utils";
 import { useLogViewport } from "../hooks/use-log-viewport";
+import { getLogViewportRow } from "../hooks/use-log-virtualizer";
+import { LogBoundaryRow } from "./LogBoundaryRow";
 import { LogRow } from "./LogRow";
 import { LogViewerStatus } from "./LogViewerStatus";
 import { LogViewportHeader } from "./LogViewportHeader";
@@ -19,8 +21,8 @@ export function LogViewport({ workflowRunId }: { workflowRunId: number }) {
     scrollRef,
     virtualizer,
     isFollowing,
+    showStartBoundary,
     onScroll,
-    loadOlder,
   } = useLogViewport(workflowRunId);
 
   const [showDate, setShowDate] = useState(true);
@@ -69,18 +71,6 @@ export function LogViewport({ workflowRunId }: { workflowRunId: number }) {
         onToggleDate={() => setShowDate((visible) => !visible)}
         onToggleJobId={() => setShowJobId((visible) => !visible)}
       />
-      {hasPreviousPage && (
-        <button
-          type="button"
-          disabled={isFetchingPreviousPage}
-          className="shrink-0 py-2"
-          onClick={loadOlder}
-        >
-          <Text size="small" variant="muted">
-            {isFetchingPreviousPage ? "Loading older logs…" : "Load older logs"}
-          </Text>
-        </button>
-      )}
       <div
         ref={scrollRef}
         onScroll={onScroll}
@@ -95,8 +85,7 @@ export function LogViewport({ workflowRunId }: { workflowRunId: number }) {
           style={{ height: virtualizer.getTotalSize() }}
         >
           {virtualizer.getVirtualItems().map((virtualRow) => {
-            const log = logs[virtualRow.index];
-            if (!log) return null;
+            const row = getLogViewportRow(virtualRow.index, logs, showStartBoundary);
 
             return (
               <div
@@ -106,7 +95,11 @@ export function LogViewport({ workflowRunId }: { workflowRunId: number }) {
                 className="absolute top-0 left-0 w-full"
                 style={{ transform: `translateY(${virtualRow.start}px)` }}
               >
-                <LogRow log={log} showDate={showDate} showJobId={showJobId} />
+                {row.type === "boundary" ? (
+                  <LogBoundaryRow edge={row.edge} isFollowing={isFollowing} />
+                ) : (
+                  <LogRow log={row.log} showDate={showDate} showJobId={showJobId} />
+                )}
               </div>
             );
           })}
