@@ -26,6 +26,8 @@ pub struct JobRun {
     pub public_id: String,
     #[specta(type = specta_typescript::Number)]
     pub workflow_run_id: i64,
+    #[specta(type = specta_typescript::Number)]
+    pub input_id: i64,
     pub job_id: String,
     pub status: String,
     #[specta(type = Option<specta_typescript::Number>)]
@@ -56,8 +58,6 @@ pub struct Log {
     #[specta(type = specta_typescript::Number)]
     pub workflow_run_id: i64,
     pub job_run_id: String,
-    #[specta(type = specta_typescript::Number)]
-    pub order: i64,
     pub content: String,
     pub created_at: String,
 }
@@ -68,7 +68,6 @@ impl From<local::LogRow> for Log {
             id: log.id,
             workflow_run_id: log.workflow_run_id,
             job_run_id: log.job_run_id,
-            order: log.order,
             content: log.content,
             created_at: log.created_at,
         }
@@ -81,8 +80,8 @@ pub struct TauriDataReference {
     pub id: i64,
     #[specta(type = specta_typescript::Number)]
     pub workflow_run_id: i64,
-    #[specta(type = specta_typescript::Number)]
-    pub job_run_id: i64,
+    #[specta(type = Option<specta_typescript::Number>)]
+    pub source_job_run_id: Option<i64>,
     pub uri: String,
     pub is_replay: bool,
     pub created_at: String,

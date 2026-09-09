@@ -17,7 +17,6 @@ impl LogWriter for LogsRepository {
         self.append(
             &workflow_run_id.to_string(),
             &source.job_run_id.to_string(),
-            &source.job_id.to_string(),
             &lines,
         )
         .await

@@ -8,7 +8,7 @@ use crate::db::DbResult as Result;
 use crate::db::{JobRunModel, WorkflowRunJobCounts};
 
 const SELECT_COLUMNS: &str = "
-    id, public_id, workflow_run_id, job_id,
+    id, public_id, workflow_run_id, input_id, job_id,
     status, duration_ms, retry_count, created_at
 ";
 
@@ -63,7 +63,7 @@ impl JobRunRepository {
         let tx = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .await?;
-        tx.execute("INSERT INTO job_runs (public_id, workflow_run_id, job_id, status, duration_ms, retry_count) VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT(public_id) DO UPDATE SET job_id = excluded.job_id, status = excluded.status, duration_ms = excluded.duration_ms, retry_count = excluded.retry_count", params![run.public_id.as_str(), run.workflow_run_id, run.job_id.as_str(), run.status.as_str(), run.duration_ms, run.retry_count]).await?;
+        tx.execute("INSERT INTO job_runs (public_id, workflow_run_id, input_id, job_id, status, duration_ms, retry_count) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) ON CONFLICT(public_id) DO UPDATE SET input_id = excluded.input_id, job_id = excluded.job_id, status = excluded.status, duration_ms = excluded.duration_ms, retry_count = excluded.retry_count", params![run.public_id.as_str(), run.workflow_run_id, run.input_id, run.job_id.as_str(), run.status.as_str(), run.duration_ms, run.retry_count]).await?;
         tx.commit().await?;
         Ok(())
     }
@@ -96,7 +96,8 @@ impl JobRunRepository {
         let tx = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .await?;
-        tx.execute("INSERT INTO job_runs (public_id, workflow_run_id, job_id, status, duration_ms) SELECT ?1, id, ?3, ?4, ?5 FROM workflow_runs WHERE public_id = ?2 ON CONFLICT(public_id) DO UPDATE SET job_id = excluded.job_id, duration_ms = COALESCE(excluded.duration_ms, job_runs.duration_ms), status = excluded.status", params![job_run_id, workflow_run_id, job_id, status, duration_ms]).await?;
+        // Completion cannot invent an input_id; only update a row created by record_started.
+        tx.execute("UPDATE job_runs SET job_id = ?3, duration_ms = COALESCE(?5, job_runs.duration_ms), status = ?4 WHERE public_id = ?1 AND workflow_run_id = (SELECT id FROM workflow_runs WHERE public_id = ?2)", params![job_run_id, workflow_run_id, job_id, status, duration_ms]).await?;
         tx.commit().await?;
         Ok(())
     }

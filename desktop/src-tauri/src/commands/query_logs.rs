@@ -24,7 +24,7 @@ pub struct QueryLogsRequest {
     /// Full-text search against log content. Bounds are optional when searching.
     #[serde(default)]
     pub search: Option<String>,
-    /// Filter by job run database id (`job_runs.id`).
+    /// Filter by job run database id (`job_runs.id`); resolved to the public id for log rows.
     #[serde(default)]
     #[specta(type = Option<specta_typescript::Number>)]
     pub job_run_id: Option<i64>,
