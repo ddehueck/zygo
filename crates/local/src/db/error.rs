@@ -6,8 +6,6 @@ pub enum Error {
     Serialization(#[from] serde_json::Error),
     #[error("invalid change type: {0}")]
     InvalidChangeType(i64),
-    #[error("job log order exceeds the supported integer range")]
-    LogOrderOverflow,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
