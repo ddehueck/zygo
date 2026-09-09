@@ -18,6 +18,7 @@ export type JobRun = {
 	id: number,
 	public_id: string,
 	workflow_run_id: number,
+	input_id: number,
 	job_id: string,
 	status: string,
 	duration_ms: number | null,
@@ -37,7 +38,6 @@ export type Log = {
 	id: number,
 	workflow_run_id: number,
 	job_run_id: string,
-	order: number,
 	content: string,
 	created_at: string,
 };
@@ -89,7 +89,7 @@ export type Tag = {
 export type TauriDataReference = {
 	id: number,
 	workflow_run_id: number,
-	job_run_id: number,
+	source_job_run_id: number | null,
 	uri: string,
 	is_replay: boolean,
 	created_at: string,

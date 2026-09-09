@@ -62,7 +62,7 @@ function JobDataReferences({
   const references = referencesQuery.data
     .filter(
       (reference) =>
-        reference.workflow_run_id === workflowRun?.id && reference.job_run_id === jobRun?.id,
+        reference.workflow_run_id === workflowRun?.id && reference.source_job_run_id === jobRun?.id,
     )
     .sort((a, b) => a.created_at.localeCompare(b.created_at));
 

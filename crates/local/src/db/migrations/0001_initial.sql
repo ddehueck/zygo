@@ -18,13 +18,15 @@ CREATE TABLE IF NOT EXISTS job_runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     public_id TEXT NOT NULL UNIQUE,
     workflow_run_id INTEGER NOT NULL,
+    input_id INTEGER NOT NULL,
     job_id TEXT NOT NULL,
     status TEXT NOT NULL,
     duration_ms INTEGER,
     retry_count INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    FOREIGN KEY (workflow_run_id) REFERENCES workflow_runs(id) ON DELETE CASCADE
+    FOREIGN KEY (workflow_run_id) REFERENCES workflow_runs(id) ON DELETE CASCADE,
+    FOREIGN KEY (input_id) REFERENCES data_references(id) ON DELETE RESTRICT
 );
 
 CREATE INDEX IF NOT EXISTS job_runs_workflow_run_id ON job_runs (workflow_run_id, created_at);
@@ -33,18 +35,18 @@ CREATE INDEX IF NOT EXISTS job_runs_workflow_run_id ON job_runs (workflow_run_id
 CREATE TABLE IF NOT EXISTS data_references (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     workflow_run_id INTEGER NOT NULL,
-    job_run_id INTEGER NOT NULL,
+    source_job_run_id INTEGER, -- workflow inputs will have no source job id
     uri TEXT NOT NULL,
     is_replay INTEGER NOT NULL DEFAULT 0 CHECK (is_replay IN (0, 1)),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    UNIQUE (workflow_run_id, job_run_id, uri),
+    UNIQUE (workflow_run_id, source_job_run_id, uri),
     FOREIGN KEY (workflow_run_id) REFERENCES workflow_runs(id) ON DELETE CASCADE,
-    FOREIGN KEY (job_run_id) REFERENCES job_runs(id) ON DELETE CASCADE
+    FOREIGN KEY (source_job_run_id) REFERENCES job_runs(id) ON DELETE RESTRICT
 );
 
-CREATE INDEX IF NOT EXISTS data_references_job_run_id
-ON data_references (workflow_run_id, job_run_id, id);
+CREATE INDEX IF NOT EXISTS data_references_source_job_run_id
+ON data_references (workflow_run_id, source_job_run_id, id);
 
 CREATE INDEX IF NOT EXISTS data_references_workflow_run_id
 ON data_references (workflow_run_id, id);
@@ -60,8 +62,8 @@ CREATE TABLE IF NOT EXISTS tags (
 
     UNIQUE (workflow_run_id, job_run_id, data_reference_id, value),
     FOREIGN KEY (workflow_run_id) REFERENCES workflow_runs(id) ON DELETE CASCADE,
-    FOREIGN KEY (job_run_id) REFERENCES job_runs(id) ON DELETE CASCADE,
-    FOREIGN KEY (data_reference_id) REFERENCES data_references(id) ON DELETE CASCADE
+    FOREIGN KEY (job_run_id) REFERENCES job_runs(id) ON DELETE RESTRICT,
+    FOREIGN KEY (data_reference_id) REFERENCES data_references(id) ON DELETE RESTRICT
 );
 
 CREATE INDEX IF NOT EXISTS tags_workflow_run_id ON tags (workflow_run_id, value, id);

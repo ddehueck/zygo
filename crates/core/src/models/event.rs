@@ -31,6 +31,7 @@ pub enum EventKind {
 pub struct JobStartedData {
     pub job_id: JobId,
     pub job_run_id: JobRunId,
+    pub input: DataReference,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

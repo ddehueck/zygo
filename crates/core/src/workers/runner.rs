@@ -9,8 +9,8 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use crate::actor::ActorMessage;
 use crate::ipc::{self, v0::RunCommandArgs};
 use crate::models::{
-    Entrypoint, Event, EventId, EventKind, JobFailedData, JobRunSource, JobStartedData,
-    JobSucceededData, Source,
+    DataReference, Entrypoint, Event, EventId, EventKind, JobFailedData, JobRunSource,
+    JobStartedData, JobSucceededData, Source,
 };
 use crate::workers::WorkerContext;
 use crate::{AppDeps, LogWriter};
@@ -268,6 +268,10 @@ impl<D: AppDeps> JobRunner<D> {
         let kind = EventKind::JobStarted(JobStartedData {
             job_id: self.source.job_id.clone(),
             job_run_id: self.source.job_run_id.clone(),
+            input: DataReference {
+                uri: self.args.data_reference_uri.clone(),
+                version: self.args.data_reference_version.clone(),
+            },
         });
         self.send_event(self.build_event(kind)).await
     }

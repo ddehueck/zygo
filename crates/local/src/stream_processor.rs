@@ -46,10 +46,27 @@ impl LocalStreamProcessor {
         match &event.kind {
             EventKind::JobStarted(data) => {
                 let job_run_id = data.job_run_id.to_string();
+                let input_id = self
+                    .repos
+                    .data_references
+                    .get_id_by_uri(&workflow_run_id, &data.input.uri)
+                    .await?
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "input data reference with URI {:?} not found for workflow run {}",
+                            data.input.uri,
+                            workflow_run_id
+                        )
+                    })?;
                 self.job_started_at.insert(job_run_id.clone(), timestamp);
                 self.repos
                     .job_runs
-                    .record_started(&workflow_run_id, &job_run_id, &data.job_id.to_string())
+                    .record_started(
+                        &workflow_run_id,
+                        &job_run_id,
+                        &data.job_id.to_string(),
+                        input_id,
+                    )
                     .await?;
             }
             EventKind::JobSucceeded(data) => {
@@ -84,14 +101,24 @@ impl LocalStreamProcessor {
                         .data_references
                         .insert(
                             &workflow_run_id,
-                            &source.job_run_id.to_string(),
+                            Some(&source.job_run_id.to_string()),
                             &data.data_reference.uri,
                             event.is_replay,
                         )
                         .await?;
                 }
             }
-            EventKind::ChannelItemInserted(_) => {}
+            EventKind::ChannelItemInserted(data) => {
+                self.repos
+                    .data_references
+                    .insert(
+                        &workflow_run_id,
+                        None,
+                        &data.data_reference.uri,
+                        event.is_replay,
+                    )
+                    .await?;
+            }
         }
 
         self.refresh_workflow_run(&workflow_run_id, &timestamp_value)

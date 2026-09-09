@@ -60,6 +60,7 @@ impl From<local::JobRunModel> for JobRun {
             id: run.id,
             public_id: run.public_id,
             workflow_run_id: run.workflow_run_id,
+            input_id: run.input_id,
             job_id: run.job_id,
             status: run.status,
             duration_ms: run.duration_ms,
@@ -74,7 +75,7 @@ impl From<local::DataReferenceModel> for TauriDataReference {
         Self {
             id: reference.id,
             workflow_run_id: reference.workflow_run_id,
-            job_run_id: reference.job_run_id,
+            source_job_run_id: reference.source_job_run_id,
             uri: reference.uri,
             is_replay: reference.is_replay,
             created_at: reference.created_at,

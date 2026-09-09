@@ -21,7 +21,7 @@ enum WatchedJobRun {
 pub struct LogWatcher {
     repository: LogsRepository,
     job_run_id: WatchedJobRun,
-    after_order: i64,
+    after_id: i64,
     next_poll: Instant,
 }
 
@@ -31,7 +31,7 @@ impl LogWatcher {
         Self {
             repository,
             job_run_id: WatchedJobRun::PublicId(job_run_id.to_string()),
-            after_order: 0,
+            after_id: 0,
             next_poll: Instant::now(),
         }
     }
@@ -41,7 +41,7 @@ impl LogWatcher {
         Self {
             repository,
             job_run_id: WatchedJobRun::DatabaseId(job_run_id),
-            after_order: 0,
+            after_id: 0,
             next_poll: Instant::now(),
         }
     }
@@ -58,12 +58,12 @@ impl LogWatcher {
         let result = match &self.job_run_id {
             WatchedJobRun::PublicId(job_run_id) => {
                 self.repository
-                    .list_after(job_run_id, self.after_order, PAGE_SIZE)
+                    .list_after(job_run_id, self.after_id, PAGE_SIZE)
                     .await
             }
             WatchedJobRun::DatabaseId(job_run_id) => {
                 self.repository
-                    .list_after_by_id(*job_run_id, self.after_order, PAGE_SIZE)
+                    .list_after_by_id(*job_run_id, self.after_id, PAGE_SIZE)
                     .await
             }
         };
@@ -71,7 +71,7 @@ impl LogWatcher {
         self.next_poll = Instant::now() + POLL_INTERVAL;
         let rows = result?;
         if let Some(last) = rows.last() {
-            self.after_order = last.order;
+            self.after_id = last.id;
         }
         if rows.len() == PAGE_SIZE as usize {
             self.next_poll = Instant::now();
