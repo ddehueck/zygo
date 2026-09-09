@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS job_runs (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (workflow_run_id) REFERENCES workflow_runs(id) ON DELETE CASCADE,
-    FOREIGN KEY (input_id) REFERENCES inputs(id) ON DELETE RESTRICT
+    FOREIGN KEY (input_id) REFERENCES data_references(id) ON DELETE RESTRICT
 );
 
 CREATE INDEX IF NOT EXISTS job_runs_workflow_run_id ON job_runs (workflow_run_id, created_at);
@@ -40,13 +40,13 @@ CREATE TABLE IF NOT EXISTS data_references (
     is_replay INTEGER NOT NULL DEFAULT 0 CHECK (is_replay IN (0, 1)),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    UNIQUE (workflow_run_id, job_run_id, uri),
+    UNIQUE (workflow_run_id, source_job_run_id, uri),
     FOREIGN KEY (workflow_run_id) REFERENCES workflow_runs(id) ON DELETE CASCADE,
-    FOREIGN KEY (job_run_id) REFERENCES job_runs(id) ON DELETE RESTRICT
+    FOREIGN KEY (source_job_run_id) REFERENCES job_runs(id) ON DELETE RESTRICT
 );
 
-CREATE INDEX IF NOT EXISTS data_references_job_run_id
-ON data_references (workflow_run_id, job_run_id, id);
+CREATE INDEX IF NOT EXISTS data_references_source_job_run_id
+ON data_references (workflow_run_id, source_job_run_id, id);
 
 CREATE INDEX IF NOT EXISTS data_references_workflow_run_id
 ON data_references (workflow_run_id, id);

@@ -257,7 +257,7 @@ impl From<TagSqlRow> for TagModel {
 pub struct DataReferenceModel {
     pub id: i64,
     pub workflow_run_id: i64,
-    pub job_run_id: i64,
+    pub source_job_run_id: Option<i64>,
     pub uri: String,
     pub is_replay: bool,
     pub created_at: String,
@@ -278,7 +278,7 @@ impl DataReferenceModel {
 struct DataReferenceSqlRow {
     id: i64,
     workflow_run_id: i64,
-    job_run_id: i64,
+    source_job_run_id: Option<i64>,
     uri: String,
     is_replay: i64,
     created_at: String,
@@ -289,7 +289,7 @@ impl DataReferenceSqlRow {
         Ok(Self {
             id: row.get(rows.column_index("id")?)?,
             workflow_run_id: row.get(rows.column_index("workflow_run_id")?)?,
-            job_run_id: row.get(rows.column_index("job_run_id")?)?,
+            source_job_run_id: row.get(rows.column_index("source_job_run_id")?)?,
             uri: row.get(rows.column_index("uri")?)?,
             is_replay: row.get(rows.column_index("is_replay")?)?,
             created_at: row.get(rows.column_index("created_at")?)?,
@@ -302,7 +302,7 @@ impl From<DataReferenceSqlRow> for DataReferenceModel {
         Self {
             id: row.id,
             workflow_run_id: row.workflow_run_id,
-            job_run_id: row.job_run_id,
+            source_job_run_id: row.source_job_run_id,
             uri: row.uri,
             is_replay: row.is_replay != 0,
             created_at: row.created_at,

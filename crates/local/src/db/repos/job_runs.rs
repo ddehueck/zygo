@@ -73,12 +73,13 @@ impl JobRunRepository {
         workflow_run_id: &str,
         job_run_id: &str,
         job_id: &str,
+        input_id: i64,
     ) -> Result<()> {
         let mut connection = self.database.connection.lock().await;
         let tx = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .await?;
-        tx.execute("INSERT INTO job_runs (public_id, workflow_run_id, job_id, status) SELECT ?1, id, ?3, 'running' FROM workflow_runs WHERE public_id = ?2 ON CONFLICT(public_id) DO UPDATE SET job_id = excluded.job_id, status = excluded.status, duration_ms = NULL", [job_run_id, workflow_run_id, job_id]).await?;
+        tx.execute("INSERT INTO job_runs (public_id, workflow_run_id, input_id, job_id, status) SELECT ?1, id, ?4, ?3, 'running' FROM workflow_runs WHERE public_id = ?2 ON CONFLICT(public_id) DO UPDATE SET input_id = excluded.input_id, job_id = excluded.job_id, status = excluded.status, duration_ms = NULL", params![job_run_id, workflow_run_id, job_id, input_id]).await?;
         tx.commit().await?;
         Ok(())
     }

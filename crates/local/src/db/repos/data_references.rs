@@ -9,7 +9,7 @@ use crate::db::DbResult as Result;
 const SELECT_COLUMNS: &str = "
     id,
     workflow_run_id,
-    job_run_id,
+    source_job_run_id,
     uri,
     is_replay,
     created_at
@@ -61,13 +61,28 @@ impl DataReferenceRepository {
     pub async fn insert(
         &self,
         workflow_run_id: &str,
-        job_run_id: &str,
+        source_job_run_id: Option<&str>,
         uri: &str,
         is_replay: bool,
     ) -> Result<()> {
         let connection = self.database.connection.lock().await;
-        connection.execute("INSERT INTO data_references (workflow_run_id, job_run_id, uri, is_replay) SELECT workflow_runs.id, job_runs.id, ?3, ?4 FROM workflow_runs JOIN job_runs ON job_runs.workflow_run_id = workflow_runs.id WHERE workflow_runs.public_id = ?1 AND job_runs.public_id = ?2 ON CONFLICT(workflow_run_id, job_run_id, uri) DO NOTHING", params![workflow_run_id, job_run_id, uri, i64::from(is_replay)]).await?;
+        connection.execute("INSERT INTO data_references (workflow_run_id, source_job_run_id, uri, is_replay) SELECT workflow_runs.id, (SELECT id FROM job_runs WHERE public_id = ?2 AND workflow_run_id = workflow_runs.id), ?3, ?4 FROM workflow_runs WHERE workflow_runs.public_id = ?1 ON CONFLICT(workflow_run_id, source_job_run_id, uri) DO NOTHING", params![workflow_run_id, source_job_run_id, uri, i64::from(is_replay)]).await?;
         Ok(())
+    }
+
+    pub async fn get_id_by_uri(&self, workflow_run_id: &str, uri: &str) -> Result<Option<i64>> {
+        let connection = self.database.connection.lock().await;
+        let mut rows = connection
+            .query(
+                "SELECT data_references.id FROM data_references JOIN workflow_runs ON workflow_runs.id = data_references.workflow_run_id WHERE workflow_runs.public_id = ?1 AND data_references.uri = ?2 ORDER BY data_references.id LIMIT 1",
+                [workflow_run_id, uri],
+            )
+            .await?;
+        rows.next()
+            .await?
+            .map(|row| row.get(0))
+            .transpose()
+            .map_err(Into::into)
     }
 
     pub async fn get_by_id(&self, id: i64) -> Result<Option<DataReferenceModel>> {
@@ -90,7 +105,7 @@ impl DataReferenceRepository {
         job_run_id: &str,
     ) -> Result<Vec<DataReferenceModel>> {
         let connection = self.database.connection.lock().await;
-        let mut rows = connection.query(&format!("SELECT {SELECT_COLUMNS} FROM data_references WHERE workflow_run_id = (SELECT id FROM workflow_runs WHERE public_id = ?1) AND job_run_id = (SELECT id FROM job_runs WHERE public_id = ?2) ORDER BY created_at ASC, id ASC"), [workflow_run_id, job_run_id]).await?;
+        let mut rows = connection.query(&format!("SELECT {SELECT_COLUMNS} FROM data_references WHERE workflow_run_id = (SELECT id FROM workflow_runs WHERE public_id = ?1) AND source_job_run_id = (SELECT id FROM job_runs WHERE public_id = ?2) ORDER BY created_at ASC, id ASC"), [workflow_run_id, job_run_id]).await?;
         read_rows(&mut rows).await
     }
 
