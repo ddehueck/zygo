@@ -14,6 +14,7 @@ import {
 
 import { Icon, iconDefinitions } from "@/components/icons";
 import { useDuration } from "@/hooks/use-duration";
+import { getFileNameFromUri } from "@/features/data-viewer/lib/file-name";
 import { useWatchLogs } from "@/features/log-viewer/hooks/use-watch-logs";
 import { formatDate } from "@/lib/dates";
 import { RunStatus, StatusIcon, isTerminalWorkflowRunStatus, statusLabel } from "./statuses";
@@ -214,11 +215,6 @@ function JobsPreviewCard({
   );
 }
 
-function getFileNameFromUri(uri: string) {
-  const parts = uri.split("/");
-  return parts[parts.length - 1] ?? uri;
-}
-
 function DataPreviewCard({ run }: { run: WorkflowRun }) {
   const referencesQuery = useLiveQuery({
     query: (q) =>
@@ -231,30 +227,37 @@ function DataPreviewCard({ run }: { run: WorkflowRun }) {
   const visibleReferences = referencesQuery.data;
 
   return (
-    <PreviewCard
-      title="Data"
-      summary={`${referencesQuery.data.length} file${referencesQuery.data.length === 1 ? "" : "s"} · 42.1 GB`}
-      footer="Browse outputs"
+    <Link
+      to="/runs/$workflowRunId/data"
+      params={{ workflowRunId: String(run.id) }}
+      aria-label="Browse data lineage for this workflow run"
+      className="group block h-full rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-app-accent"
     >
-      <div>
-        {visibleReferences.map((reference) => (
-          <div
-            key={reference.id}
-            className="flex min-w-0 items-center gap-3 py-3 first:pt-4 last:pb-4"
-          >
-            <Icon
-              aria-hidden
-              className="size-4 shrink-0 text-app-foreground-muted"
-              definition={iconDefinitions.file}
-            />
-            <span className="min-w-0 flex-1 truncate text-sm font-medium text-app-foreground">
-              {getFileNameFromUri(reference.uri)}
-            </span>
-            <span className="shrink-0 text-xs text-app-foreground-muted">48 KB</span>
-          </div>
-        ))}
-      </div>
-    </PreviewCard>
+      <PreviewCard
+        title="Data"
+        summary={`${referencesQuery.data.length} file${referencesQuery.data.length === 1 ? "" : "s"} · 42.1 GB`}
+        footer="Browse lineage"
+      >
+        <div>
+          {visibleReferences.map((reference) => (
+            <div
+              key={reference.id}
+              className="flex min-w-0 items-center gap-3 py-3 first:pt-4 last:pb-4"
+            >
+              <Icon
+                aria-hidden
+                className="size-4 shrink-0 text-app-foreground-muted"
+                definition={iconDefinitions.file}
+              />
+              <span className="min-w-0 flex-1 truncate text-sm font-medium text-app-foreground">
+                {getFileNameFromUri(reference.uri)}
+              </span>
+              <span className="shrink-0 text-xs text-app-foreground-muted">48 KB</span>
+            </div>
+          ))}
+        </div>
+      </PreviewCard>
+    </Link>
   );
 }
 

@@ -193,14 +193,14 @@ export function Cell(props: CellProps) {
       {composeRenderProps(
         props.children,
         (children, { hasChildItems, isTreeColumn, isExpanded, isDisabled }) => (
-          <>
+          <span className="inline-flex min-w-0 max-w-full items-center">
             {hasChildItems && isTreeColumn && (
               <Button slot="chevron" className={expandButton({ isDisabled })}>
                 <ChevronRight aria-hidden className={chevron({ isExpanded, isDisabled })} />
               </Button>
             )}
             {children}
-          </>
+          </span>
         ),
       )}
     </AriaCell>
