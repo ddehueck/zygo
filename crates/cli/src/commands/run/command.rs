@@ -178,11 +178,7 @@ fn select_next(state: &mut TableState, item_count: usize) {
     state.select(Some(selected));
 }
 
-pub async fn run_workflow(
-    target: &str,
-    fsspec_uri: &str,
-    workers: Option<usize>,
-) -> anyhow::Result<()> {
+pub async fn run_workflow(target: &str, path: &str, workers: Option<usize>) -> anyhow::Result<()> {
     // 1. Find the current python executable in the current working directory
     // Start with `uv python` for now
     let python = Command::new("uv").args(["python", "find"]).output()?;
@@ -192,6 +188,17 @@ pub async fn run_workflow(
     );
     let python = String::from_utf8_lossy(&python.stdout).trim().to_owned();
     let cwd = std::env::current_dir()?.to_string_lossy().into_owned();
+
+    // Covert the path into a fsspec URI with an absolute path
+    // todo: this needs to mature
+    let fsspec_uri = if path.starts_with("file://") {
+        path.to_string()
+    } else {
+        format!(
+            "file://{}",
+            std::path::Path::new(path).canonicalize()?.display()
+        )
+    };
     // println!("{python}");
 
     // 2. Ensure that the zygo package is in the executable's environment
@@ -221,7 +228,7 @@ pub async fn run_workflow(
         .iter()
         .find(|channel| channel.id == metadata.input_channel_id)
         .map_or_else(Vec::new, |channel| channel.accepted_file_extensions.clone());
-    let inputs = input_data_references(fsspec_uri, &input_extensions)?;
+    let inputs = input_data_references(&fsspec_uri, &input_extensions)?;
 
     let schema = python_cli.workflow_schema_from_metadata(metadata.clone())?;
     // println!("built workflow schema: {schema:?}");
@@ -460,7 +467,7 @@ pub async fn run_workflow(
                 terminal.draw(|frame| {
                     last_area = frame.area();
                     frame.render_stateful_widget(
-                        WorkflowRunView::new(&summary, target, fsspec_uri),
+                        WorkflowRunView::new(&summary, target, &fsspec_uri),
                         frame.area(),
                         &mut table_state,
                     );
