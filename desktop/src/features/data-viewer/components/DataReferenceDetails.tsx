@@ -1,6 +1,8 @@
 import { Link } from "@tanstack/react-router";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
+import { Button } from "@/components/Button";
+import { CopyableText } from "@/components/CopyableText";
 import { Icon, iconDefinitions } from "@/components/icons";
 import { Description, Heading, Text } from "@/components/Text";
 import { formatDate } from "@/lib/dates";
@@ -9,6 +11,7 @@ import { RunStatus } from "@/features/workflow-runs/components/statuses";
 
 import type { DataTreeNode } from "../lib/build-data-tree";
 import { getProducedByJob, presentDataRow } from "../lib/data-lookups";
+import { localPathFromUri, revealLocalUri } from "../lib/reveal-local-path";
 import type { DataTreeIndex } from "../lib/data-tree-index";
 
 type DataReferenceDetailsProps = {
@@ -17,17 +20,20 @@ type DataReferenceDetailsProps = {
   workflowRunId: string;
 };
 
-export function DataReferenceDetails({
-  node,
-  index,
-  workflowRunId,
-}: DataReferenceDetailsProps) {
+export function DataReferenceDetails({ node, index, workflowRunId }: DataReferenceDetailsProps) {
+  const [revealError, setRevealError] = useState(false);
   const reference = index.referencesById.get(node.id);
   if (!reference) return null;
 
+  const referenceUri = reference.uri;
   const { fileName, kind, sizeLabel } = presentDataRow(reference);
   const producedByJob = getProducedByJob(reference, index.jobsById);
   const tags = index.tagsByRefId.get(node.id) ?? [];
+  const canReveal = localPathFromUri(referenceUri) !== null;
+
+  async function revealReference() {
+    setRevealError(!(await revealLocalUri(referenceUri)));
+  }
 
   return (
     <aside
@@ -50,13 +56,26 @@ export function DataReferenceDetails({
             {kind} · {sizeLabel}
           </Description>
         </div>
+        <Button
+          aria-label="Open in directory"
+          className="h-8 shrink-0 px-2.5"
+          isDisabled={!canReveal}
+          onPress={revealReference}
+          variant="secondary"
+        >
+          <Icon aria-hidden className="size-3.5" definition={iconDefinitions.open} />
+          Open
+        </Button>
       </div>
 
       <dl className="mt-6 space-y-4">
         <DetailField label="URI">
-          <Text size="small" className="block break-all font-mono">
-            {reference.uri}
-          </Text>
+          <CopyableText value={referenceUri} label="URI" onTextPress={revealReference} />
+          {revealError && (
+            <Text size="small" variant="danger" role="alert" className="mt-1 block">
+              Unable to reveal this URI. It may not be a local file path.
+            </Text>
+          )}
         </DetailField>
 
         <DetailField label="Created">{formatDate(reference.created_at)}</DetailField>
@@ -111,8 +130,8 @@ export function DataReferenceDetails({
             Downstream outputs
           </Heading>
           <Description className="mt-1">
-            {node.children.length} file{node.children.length === 1 ? "" : "s"} produced from jobs that
-            consumed this input
+            {node.children.length} file{node.children.length === 1 ? "" : "s"} produced from jobs
+            that consumed this input
           </Description>
           <ul className="mt-3 space-y-2">
             {node.children.map((child) => {
