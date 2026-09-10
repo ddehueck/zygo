@@ -113,14 +113,15 @@ class StoreImpl(StoreProtocol):
         # "global" = shared across runs (still under root, but outside run namespace)
         return posixpath.join(self._options.root_uri.path, "store", "global")
 
-    def _uri_for_key(self, key: str, scope: Scope) -> str:
+    def _uri_for_key(self, key: str, scope: Scope) -> FsspecUri:
         # TODO: Better interface for passing URIs directly across the whole store.
         if self._is_uri(key):
-            return key
+            return FsspecUri(key)
 
         key = _normalize_key(key)
         prefix = self._prefix(scope)
-        return posixpath.join(prefix, key)
+        uri = posixpath.join(prefix, key)
+        return FsspecUri(f"{self._options.root_uri.protocol}://{uri}")
 
     @override
     def put(
@@ -134,7 +135,7 @@ class StoreImpl(StoreProtocol):
         uri = self._uri_for_key(key, scope)
 
         # Ensure parent directories for local-ish FS that require it
-        parent = posixpath.dirname(uri)
+        parent = posixpath.dirname(uri.path)
         if self._options.root_uri.is_local():
             self._fs.makedirs(parent, exist_ok=True)  # type: ignore
 
@@ -145,7 +146,7 @@ class StoreImpl(StoreProtocol):
         write_stdout_ipc_message(
             DataReferenceCreated(
                 data_reference=DataReference(
-                    uri=uri,
+                    uri=str(uri),
                     version="0",
                 )
             )
@@ -153,7 +154,7 @@ class StoreImpl(StoreProtocol):
 
         return Reference(
             key=key,
-            uri=FsspecUri(uri),
+            uri=uri,
         )
 
     @override
@@ -239,7 +240,7 @@ class StoreImpl(StoreProtocol):
     ) -> StoreContextManager[TmpFileProtocol]:
         reference = Reference(
             key=key,
-            uri=FsspecUri(self._uri_for_key(key, scope)),
+            uri=self._uri_for_key(key, scope),
         )
         return _OpenFileContext(self, reference, mode)
 

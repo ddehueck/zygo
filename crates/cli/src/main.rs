@@ -27,7 +27,7 @@ enum Command {
     /// Run a workflow given a target and fsspec URI
     Run {
         target: String,
-        fsspec_uri: String,
+        path: String,
         #[arg(long)]
         workers: Option<usize>,
     },
@@ -42,8 +42,8 @@ async fn main() -> anyhow::Result<()> {
         Command::Nuke => nuke_database(),
         Command::Run {
             target,
-            fsspec_uri,
+            path,
             workers,
-        } => run_workflow(&target, &fsspec_uri, workers).await,
+        } => run_workflow(&target, &path, workers).await,
     }
 }

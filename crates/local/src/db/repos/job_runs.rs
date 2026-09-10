@@ -96,7 +96,6 @@ impl JobRunRepository {
         let tx = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .await?;
-        // Completion cannot invent an input_id; only update a row created by record_started.
         tx.execute("UPDATE job_runs SET job_id = ?3, duration_ms = COALESCE(?5, job_runs.duration_ms), status = ?4 WHERE public_id = ?1 AND workflow_run_id = (SELECT id FROM workflow_runs WHERE public_id = ?2)", params![job_run_id, workflow_run_id, job_id, status, duration_ms]).await?;
         tx.commit().await?;
         Ok(())

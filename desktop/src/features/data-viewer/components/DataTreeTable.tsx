@@ -2,6 +2,7 @@ import { Collection, type Selection } from "react-aria-components/Table";
 import { useState } from "react";
 
 import { Icon, iconDefinitions } from "@/components/icons";
+import { IconButton } from "@/components/IconButton";
 import { Cell, Column, Row, Table, TableBody, TableHeader } from "@/components/Table";
 import { Text } from "@/components/Text";
 import { formatDate } from "@/lib/dates";
@@ -9,6 +10,7 @@ import { formatDate } from "@/lib/dates";
 import { collectExpandedKeysUpToDepth, type DataTreeNode } from "../lib/build-data-tree";
 import { getProducedByJob, presentDataRow } from "../lib/data-lookups";
 import type { DataTreeIndex } from "../lib/data-tree-index";
+import { localPathFromUri, revealLocalUri } from "../lib/reveal-local-path";
 
 const INITIAL_EXPAND_DEPTH = 10;
 
@@ -46,13 +48,7 @@ export function DataTreeTable({
       className="min-w-180"
     >
       <TableHeader className="bg-app-bg-surface backdrop-blur-none">
-        <Column
-          id="name"
-          isRowHeader
-          defaultWidth="2fr"
-          minWidth={220}
-          className={columnClassName}
-        >
+        <Column id="name" isRowHeader defaultWidth="2fr" minWidth={220} className={columnClassName}>
           Name
         </Column>
         <Column id="kind" defaultWidth={100} minWidth={88} className={columnClassName}>
@@ -66,6 +62,9 @@ export function DataTreeTable({
         </Column>
         <Column id="created" defaultWidth={160} minWidth={120} className={columnClassName}>
           Created
+        </Column>
+        <Column id="open" defaultWidth={72} minWidth={72} className={columnClassName}>
+          Open
         </Column>
       </TableHeader>
       <TableBody items={roots} renderEmptyState={() => <EmptyState />}>
@@ -115,6 +114,17 @@ export function DataTreeTable({
                 <Text size="small" variant="muted">
                   {formatDate(reference.created_at)}
                 </Text>
+              </Cell>
+              <Cell>
+                <IconButton
+                  aria-label={`Open ${fileName} in directory`}
+                  isDisabled={localPathFromUri(reference.uri) === null}
+                  onPress={() => {
+                    void revealLocalUri(reference.uri);
+                  }}
+                >
+                  <Icon aria-hidden className="size-4" definition={iconDefinitions.open} />
+                </IconButton>
               </Cell>
               <Collection items={node.children}>{renderNode}</Collection>
             </Row>
