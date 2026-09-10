@@ -19,9 +19,9 @@ def square_values(input: int, *, ctx: JobContext) -> int:
 
     rand_wait = random.randint(1, 15)
     if rand_wait % 2 == 0:
-        tags.add("wait_type", "even")
+        tags.add("even")
     else:
-        tags.add("wait_type", "odd")
+        tags.add("odd")
 
     for i in range(rand_wait):
         print(f"[square_values] Waiting: {i + 1}/{rand_wait}")  # ruff: ignore[print]

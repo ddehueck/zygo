@@ -21,6 +21,10 @@ class FsspecUri:
             if not path and protocol not in {"memory"}:
                 raise ValueError(f"Empty path for protocol: {protocol}")
 
+            # We should only ever use absolute uris for local filesf
+            if self.is_local() and not self.is_absolute():
+                object.__setattr__(self, "uri", self.to_absolute().uri)
+
         except Exception as e:
             raise ValueError(f"Invalid fsspec URI: {self.uri} ({e})") from e
 
@@ -42,16 +46,17 @@ class FsspecUri:
         """Get the key of the fsspec URI."""
         return Path(self.path).name
 
-    def to_absolute(self, root: str | None = None) -> "FsspecUri":
+    def to_absolute(self) -> "FsspecUri":
         """Convert the fsspec URI to an absolute file URI."""
-        absolute_path = Path(root) / self.path if root else Path(self.path).resolve()
+        absolute_path = Path(self.path).resolve()
+        print(f"Converting to absolute: {absolute_path}")
         return FsspecUri(f"{self.protocol}://{absolute_path}")
 
     def is_absolute(self) -> bool:
         """Check if the fsspec URI is absolute."""
         # TODO: Maybe split out the absolute/relative stuff into a seperate
         # local only subset of FsspecUri?
-        return self.protocol in {"file", "memory"} and not self.path.startswith("/")
+        return self.protocol in {"file", "memory"} and self.path.startswith("/")
 
     def is_local(self) -> bool:
         """Check if the fsspec URI is a local filesystem."""
