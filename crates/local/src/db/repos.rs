@@ -8,6 +8,7 @@ mod paginator;
 pub use paginator::{Cursor, CursorPaginator, Page};
 mod tags;
 mod workflow_runs;
+mod workflows;
 
 pub use self::{
     cdc::CdcRepository,
@@ -17,6 +18,7 @@ pub use self::{
     logs::{LogRow, LogsRepository},
     tags::TagsRepository,
     workflow_runs::WorkflowRunRepository,
+    workflows::WorkflowRepository,
 };
 
 /// Repositories owned by a [`ZygoLocalService`](crate::ZygoLocalService).
@@ -29,6 +31,7 @@ pub struct Repos {
     pub tags: TagsRepository,
     pub data_references: DataReferenceRepository,
     pub workflow_runs: WorkflowRunRepository,
+    pub workflows: WorkflowRepository,
     pub job_runs: JobRunRepository,
     pub logs: LogsRepository,
 }

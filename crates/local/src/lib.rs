@@ -11,7 +11,7 @@ mod sync;
 
 // This is the single entrypoint for the local Zygo service.
 pub use config::{DEFAULT_DATABASE_BUSY_TIMEOUT, ZygoLocalConfig};
-pub use service::ZygoLocalService;
+pub use service::{ZygoLocalRun, ZygoLocalService, ZygoLocalWorkflow};
 
 use dates::format_database_timestamp;
 
@@ -19,8 +19,8 @@ use dates::format_database_timestamp;
 pub use db::{
     CdcChangeType, CdcRepository, CdcRow, Cursor, CursorPaginator, DataReferenceModel,
     DataReferenceRepository, DbError, DbResult, JobRunModel, JobRunRepository, KvModel,
-    KvRepository, LogRow, LogsRepository, Page, Repos, TagModel, TagsRepository,
-    WorkflowRunJobCounts, WorkflowRunModel, WorkflowRunRepository,
+    KvRepository, LogRow, LogsRepository, Page, Repos, TagModel, TagsRepository, WorkflowModel,
+    WorkflowRepository, WorkflowRunJobCounts, WorkflowRunModel, WorkflowRunRepository,
 };
 pub use log_watcher::LogWatcher;
 pub use sync::{Delta, DeltaBatch, RowChange, SyncSubscription};

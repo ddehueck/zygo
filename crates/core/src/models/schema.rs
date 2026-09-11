@@ -4,8 +4,8 @@ use crate::models::{Channel, ChannelId, ContentHash, Entrypoint, Job, JobId, Wor
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkflowSchema {
-    pub id: WorkflowId, // todo: call this a name.
-    pub entrypoint: Entrypoint,
+    pub id: WorkflowId,         // todo: call this a name.
+    pub entrypoint: Entrypoint, // this doesn't really belong here?
     pub content_hash: ContentHash,
     pub input_channel_id: ChannelId,
     pub output_channel_id: ChannelId,

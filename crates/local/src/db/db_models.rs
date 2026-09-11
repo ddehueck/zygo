@@ -52,13 +52,66 @@ impl CdcRow {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkflowModel {
+    pub id: i64,
+    pub name: String,
+    pub path: String,
+    pub schema: String,
+    pub created_at: String,
+}
+
+impl WorkflowModel {
+    pub fn from_sql_value(value: Value) -> Result<Self> {
+        let sql_row: WorkflowSqlRow = serde_json::from_value(value)?;
+        Ok(sql_row.into())
+    }
+
+    pub fn from_row(row: &Row, rows: &Rows) -> Result<Self> {
+        Ok(WorkflowSqlRow::from_row(row, rows)?.into())
+    }
+}
+
+#[derive(Deserialize)]
+struct WorkflowSqlRow {
+    id: i64,
+    name: String,
+    path: String,
+    schema: String,
+    created_at: String,
+}
+
+impl WorkflowSqlRow {
+    fn from_row(row: &Row, rows: &Rows) -> Result<Self> {
+        Ok(Self {
+            id: row.get(rows.column_index("id")?)?,
+            name: row.get(rows.column_index("name")?)?,
+            path: row.get(rows.column_index("path")?)?,
+            schema: row.get(rows.column_index("schema")?)?,
+            created_at: row.get(rows.column_index("created_at")?)?,
+        })
+    }
+}
+
+impl From<WorkflowSqlRow> for WorkflowModel {
+    fn from(row: WorkflowSqlRow) -> Self {
+        Self {
+            id: row.id,
+            name: row.name,
+            path: row.path,
+            schema: row.schema,
+            created_at: row.created_at,
+        }
+    }
+}
+
 // SQL rows retain literal storage encodings. Both query reads and CDC
 // deserialization go through their conversions into persisted models.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorkflowRunModel {
     pub id: i64,
     pub public_id: String,
-    pub workflow_id: String,
+    pub workflow_id: i64,
     pub content_hash: String,
     pub status: String,
     pub started_at: Option<String>,
@@ -84,7 +137,7 @@ impl WorkflowRunModel {
 struct WorkflowRunSqlRow {
     id: i64,
     public_id: String,
-    workflow_id: String,
+    workflow_id: i64,
     content_hash: String,
     status: String,
     started_at: Option<String>,

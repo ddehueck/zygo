@@ -7,7 +7,7 @@ use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, BufReader};
 
 use crate::actor::ActorMessage;
-use crate::ipc::{self, v0::RunCommandArgs};
+use crate::api::{self, v0::RunCommandArgs};
 use crate::models::{
     DataReference, Entrypoint, Event, EventId, EventKind, JobFailedData, JobRunSource,
     JobStartedData, JobSucceededData, Source,
@@ -44,7 +44,7 @@ impl<D: AppDeps> JobRunner<D> {
     pub async fn run(&self) -> Result<()> {
         // TODO: Bubble up errors in events.
         let mut command = match &self.entrypoint {
-            Entrypoint::Python(cli) => cli.run_entrypoint(self.args.clone()),
+            Entrypoint::Python(cli) => cli.build_run_job_command(self.args.clone()),
         };
 
         // Both streams share one OS pipe, so order is kernel arrival order; child buffering and
@@ -221,7 +221,7 @@ impl<D: AppDeps> JobRunner<D> {
                 .unwrap_or(line_without_newline);
 
             if let Ok(line) = std::str::from_utf8(line_without_newline) {
-                match ipc::v0::PythonCli::parse_run_stdout(line) {
+                match api::v0::PythonCli::parse_run_stdout(line) {
                     Ok(Some(kind)) => self.send_event(self.build_event(kind)).await?,
                     Ok(None) => {}
                     Err(error) => return Err(error.into()),

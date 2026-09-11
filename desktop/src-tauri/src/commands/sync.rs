@@ -49,19 +49,13 @@ pub async fn open_sync_channel(
     }
 }
 
-impl<M, T: From<M>> From<local::RowChange<M>> for RowChange<T> {
-    fn from(change: local::RowChange<M>) -> Self {
-        match change {
-            local::RowChange::Insert { row } => Self::Insert { row: row.into() },
-            local::RowChange::Update { row } => Self::Update { row: row.into() },
-            local::RowChange::Delete { id } => Self::Delete { id },
-        }
-    }
-}
-
 impl From<Delta> for SyncDelta {
     fn from(delta: Delta) -> Self {
         match delta {
+            Delta::Workflow { change_id, change } => Self::Workflow {
+                change_id,
+                change: change.into(),
+            },
             Delta::WorkflowRun { change_id, change } => Self::WorkflowRun {
                 change_id,
                 change: change.into(),
@@ -78,6 +72,16 @@ impl From<Delta> for SyncDelta {
                 change_id,
                 change: change.into(),
             },
+        }
+    }
+}
+
+impl<M, T: From<M>> From<local::RowChange<M>> for RowChange<T> {
+    fn from(change: local::RowChange<M>) -> Self {
+        match change {
+            local::RowChange::Insert { row } => Self::Insert { row: row.into() },
+            local::RowChange::Update { row } => Self::Update { row: row.into() },
+            local::RowChange::Delete { id } => Self::Delete { id },
         }
     }
 }

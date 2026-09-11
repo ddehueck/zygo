@@ -1,49 +1,77 @@
-use std::process::Command as StdCommand;
-
 use serde::{Deserialize, Serialize};
 use tokio::process::Command;
 
-use crate::{
-    ipc::{
-        error::Result,
-        v0::interface::{
-            DataReference, RunCommandArgs, STDOUT_IPC_PREFIX, StdoutIPCMessage, WorkflowMetadata,
-            ZYGO_PKG_INTERNAL_CLI_MODULE,
-        },
-    },
-    models::{
-        self, Channel, ChannelId, ChannelItemInsertedData, ContentHash, DataReferenceInsertedData,
-        Entrypoint, EventKind, FileExtension, Job, JobId, TagInsertedData, WorkflowId,
-        WorkflowSchema,
-    },
+use crate::api::error::{self, Result};
+use crate::api::v0::interface::{
+    DataReference, RunCommandArgs, STDOUT_IPC_PREFIX, StdoutIPCMessage, WorkflowMetadata,
+    ZYGO_PKG_INTERNAL_CLI_MODULE,
+};
+use crate::models::{
+    self, Channel, ChannelId, ChannelItemInsertedData, ContentHash, DataReferenceInsertedData,
+    Entrypoint, EventKind, FileExtension, Job, JobId, TagInsertedData, WorkflowId, WorkflowSchema,
 };
 
-/// This struct serves as the interface for interacting with the v0 python cli
+type PythonExecPath = String;
+type Cwd = String;
+type PythonTarget = String;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PythonCli {
-    python_exec: String,
-    cwd: String,
-    target: String,
+    python: PythonExecPath,
+    cwd: Cwd,
+    target: PythonTarget,
 }
 
 impl PythonCli {
-    pub fn new(python_exec_path: String, cwd: String, target: String) -> Self {
-        Self {
-            python_exec: python_exec_path,
-            cwd,
-            target,
-        }
-    }
-
     pub fn cwd(&self) -> &str {
         &self.cwd
     }
 
-    pub fn run_entrypoint(&self, args: RunCommandArgs) -> Command {
-        let mut command = Command::new(self.python_exec.clone());
-        // Keep logs and stdout IPC flowing through the shared pipe promptly.
-        // Python otherwise block-buffers output when stdout is not a terminal.
+    pub async fn from_env(target: &str) -> Result<Self> {
+        // 1. Find the current python executable in the current working directory
+        // Start with `uv python` for now.
+        let python = Command::new("uv")
+            .args(["python", "find"])
+            .output()
+            .await
+            .map_err(|error| error::Error::UvNotFound(error.to_string()))?;
+
+        if !python.status.success() {
+            return Err(error::Error::PythonNotFound);
+        }
+
+        let python_path = String::from_utf8_lossy(&python.stdout).trim().to_owned();
+        if python_path.is_empty() {
+            return Err(error::Error::PythonNotFound);
+        }
+
+        let cwd = std::env::current_dir()
+            .map_err(|error| error::Error::other(error.to_string()))?
+            .to_string_lossy()
+            .into_owned();
+
+        // 2. Ensure that the zygo package is in the executable's environment
+        let package = Command::new(&python_path)
+            .args(["-c", "import zygo"])
+            .status()
+            .await
+            .map_err(|error| error::Error::other(error.to_string()))?;
+        if !package.success() {
+            return Err(error::Error::ZygoPackageNotFound(python_path));
+        }
+
+        Ok(Self {
+            python: python_path,
+            cwd,
+            target: target.to_owned(),
+        })
+    }
+
+    pub fn build_run_job_command(&self, args: RunCommandArgs) -> Command {
+        let mut command = Command::new(self.python.clone());
         command
+            // Keep logs and stdout IPC flowing through the shared pipe promptly.
+            // Python otherwise block-buffers output when stdout is not a terminal.
             .env("PYTHONUNBUFFERED", "1")
             .current_dir(&self.cwd)
             .args(vec![
@@ -65,22 +93,33 @@ impl PythonCli {
         Ok(None)
     }
 
-    pub fn metadata_entrypoint(&self) -> StdCommand {
-        let mut command = StdCommand::new(self.python_exec.clone());
+    pub async fn run_metadata_command(&self) -> Result<WorkflowMetadata> {
+        let mut command = Command::new(self.python.clone());
         command.current_dir(&self.cwd).args(vec![
             "-m".into(),
             ZYGO_PKG_INTERNAL_CLI_MODULE.into(),
             "metadata".into(),
             self.target.clone(),
         ]);
-        command
+
+        let output = command
+            .output()
+            .await
+            .map_err(|error| error::Error::other(error.to_string()))?;
+
+        if !output.status.success() {
+            return Err(error::Error::other("metadata command failed"));
+        }
+
+        let response = String::from_utf8_lossy(&output.stdout);
+        Self::parse_metadata_response(&response)
     }
 
-    pub fn parse_metadata_response(response: &str) -> Result<WorkflowMetadata> {
+    fn parse_metadata_response(response: &str) -> Result<WorkflowMetadata> {
         let payload = response
             .lines()
             .find_map(|line| line.strip_prefix(STDOUT_IPC_PREFIX))
-            .ok_or_else(|| crate::ipc::error::Error::other("metadata IPC response not found"))?;
+            .ok_or_else(|| crate::api::error::Error::other("metadata IPC response not found"))?;
         let metadata: WorkflowMetadata = serde_json::from_str(payload)?;
         Ok(metadata)
     }

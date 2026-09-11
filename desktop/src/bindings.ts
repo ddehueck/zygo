@@ -8,6 +8,7 @@ export const commands = {
 	loadSyncableData: (request: LoadSyncableDataRequest) => typedError<LoadSyncableDataResponse, CommandError>(__TAURI_INVOKE("load_syncable_data", { request })),
 	openSyncChannel: (onEvent: Channel<SyncDelta>, onReady: Channel<null>) => typedError<null, CommandError>(__TAURI_INVOKE("open_sync_channel", { onEvent, onReady })),
 	queryLogs: (request: QueryLogsRequest) => typedError<QueryLogsResponse, CommandError>(__TAURI_INVOKE("query_logs", { request })),
+	startWorkflowRun: (request: StartWorkflowRunRequest) => typedError<StartWorkflowRunResponse, CommandError>(__TAURI_INVOKE("start_workflow_run", { request })),
 };
 
 /* Types */
@@ -32,7 +33,7 @@ export type LoadSyncableDataRequest = {
 	limit: number,
 };
 
-export type LoadSyncableDataResponse = { entity: "workflow_run"; page: SyncPage<WorkflowRun> } | { entity: "job_run"; page: SyncPage<JobRun> } | { entity: "tag"; page: SyncPage<Tag> } | { entity: "data_reference"; page: SyncPage<TauriDataReference> };
+export type LoadSyncableDataResponse = { entity: "workflow"; page: SyncPage<Workflow> } | { entity: "workflow_run"; page: SyncPage<WorkflowRun> } | { entity: "job_run"; page: SyncPage<JobRun> } | { entity: "tag"; page: SyncPage<Tag> } | { entity: "data_reference"; page: SyncPage<TauriDataReference> };
 
 export type Log = {
 	id: number,
@@ -51,7 +52,7 @@ export type QueryLogsRequest = {
 	before_id?: number | null,
 	/**  Full-text search against log content. Bounds are optional when searching. */
 	search?: string | null,
-	/**  Filter by job run database id (`job_runs.id`). */
+	/**  Filter by job run database id (`job_runs.id`); resolved to the public id for log rows. */
 	job_run_id?: number | null,
 };
 
@@ -64,13 +65,23 @@ export type QueryLogsResponse = {
 
 export type RowChange<T> = { operation: "insert"; row: T } | { operation: "update"; row: T } | { operation: "delete"; id: number };
 
+export type StartWorkflowRunRequest = {
+	workflow_id: number,
+	input_paths: string[],
+};
+
+export type StartWorkflowRunResponse = {
+	workflow_run_id: number,
+	public_id: string,
+};
+
 export type SyncCursor = {
 	id: number,
 };
 
-export type SyncDelta = { entity: "workflow_run"; change_id: number; change: RowChange<WorkflowRun> } | { entity: "job_run"; change_id: number; change: RowChange<JobRun> } | { entity: "tag"; change_id: number; change: RowChange<Tag> } | { entity: "data_reference"; change_id: number; change: RowChange<TauriDataReference> };
+export type SyncDelta = { entity: "workflow"; change_id: number; change: RowChange<Workflow> } | { entity: "workflow_run"; change_id: number; change: RowChange<WorkflowRun> } | { entity: "job_run"; change_id: number; change: RowChange<JobRun> } | { entity: "tag"; change_id: number; change: RowChange<Tag> } | { entity: "data_reference"; change_id: number; change: RowChange<TauriDataReference> };
 
-export type SyncEntityKind = "workflow_run" | "job_run" | "tag" | "data_reference";
+export type SyncEntityKind = "workflow" | "workflow_run" | "job_run" | "tag" | "data_reference";
 
 export type SyncPage<T> = {
 	next: SyncCursor | null,
@@ -95,10 +106,18 @@ export type TauriDataReference = {
 	created_at: string,
 };
 
+export type Workflow = {
+	id: number,
+	name: string,
+	path: string,
+	schema: string,
+	created_at: string,
+};
+
 export type WorkflowRun = {
 	id: number,
 	public_id: string,
-	workflow_id: string,
+	workflow_id: number,
 	status: string,
 	started_at: string | null,
 	completed_at: string | null,

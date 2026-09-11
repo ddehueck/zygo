@@ -48,7 +48,7 @@ export function WorkflowRunList({ runs }: WorkflowRunListProps) {
 }
 
 function WorkflowRunItem({ id, item }: { id: number; item: WorkflowRunListRow }) {
-  const { workflowRun, tags } = item;
+  const { workflowRun, workflow, tags } = item;
 
   const duration = useDuration({
     startedAt: workflowRun.started_at,
@@ -63,10 +63,10 @@ function WorkflowRunItem({ id, item }: { id: number; item: WorkflowRunListRow })
         <div className="flex min-w-0 items-center gap-3 py-1">
           <StatusIcon status={workflowRun.status} />
           <p className="min-w-0 truncate font-mono text-base font-semibold tracking-tight text-app-foreground">
-            <span className="text-app -foreground-muted font-normal">
+            <span className="text-app-foreground-muted font-normal">
               ({shortRunId(workflowRun.public_id)})
             </span>{" "}
-            {workflowRun.workflow_id}
+            {workflow?.name ?? ""}
           </p>
         </div>
 

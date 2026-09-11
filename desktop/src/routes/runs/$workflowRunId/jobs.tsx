@@ -1,10 +1,11 @@
+import { eq } from "@tanstack/db";
 import { useLiveQuery } from "@tanstack/react-db";
 import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
 
 import { BreadcrumbHeaderLayout } from "@/components/layout/BreadcrumbHeaderLayout";
 import { ScrollArea } from "@/components/ScrollArea";
 import { Description, Heading, Text } from "@/components/Text";
-import { jobRunsCollection, workflowRunsCollection } from "@/db/collections";
+import { jobRunsCollection, workflowRunsCollection, workflowsCollection } from "@/db/collections";
 import { JobList } from "@/features/workflow-runs/components/JobList";
 
 export const Route = createFileRoute("/runs/$workflowRunId/jobs")({
@@ -30,13 +31,22 @@ function JobsRoute() {
 
 function JobsListPage({ workflowRunId }: { workflowRunId: string }) {
   const runsQuery = useLiveQuery({
-    query: (q) => q.from({ workflowRun: workflowRunsCollection }),
+    query: (q) =>
+      q
+        .from({ workflowRun: workflowRunsCollection })
+        .leftJoin(
+          { workflow: workflowsCollection },
+          ({ workflowRun, workflow }) => eq(workflowRun.workflow_id, workflow.id),
+        )
+        .where(({ workflowRun }) => eq(workflowRun.id, Number(workflowRunId)))
+        .findOne(),
   });
   const jobsQuery = useLiveQuery({
     query: (q) => q.from({ jobRun: jobRunsCollection }),
   });
 
-  const workflowRun = runsQuery.data.find((run) => String(run.id) === workflowRunId);
+  const workflowRun = runsQuery.data?.workflowRun;
+  const workflowName = runsQuery.data?.workflow?.name ?? "";
   const jobs = jobsQuery.data
     .filter((job) => job.workflow_run_id === workflowRun?.id)
     .sort((a, b) => a.created_at.localeCompare(b.created_at));
@@ -81,7 +91,7 @@ function JobsListPage({ workflowRunId }: { workflowRunId: string }) {
       <header>
         <Heading size="medium">Jobs</Heading>
         <Description className="mt-1">
-          Jobs for <span className="font-mono">{workflowRun.workflow_id}</span>
+          Jobs for <span className="font-mono">{workflowName}</span>
         </Description>
       </header>
       {jobs.length > 0 ? (

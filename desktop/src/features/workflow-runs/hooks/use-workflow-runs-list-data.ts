@@ -1,6 +1,10 @@
 import { eq, materialize } from "@tanstack/db";
 import { useLiveQuery } from "@tanstack/react-db";
-import { tagsCollection, workflowRunsCollection } from "../../../db/collections";
+import {
+  tagsCollection,
+  workflowRunsCollection,
+  workflowsCollection,
+} from "../../../db/collections";
 
 export type WorkflowRunListData = ReturnType<typeof useWorkflowRunsListData>["data"];
 
@@ -9,8 +13,13 @@ export function useWorkflowRunsListData() {
     query: (q) =>
       q
         .from({ workflowRun: workflowRunsCollection })
-        .select(({ workflowRun }) => ({
+        .leftJoin(
+          { workflow: workflowsCollection },
+          ({ workflowRun, workflow }) => eq(workflowRun.workflow_id, workflow.id),
+        )
+        .select(({ workflowRun, workflow }) => ({
           workflowRun,
+          workflow,
           tags: materialize(
             q
               .from({ tag: tagsCollection })

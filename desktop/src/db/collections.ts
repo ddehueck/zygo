@@ -2,6 +2,12 @@ import { BasicIndex, createCollection, localOnlyCollectionOptions } from "@tanst
 import type { Log } from "@/bindings";
 import { syncCollectionOptions } from "./sync-collection";
 
+export const workflowsCollection = createCollection({
+  ...syncCollectionOptions("workflow"),
+  defaultIndexType: BasicIndex,
+  autoIndex: "eager",
+});
+
 export const workflowRunsCollection = createCollection({
   ...syncCollectionOptions("workflow_run"),
   defaultIndexType: BasicIndex,

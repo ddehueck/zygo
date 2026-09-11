@@ -5,7 +5,7 @@ use zygo_core::ZygoConfig;
 pub async fn list_workflow_runs(filter: Option<&str>) -> Result<()> {
     let filter = filter.map(parse_filter).transpose()?;
     let service = ZygoLocalService::new(ZygoLocalConfig {
-        base: ZygoConfig::new(1),
+        base: ZygoConfig { num_workers: 1 },
         database_busy_timeout: DEFAULT_DATABASE_BUSY_TIMEOUT,
     })
     .await?;

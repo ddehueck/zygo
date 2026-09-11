@@ -1,8 +1,17 @@
+-- Workflow Table
+CREATE TABLE IF NOT EXISTS workflows (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,  -- user-defined name
+    path TEXT NOT NULL UNIQUE,  -- file system path to dir that contains the workflow definition
+    schema TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Workflow Runs Table
 CREATE TABLE IF NOT EXISTS workflow_runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     public_id TEXT NOT NULL UNIQUE,
-    workflow_id TEXT NOT NULL,
+    workflow_id INTEGER NOT NULL,
     content_hash TEXT NOT NULL,
     status TEXT NOT NULL,
     started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -10,7 +19,9 @@ CREATE TABLE IF NOT EXISTS workflow_runs (
     active_job_count INTEGER NOT NULL DEFAULT 0,
     succeeded_job_count INTEGER NOT NULL DEFAULT 0,
     errored_job_count INTEGER NOT NULL DEFAULT 0,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (workflow_id) REFERENCES workflows(id) ON DELETE RESTRICT
 );
 
 -- Job Runs Table

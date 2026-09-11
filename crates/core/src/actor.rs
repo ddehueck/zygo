@@ -12,6 +12,7 @@ const ACTOR_MESSAGE_BATCH_SIZE: usize = 100;
 
 pub type ActorTx = tokio::sync::mpsc::Sender<ActorMessage>;
 pub type ActorRx = tokio::sync::mpsc::Receiver<ActorMessage>;
+pub type ActorStateRx = Receiver<EngineSnapshot>;
 
 pub struct ActorMessage {
     pub events: Vec<Event>,
@@ -27,7 +28,7 @@ pub struct Actor<D: AppDeps> {
 
 #[derive(Clone)]
 pub struct ActorHandle {
-    pub state_rx: Receiver<EngineSnapshot>,
+    pub state_rx: ActorStateRx,
     cancellation: crate::CancellationGroup,
 }
 

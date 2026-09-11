@@ -6,12 +6,13 @@ mod repos;
 
 pub use database::Db;
 pub use db_models::{
-    CdcChangeType, CdcRow, DataReferenceModel, JobRunModel, KvModel, TagModel,
+    CdcChangeType, CdcRow, DataReferenceModel, JobRunModel, KvModel, TagModel, WorkflowModel,
     WorkflowRunJobCounts, WorkflowRunModel,
 };
 pub use error::{Error as DbError, Result as DbResult};
 
 pub use repos::{
     CdcRepository, Cursor, CursorPaginator, DataReferenceRepository, JobRunRepository,
-    KvRepository, LogRow, LogsRepository, Page, Repos, TagsRepository, WorkflowRunRepository,
+    KvRepository, LogRow, LogsRepository, Page, Repos, TagsRepository, WorkflowRepository,
+    WorkflowRunRepository,
 };
