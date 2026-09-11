@@ -6,9 +6,9 @@ mod service;
 
 // TODO: Do these all need to be pub?
 pub mod actor;
+pub mod api;
 pub mod dependencies;
 pub mod engine;
-pub mod ipc;
 pub mod models;
 pub mod store;
 pub mod stream;
@@ -19,5 +19,5 @@ use cancellation::CancellationGroup;
 pub use dependencies::{AppDeps, Dependencies, LogWriter};
 pub use error::{Error, Result};
 pub use reader::WorkflowRunReader;
-pub use service::{Zygo, ZygoConfig};
+pub use service::{Zygo, ZygoConfig, ZygoRun};
 pub use store::MemoryStore;

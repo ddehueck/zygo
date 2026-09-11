@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::ipc;
+use crate::api;
 
 // Describes a shell-free command prefix used to launch a Zygo IPC CLI.
 // The runtime appends an IPC subcommand (`run` or `metadata`) and its arguments.
@@ -36,7 +36,7 @@ use crate::ipc;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Entrypoint {
     // TODO: These should implement a run cmd?
-    Python(ipc::v0::PythonCli),
+    Python(api::v0::PythonCli),
 }
 
 impl Entrypoint {

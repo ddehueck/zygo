@@ -73,7 +73,7 @@ impl WorkflowRunRepository {
     pub async fn insert(
         &self,
         workflow_run_id: &str,
-        workflow_id: &str,
+        workflow_id: i64,
         content_hash: &str,
     ) -> Result<()> {
         let mut connection = self.database.connection.lock().await;
@@ -82,7 +82,7 @@ impl WorkflowRunRepository {
             .await?;
         tx.execute(
             CREATE_SQL,
-            [workflow_run_id, workflow_id, content_hash, "running"],
+            params![workflow_run_id, workflow_id, content_hash, "running"],
         )
         .await?;
         tx.commit().await?;

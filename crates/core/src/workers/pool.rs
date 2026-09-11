@@ -5,7 +5,7 @@ use tokio::sync::{OwnedSemaphorePermit, Semaphore, TryAcquireError};
 use crate::{
     AppDeps,
     context::ActorContext,
-    ipc::v0::RunCommandArgs,
+    api::v0::RunCommandArgs,
     models::{Entrypoint, JobRunSource, WorkflowRunId},
     workers::{
         Error::{Closed, Unknown},

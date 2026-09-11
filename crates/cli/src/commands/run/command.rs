@@ -1,7 +1,7 @@
 use std::fs;
 use std::io::stdout;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+
 use std::time::Duration;
 
 use crossterm::cursor::Show;
@@ -21,9 +21,9 @@ use ratatui::backend::CrosstermBackend;
 use ratatui::widgets::TableState;
 use ratatui::{Terminal, TerminalOptions, Viewport};
 use zygo_core::ZygoConfig;
+use zygo_core::api::v0::PythonCli;
 use zygo_core::engine::{EngineSnapshot, RunCursor};
-use zygo_core::ipc::v0::PythonCli;
-use zygo_core::models::{DataReference, Event, JobRunId, StreamItem};
+use zygo_core::models::{DataReference, Event, FileExtension, JobRunId, StreamItem};
 
 use crate::tui::{JobLogView, WorkflowRunView, job_run_at_position};
 
@@ -178,72 +178,47 @@ fn select_next(state: &mut TableState, item_count: usize) {
     state.select(Some(selected));
 }
 
-pub async fn run_workflow(target: &str, path: &str, workers: Option<usize>) -> anyhow::Result<()> {
-    // 1. Find the current python executable in the current working directory
-    // Start with `uv python` for now
-    let python = Command::new("uv").args(["python", "find"]).output()?;
-    anyhow::ensure!(
-        python.status.success(),
-        "Could not find a python executable"
-    );
-    let python = String::from_utf8_lossy(&python.stdout).trim().to_owned();
-    let cwd = std::env::current_dir()?.to_string_lossy().into_owned();
-
+pub async fn run_workflow(
+    target: &str,
+    input_path: &str,
+    workers: Option<usize>,
+) -> anyhow::Result<()> {
     // Covert the path into a fsspec URI with an absolute path
     // todo: this needs to mature
-    let fsspec_uri = if path.starts_with("file://") {
-        path.to_string()
+    let fsspec_uri = if input_path.starts_with("file://") {
+        input_path.to_string()
     } else {
         format!(
             "file://{}",
-            std::path::Path::new(path).canonicalize()?.display()
+            std::path::Path::new(input_path).canonicalize()?.display()
         )
     };
-    // println!("{python}");
 
-    // 2. Ensure that the zygo package is in the executable's environment
-    let package = Command::new(&python).args(["-c", "import zygo"]).status()?;
-    anyhow::ensure!(package.success(), "zygo is not available in {python}");
-    // println!("zygo is available in {python}");
+    let python_cli = PythonCli::from_env(target).await?;
 
-    // 3. Use the zygo package to inspect the workflow to build the schema
-    let metadata = Command::new(&python)
-        .args(["-m", ZYGO_PKG_INTERNAL_CLI_MODULE, "metadata", target])
-        .output()?;
-    anyhow::ensure!(
-        metadata.status.success(),
-        "Failed to get metadata for {target}: {}",
-        String::from_utf8_lossy(&metadata.stderr).trim()
-    );
-    let metadata = String::from_utf8_lossy(&metadata.stdout).trim().to_owned();
-    // println!("metadata: {metadata}");
+    // Inspect the workflow metadata
+    let metadata = python_cli.run_metadata_command().await?;
+    let schema = python_cli.workflow_schema_from_metadata(metadata.clone())?;
 
-    // 3.5 Parse the metadata into a structured format
-    let python_cli = PythonCli::new(python.clone(), cwd.clone(), target.to_owned());
-    let metadata = PythonCli::parse_metadata_response(&metadata)?;
-    // println!("parsed metadata: {metadata:?}");
-
-    let input_extensions = metadata
+    // todo: extend the workflow schema to support easier validation
+    let input_extensions = schema
         .channels
         .iter()
-        .find(|channel| channel.id == metadata.input_channel_id)
+        .find(|channel| channel.id == schema.input_channel_id)
         .map_or_else(Vec::new, |channel| channel.accepted_file_extensions.clone());
     let inputs = input_data_references(&fsspec_uri, &input_extensions)?;
 
-    let schema = python_cli.workflow_schema_from_metadata(metadata.clone())?;
-    // println!("built workflow schema: {schema:?}");
-
     // 4. Create a zygo service and start the workflow
-    let num_workers = workers.unwrap_or(1); // TODO: Use CPU core count
-    let config = ZygoConfig::new(num_workers);
-    let service = ZygoLocalService::new(ZygoLocalConfig {
-        base: config,
+    let config = ZygoLocalConfig {
         database_busy_timeout: DEFAULT_DATABASE_BUSY_TIMEOUT,
-    })
-    .await?;
+        base: ZygoConfig {
+            num_workers: workers.unwrap_or(1),
+        },
+    };
 
-    let run_id = service.run(inputs, schema).await?;
-    // println!("run_id: {run_id:?}");
+    let service = ZygoLocalService::new(config).await?;
+    let workflow = service.register(schema).await?;
+    let run = workflow.run(inputs).await?;
 
     // 5. Watch the engine state in an interactive fullscreen terminal view.
     let mut terminal_input = TerminalInput::new()?;
@@ -258,8 +233,9 @@ pub async fn run_workflow(target: &str, path: &str, workers: Option<usize>) -> a
     // Keep stream projection and database work off the UI task. Updates are
     // delivered in bounded batches so a large backlog cannot starve input or
     // redraws.
-    let mut snapshot_rx = service.base.subscribe(&run_id).await?;
-    let mut stream_processor = service.stream_processor(&run_id);
+    let mut snapshot_rx = run.subscribe()?;
+    let mut stream_processor = run.stream_processor();
+
     let (stream_updates_tx, mut stream_updates_rx) = tokio::sync::mpsc::channel(1);
     let stream_task = tokio::spawn(async move {
         let mut cursor = RunCursor::default();
@@ -430,7 +406,7 @@ pub async fn run_workflow(target: &str, path: &str, workers: Option<usize>) -> a
             }
             LoopEvent::StreamError(error) => {
                 stream_task.abort();
-                service.cancel(&run_id).await?;
+                run.cancel().await?;
                 return Err(error);
             }
             LoopEvent::Redraw | LoopEvent::Input(Some(_)) => {}
@@ -439,7 +415,7 @@ pub async fn run_workflow(target: &str, path: &str, workers: Option<usize>) -> a
 
         if should_cancel {
             stream_task.abort();
-            service.cancel(&run_id).await?;
+            run.cancel().await?;
             break;
         }
 
@@ -498,7 +474,7 @@ pub async fn run_workflow(target: &str, path: &str, workers: Option<usize>) -> a
 
 fn input_data_references(
     input_uri: &str,
-    accepted_file_extensions: &[String],
+    accepted_file_extensions: &[FileExtension],
 ) -> anyhow::Result<Vec<DataReference>> {
     let Some(path) = local_path(input_uri) else {
         return Ok(vec![DataReference {
@@ -516,7 +492,7 @@ fn input_data_references(
 
     let accepted_extensions = accepted_file_extensions
         .iter()
-        .map(|extension| extension.trim_start_matches('.').to_ascii_lowercase())
+        .map(|extension| extension.as_str().to_ascii_lowercase())
         .collect::<Vec<_>>();
     let mut files = fs::read_dir(&path)?
         .map(|entry| entry.map(|entry| entry.path()))
