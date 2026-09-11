@@ -7,7 +7,7 @@ use zygo_core::ZygoConfig;
 mod commands;
 mod error;
 
-use commands::{load_syncable_data, open_sync_channel, query_logs};
+use commands::{load_syncable_data, open_sync_channel, query_logs, start_workflow_run};
 
 const TYPESCRIPT_BINDINGS_PATH: &str = "../src/bindings.ts";
 
@@ -23,14 +23,15 @@ fn specta_builder() -> Builder<tauri::Wry> {
         greet,
         load_syncable_data,
         open_sync_channel,
-        query_logs
+        query_logs,
+        start_workflow_run
     ])
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let service = tauri::async_runtime::block_on(ZygoLocalService::new(ZygoLocalConfig {
-        base: ZygoConfig::new(1),
+        base: ZygoConfig { num_workers: 1 },
         database_busy_timeout: DEFAULT_DATABASE_BUSY_TIMEOUT,
     }))
     .expect("failed to start the local Zygo service");
@@ -39,6 +40,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(service)
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(specta.invoke_handler())
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

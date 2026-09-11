@@ -2,11 +2,34 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 
 #[derive(Debug, Deserialize, Serialize, Type)]
+pub struct Workflow {
+    #[specta(type = specta_typescript::Number)]
+    pub id: i64,
+    pub name: String,
+    pub path: String,
+    pub schema: String,
+    pub created_at: String,
+}
+
+impl From<local::WorkflowModel> for Workflow {
+    fn from(workflow: local::WorkflowModel) -> Self {
+        Self {
+            id: workflow.id,
+            name: workflow.name,
+            path: workflow.path,
+            schema: workflow.schema,
+            created_at: workflow.created_at,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize, Type)]
 pub struct WorkflowRun {
     #[specta(type = specta_typescript::Number)]
     pub id: i64,
     pub public_id: String,
-    pub workflow_id: String,
+    #[specta(type = specta_typescript::Number)]
+    pub workflow_id: i64,
     pub status: String,
     pub started_at: Option<String>,
     pub completed_at: Option<String>,
@@ -17,6 +40,23 @@ pub struct WorkflowRun {
     #[specta(type = specta_typescript::Number)]
     pub errored_job_count: i64,
     pub created_at: String,
+}
+
+impl From<local::WorkflowRunModel> for WorkflowRun {
+    fn from(run: local::WorkflowRunModel) -> Self {
+        Self {
+            id: run.id,
+            public_id: run.public_id,
+            workflow_id: run.workflow_id,
+            status: run.status,
+            started_at: run.started_at,
+            completed_at: run.completed_at,
+            active_job_count: run.active_job_count,
+            succeeded_job_count: run.succeeded_job_count,
+            errored_job_count: run.errored_job_count,
+            created_at: run.created_at,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Type)]
@@ -90,6 +130,7 @@ pub struct TauriDataReference {
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum SyncEntityKind {
+    Workflow,
     WorkflowRun,
     JobRun,
     Tag,
@@ -114,6 +155,11 @@ pub enum RowChange<T> {
 #[derive(Debug, Serialize, Type)]
 #[serde(tag = "entity", rename_all = "snake_case")]
 pub enum SyncDelta {
+    Workflow {
+        #[specta(type = specta_typescript::Number)]
+        change_id: i64,
+        change: RowChange<Workflow>,
+    },
     WorkflowRun {
         #[specta(type = specta_typescript::Number)]
         change_id: i64,

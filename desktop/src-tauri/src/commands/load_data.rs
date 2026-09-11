@@ -5,7 +5,7 @@ use tauri::State;
 
 use crate::error::{CommandError, CommandResult};
 
-use super::{JobRun, SyncEntityKind, Tag, TauriDataReference, WorkflowRun};
+use super::{JobRun, SyncEntityKind, Tag, TauriDataReference, Workflow, WorkflowRun};
 
 const MAX_PAGE_SIZE: u32 = 1000;
 
@@ -31,27 +31,11 @@ pub struct SyncPage<T> {
 #[derive(Debug, Serialize, Type)]
 #[serde(tag = "entity", rename_all = "snake_case")]
 pub enum LoadSyncableDataResponse {
+    Workflow { page: SyncPage<Workflow> },
     WorkflowRun { page: SyncPage<WorkflowRun> },
     JobRun { page: SyncPage<JobRun> },
     Tag { page: SyncPage<Tag> },
     DataReference { page: SyncPage<TauriDataReference> },
-}
-
-impl From<local::WorkflowRunModel> for WorkflowRun {
-    fn from(run: local::WorkflowRunModel) -> Self {
-        Self {
-            id: run.id,
-            public_id: run.public_id,
-            workflow_id: run.workflow_id,
-            status: run.status,
-            started_at: run.started_at,
-            completed_at: run.completed_at,
-            active_job_count: run.active_job_count,
-            succeeded_job_count: run.succeeded_job_count,
-            errored_job_count: run.errored_job_count,
-            created_at: run.created_at,
-        }
-    }
 }
 
 impl From<local::JobRunModel> for JobRun {
@@ -140,6 +124,9 @@ pub async fn load_syncable_data(
     let repos = &state.repos;
 
     let response = match request.entity {
+        SyncEntityKind::Workflow => LoadSyncableDataResponse::Workflow {
+            page: load_page(&repos.workflows, cursor, limit).await?,
+        },
         SyncEntityKind::WorkflowRun => LoadSyncableDataResponse::WorkflowRun {
             page: load_page(&repos.workflow_runs, cursor, limit).await?,
         },

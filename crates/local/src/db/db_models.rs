@@ -62,7 +62,27 @@ pub struct WorkflowModel {
 }
 
 impl WorkflowModel {
+    pub fn from_sql_value(value: Value) -> Result<Self> {
+        let sql_row: WorkflowSqlRow = serde_json::from_value(value)?;
+        Ok(sql_row.into())
+    }
+
     pub fn from_row(row: &Row, rows: &Rows) -> Result<Self> {
+        Ok(WorkflowSqlRow::from_row(row, rows)?.into())
+    }
+}
+
+#[derive(Deserialize)]
+struct WorkflowSqlRow {
+    id: i64,
+    name: String,
+    path: String,
+    schema: String,
+    created_at: String,
+}
+
+impl WorkflowSqlRow {
+    fn from_row(row: &Row, rows: &Rows) -> Result<Self> {
         Ok(Self {
             id: row.get(rows.column_index("id")?)?,
             name: row.get(rows.column_index("name")?)?,
@@ -70,6 +90,18 @@ impl WorkflowModel {
             schema: row.get(rows.column_index("schema")?)?,
             created_at: row.get(rows.column_index("created_at")?)?,
         })
+    }
+}
+
+impl From<WorkflowSqlRow> for WorkflowModel {
+    fn from(row: WorkflowSqlRow) -> Self {
+        Self {
+            id: row.id,
+            name: row.name,
+            path: row.path,
+            schema: row.schema,
+            created_at: row.created_at,
+        }
     }
 }
 

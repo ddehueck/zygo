@@ -1,17 +1,19 @@
 import { useLiveQuery } from "@tanstack/react-db";
 import { eq } from "@tanstack/db";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { type ReactNode } from "react";
 
-import type { JobRun, Tag, WorkflowRun } from "@/bindings";
+import type { JobRun, Tag, Workflow, WorkflowRun } from "@/bindings";
 import {
   dataReferencesCollection,
   jobRunsCollection,
   logsCollection,
   tagsCollection,
   workflowRunsCollection,
+  workflowsCollection,
 } from "@/db/collections";
 
+import { Button } from "@/components/Button";
 import { Icon, iconDefinitions } from "@/components/icons";
 import { useDuration } from "@/hooks/use-duration";
 import { getFileNameFromUri } from "@/features/data-viewer/lib/file-name";
@@ -28,7 +30,15 @@ type WorkflowRunDetailsProps = {
 
 export function WorkflowRunDetails({ workflowRunId }: WorkflowRunDetailsProps) {
   const runsQuery = useLiveQuery({
-    query: (q) => q.from({ workflowRun: workflowRunsCollection }),
+    query: (q) =>
+      q
+        .from({ workflowRun: workflowRunsCollection })
+        .leftJoin(
+          { workflow: workflowsCollection },
+          ({ workflowRun, workflow }) => eq(workflowRun.workflow_id, workflow.id),
+        )
+        .where(({ workflowRun }) => eq(workflowRun.id, Number(workflowRunId)))
+        .findOne(),
   });
   const jobsQuery = useLiveQuery({
     query: (q) => q.from({ jobRun: jobRunsCollection }),
@@ -37,7 +47,8 @@ export function WorkflowRunDetails({ workflowRunId }: WorkflowRunDetailsProps) {
     query: (q) => q.from({ tag: tagsCollection }),
   });
 
-  const workflowRun = runsQuery.data.find((run) => String(run.id) === workflowRunId);
+  const workflowRun = runsQuery.data?.workflowRun;
+  const workflow = runsQuery.data?.workflow;
   const jobs = jobsQuery.data
     .filter((job) => job.workflow_run_id === workflowRun?.id)
     .sort((a, b) => a.created_at.localeCompare(b.created_at));
@@ -76,7 +87,9 @@ export function WorkflowRunDetails({ workflowRunId }: WorkflowRunDetailsProps) {
     );
   }
 
-  return <WorkflowRunOverview run={workflowRun} jobs={jobs} runTags={runTags} />;
+  return (
+    <WorkflowRunOverview run={workflowRun} workflow={workflow} jobs={jobs} runTags={runTags} />
+  );
 }
 
 function RunPageShell({ children }: { children: ReactNode }) {
@@ -85,13 +98,16 @@ function RunPageShell({ children }: { children: ReactNode }) {
 
 function WorkflowRunOverview({
   run,
+  workflow,
   jobs,
   runTags,
 }: {
   run: WorkflowRun;
+  workflow: Workflow | undefined;
   jobs: JobRun[];
   runTags: Tag[];
 }) {
+  const navigate = useNavigate();
   const totalJobs = sum([run.active_job_count, run.succeeded_job_count, run.errored_job_count]);
 
   const duration = useDuration({
@@ -104,8 +120,21 @@ function WorkflowRunOverview({
       <header className="">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-3">
-            <Heading text={run.workflow_id} />
-            <RunStatus status={run.status} />
+            <Heading text={workflow?.name ?? ""} />
+            <div className="flex items-center gap-3">
+              <RunStatus status={run.status} />
+              <Button
+                variant="secondary"
+                onPress={() =>
+                  void navigate({
+                    to: "/workflows/$workflowId/runs/new",
+                    params: { workflowId: String(run.workflow_id) },
+                  })
+                }
+              >
+                Run workflow
+              </Button>
+            </div>
           </div>
         </div>
         <p className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-app-foreground-muted">

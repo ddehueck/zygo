@@ -2,7 +2,7 @@ import { ilike } from "@tanstack/db";
 import { useLiveQuery } from "@tanstack/react-db";
 
 import { filterPrefix } from "@/components/search";
-import { tagsCollection, workflowRunsCollection } from "@/db/collections";
+import { tagsCollection, workflowsCollection } from "@/db/collections";
 import { WorkflowRunSearchSuggestion } from "./types";
 
 const defaultSuggestions: WorkflowRunSearchSuggestion[] = [
@@ -28,16 +28,16 @@ export function useWorkflowRunsSearchSuggestions({
 }) {
   const { data, isLoading, isError, status } = useLiveQuery({
     query: (q) => {
-      const runIdRows = q
-        .from({ run: workflowRunsCollection })
-        .select(({ run }) => ({
+      const workflowRows = q
+        .from({ workflow: workflowsCollection })
+        .select(({ workflow }) => ({
           type: "workflowId" as const,
-          text: run.workflow_id,
-          sort_id: run.id,
+          text: workflow.name,
+          sort_id: workflow.id,
         }))
-        .where(({ run }) => ilike(run.workflow_id, `${filterValue}%`))
+        .where(({ workflow }) => ilike(workflow.name, `${filterValue}%`))
         // Unique numeric keys — `created_at` ties can destabilize live orderBy.
-        .orderBy(({ run }) => run.id, "asc")
+        .orderBy(({ workflow }) => workflow.id, "asc")
         .limit(limit);
 
       const tagsRows = q
@@ -51,7 +51,7 @@ export function useWorkflowRunsSearchSuggestions({
         .orderBy(({ tag }) => tag.id, "asc")
         .limit(limit);
 
-      return q.unionAll(runIdRows, tagsRows).orderBy(({ sort_id }) => sort_id);
+      return q.unionAll(workflowRows, tagsRows).orderBy(({ sort_id }) => sort_id);
     },
   });
 
@@ -61,18 +61,18 @@ export function useWorkflowRunsSearchSuggestions({
 }
 
 function createSuggestions(rows: SuggestionQueryResultItem[]): WorkflowRunSearchSuggestion[] {
-  const workflowIds = rows.filter((row) => row.type === "workflowId").map((row) => row.text);
+  const workflowNames = rows.filter((row) => row.type === "workflowId").map((row) => row.text);
   const tagValues = rows.filter((row) => row.type === "tag").map((row) => row.text);
 
   return [
     ...defaultSuggestions,
-    ...[...new Set(workflowIds)]
+    ...[...new Set(workflowNames)]
       .sort((left, right) => left.localeCompare(right))
-      .map((workflowId) => ({
-        id: `workflow:${workflowId}`,
+      .map((workflowName) => ({
+        id: `workflow:${workflowName}`,
         type: "token" as const,
-        text: `${filterPrefix("workflow")}${workflowId}`,
-        value: { entity: "workflow" as const, id: workflowId },
+        text: `${filterPrefix("workflow")}${workflowName}`,
+        value: { entity: "workflow" as const, id: workflowName },
       })),
     ...[...new Set(tagValues)]
       .sort((left, right) => left.localeCompare(right))

@@ -1,5 +1,7 @@
 use turso::transaction::TransactionBehavior;
 
+use super::paginator::{Cursor, CursorPaginator, Page};
+use crate::DbResult;
 use crate::db::{Db, DbResult as Result, WorkflowModel};
 
 const SELECT_COLUMNS: &str = "id, name, path, schema, created_at";
@@ -13,6 +15,48 @@ const UPSERT_SQL: &str = "
 #[derive(Clone)]
 pub struct WorkflowRepository {
     database: Db,
+}
+
+impl CursorPaginator for WorkflowRepository {
+    type Item = WorkflowModel;
+
+    async fn list(&self, cursor: Option<Cursor>, limit: i64) -> DbResult<Page<Self::Item>> {
+        let connection = self.database.connection.lock().await;
+        let mut rows = match cursor {
+            Some(cursor) => {
+                connection
+                    .query(
+                        &format!(
+                            "SELECT {SELECT_COLUMNS} FROM workflows WHERE id < ?1 ORDER BY id DESC LIMIT ?2"
+                        ),
+                        [turso::Value::from(cursor.id), turso::Value::from(limit + 1)],
+                    )
+                    .await?
+            }
+            None => {
+                connection
+                    .query(
+                        &format!("SELECT {SELECT_COLUMNS} FROM workflows ORDER BY id DESC LIMIT ?1"),
+                        [limit + 1],
+                    )
+                    .await?
+            }
+        };
+        let mut data = Vec::new();
+        while let Some(row) = rows.next().await? {
+            data.push(WorkflowModel::from_row(&row, &rows)?);
+        }
+        let next = (limit > 0 && data.len() > limit as usize).then(|| {
+            let next_id = data[..limit as usize]
+                .iter()
+                .map(|row| row.id)
+                .min()
+                .expect("page is non-empty when limit is positive");
+            data.truncate(limit as usize);
+            Cursor { id: next_id }
+        });
+        Ok(Page { next, data })
+    }
 }
 
 impl WorkflowRepository {

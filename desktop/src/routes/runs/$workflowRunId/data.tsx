@@ -4,7 +4,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { BreadcrumbHeaderLayout } from "@/components/layout/BreadcrumbHeaderLayout";
 import { ScrollArea } from "@/components/ScrollArea";
 import { Description, Heading, Text } from "@/components/Text";
-import { workflowRunsCollection } from "@/db/collections";
+import { workflowRunsCollection, workflowsCollection } from "@/db/collections";
 import { DataViewer } from "@/features/data-viewer/components/DataViewer";
 import { isPositiveInteger } from "@/lib/integer";
 
@@ -26,10 +26,15 @@ function WorkflowRunDataRoute() {
     query: (q) =>
       q
         .from({ workflowRun: workflowRunsCollection })
+        .leftJoin(
+          { workflow: workflowsCollection },
+          ({ workflowRun, workflow }) => eq(workflowRun.workflow_id, workflow.id),
+        )
         .where(({ workflowRun }) => eq(workflowRun.id, Number(workflowRunId)))
         .findOne(),
   });
-  const workflowRun = runsQuery.data;
+  const workflowRun = runsQuery.data?.workflowRun;
+  const workflowName = runsQuery.data?.workflow?.name ?? "";
 
   if (runsQuery.isLoading) {
     return (
@@ -66,7 +71,7 @@ function WorkflowRunDataRoute() {
 
   return (
     <BreadcrumbHeaderLayout>
-      <DataViewer workflowRunId={numericWorkflowRunId} workflowId={workflowRun.workflow_id} />
+      <DataViewer workflowRunId={numericWorkflowRunId} workflowId={workflowName} />
     </BreadcrumbHeaderLayout>
   );
 }

@@ -7,7 +7,13 @@ use tokio::sync::Notify;
 use super::{Delta, Result};
 use crate::Repos;
 
-const SYNC_TABLES: [&str; 4] = ["workflow_runs", "job_runs", "tags", "data_references"];
+const SYNC_TABLES: [&str; 5] = [
+    "workflows",
+    "workflow_runs",
+    "job_runs",
+    "tags",
+    "data_references",
+];
 
 #[derive(Clone)]
 pub struct SyncSubscription {

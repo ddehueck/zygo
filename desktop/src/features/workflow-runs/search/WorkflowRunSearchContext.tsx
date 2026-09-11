@@ -35,11 +35,11 @@ export function WorkflowRunSearchProvider({
       setValue,
       activeFilters,
       applyFilters: (runs: WorkflowRunListData) =>
-        runs.filter(({ workflowRun, tags }) =>
+        runs.filter(({ workflow, tags }) =>
           activeFilters.every((filter) => {
             switch (filter.entity) {
               case "workflow":
-                return workflowRun.workflow_id === filter.id;
+                return workflow?.name === filter.id;
               case "tag":
                 return tags.some((tag) => tag.value === filter.value);
             }

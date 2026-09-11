@@ -1,5 +1,8 @@
 use super::{Error, Result};
-use crate::{CdcChangeType, CdcRow, DataReferenceModel, JobRunModel, TagModel, WorkflowRunModel};
+use crate::{
+    CdcChangeType, CdcRow, DataReferenceModel, JobRunModel, TagModel, WorkflowModel,
+    WorkflowRunModel,
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum RowChange<T> {
@@ -10,6 +13,10 @@ pub enum RowChange<T> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Delta {
+    Workflow {
+        change_id: i64,
+        change: RowChange<WorkflowModel>,
+    },
     WorkflowRun {
         change_id: i64,
         change: RowChange<WorkflowRunModel>,
@@ -72,6 +79,10 @@ impl TryFrom<CdcRow> for Delta {
     fn try_from(row: CdcRow) -> Result<Self> {
         let change_id = row.change_id;
         match row.table_name.as_str() {
+            "workflows" => Ok(Self::Workflow {
+                change_id,
+                change: RowChange::from_cdc_row(row, WorkflowModel::from_sql_value)?,
+            }),
             "workflow_runs" => Ok(Self::WorkflowRun {
                 change_id,
                 change: RowChange::from_cdc_row(row, WorkflowRunModel::from_sql_value)?,

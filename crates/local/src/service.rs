@@ -9,7 +9,7 @@ use zygo_core::{Dependencies, Zygo, ZygoRun};
 use crate::ZygoLocalConfig;
 use crate::db::{
     CdcRepository, DataReferenceRepository, Db, JobRunRepository, KvRepository, LogsRepository,
-    Repos, TagsRepository, WorkflowRepository, WorkflowRunRepository,
+    Repos, TagsRepository, WorkflowRepository, WorkflowRunModel, WorkflowRunRepository,
 };
 use crate::paths;
 use crate::stream_processor::LocalStreamProcessor;
@@ -112,6 +112,18 @@ impl ZygoLocalService {
         )
         .await
     }
+
+    // todo: don't love that this is here. There's a repository/deps refactor brewing.
+    // this requires a cli tui rewrite which is also brewing
+    pub async fn list_workflow_runs(
+        &self,
+        filter: Option<(&str, &str)>,
+    ) -> Result<Vec<WorkflowRunModel>> {
+        match filter {
+            Some((key, value)) => Ok(self.repos.workflow_runs.list_by_tag(key, value).await?),
+            None => Ok(self.repos.workflow_runs.list_all().await?),
+        }
+    }
 }
 
 pub struct ZygoLocalWorkflow {
@@ -128,6 +140,7 @@ impl ZygoLocalWorkflow {
 
 pub struct ZygoLocalRun {
     pub id: WorkflowRunId,
+    pub db_id: i64,
     pub workflow_id: i64,
     run: ZygoRun<Dependencies<KvRepository, LogsRepository>>,
     repos: Repos,
@@ -148,7 +161,7 @@ impl ZygoLocalRun {
         let workflow_run_id = WorkflowRunId::new();
 
         // saves a record of the run before actually running it
-        repos
+        let db_run = repos
             .workflow_runs
             .insert(&workflow_run_id.to_string(), workflow_id, &content_hash)
             .await?;
@@ -157,6 +170,7 @@ impl ZygoLocalRun {
 
         Ok(Self {
             id: workflow_run_id,
+            db_id: db_run.id,
             workflow_id,
             run,
             repos,
