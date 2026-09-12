@@ -291,9 +291,11 @@ function DataPreviewCard({ run }: { run: WorkflowRun }) {
 }
 
 function LogsPreviewCard({ run }: { run: WorkflowRun }) {
+  const isActive = !isTerminalWorkflowRunStatus(run.status);
+  // Always hydrate once so completed runs show preview rows; only poll while active.
   const watcher = useWatchLogs({
     workflowRunId: run.id,
-    enabled: !isTerminalWorkflowRunStatus(run.status),
+    watch: isActive,
   });
 
   const logsQuery = useLiveQuery({
