@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use anyhow::{Result, anyhow};
 use zygo_core::actor::ActorStateRx;
-use zygo_core::models::{DataReference, WorkflowRunId, WorkflowSchema};
+use zygo_core::models::{DataReference, JobId, WorkflowRunId, WorkflowSchema};
 use zygo_core::{Dependencies, Zygo, ZygoRun};
 
 use crate::ZygoLocalConfig;
@@ -134,7 +134,22 @@ pub struct ZygoLocalWorkflow {
 
 impl ZygoLocalWorkflow {
     pub async fn run(&self, inputs: Vec<DataReference>) -> Result<ZygoLocalRun> {
-        self.service.run(inputs, self.id, self.schema.clone()).await
+        self.service
+            .run(inputs, self.id, self.schema.clone())
+            .await
+    }
+
+    /// Runs a single job by creating a job-scoped schema via [`WorkflowSchema::to_job_run`].
+    pub async fn run_job(
+        &self,
+        inputs: Vec<DataReference>,
+        job_id: &JobId,
+    ) -> Result<ZygoLocalRun> {
+        let schema = self
+            .schema
+            .to_job_run(job_id)
+            .ok_or_else(|| anyhow!("job `{job_id}` was not found in workflow schema"))?;
+        self.service.run(inputs, self.id, schema).await
     }
 }
 
@@ -155,6 +170,7 @@ impl ZygoLocalRun {
         repos: Repos,
     ) -> Result<Self> {
         let content_hash = schema.content_hash.to_string();
+        let serialized_schema = serde_json::to_string(&schema)?;
 
         // Each invocation is a distinct execution attempt. Job result reuse is
         // handled separately by deterministic job run IDs in the result cache.
@@ -163,7 +179,12 @@ impl ZygoLocalRun {
         // saves a record of the run before actually running it
         let db_run = repos
             .workflow_runs
-            .insert(&workflow_run_id.to_string(), workflow_id, &content_hash)
+            .insert(
+                &workflow_run_id.to_string(),
+                workflow_id,
+                &content_hash,
+                &serialized_schema,
+            )
             .await?;
 
         let run = zygo.run(&workflow_run_id, inputs, schema).await?;

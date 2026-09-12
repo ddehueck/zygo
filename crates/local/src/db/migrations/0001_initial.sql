@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS workflows (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,  -- user-defined name
     path TEXT NOT NULL UNIQUE,  -- file system path to dir that contains the workflow definition
-    schema TEXT NOT NULL,
+    schema TEXT NOT NULL,  -- latest registered schema; runs keep their own snapshot
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS workflow_runs (
     public_id TEXT NOT NULL UNIQUE,
     workflow_id INTEGER NOT NULL,
     content_hash TEXT NOT NULL,
+    schema TEXT NOT NULL,  -- schema snapshot at runtime
     status TEXT NOT NULL,
     started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     completed_at TIMESTAMP,
@@ -25,9 +26,11 @@ CREATE TABLE IF NOT EXISTS workflow_runs (
 );
 
 -- Job Runs Table
+-- public_id is the deterministic job-run id (job + content hash + input). The same
+-- id can appear on multiple workflow runs when a cached result is replayed.
 CREATE TABLE IF NOT EXISTS job_runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    public_id TEXT NOT NULL UNIQUE,
+    public_id TEXT NOT NULL,
     workflow_run_id INTEGER NOT NULL,
     input_id INTEGER NOT NULL,
     job_id TEXT NOT NULL,
@@ -36,6 +39,7 @@ CREATE TABLE IF NOT EXISTS job_runs (
     retry_count INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
+    UNIQUE (workflow_run_id, public_id),
     FOREIGN KEY (workflow_run_id) REFERENCES workflow_runs(id) ON DELETE CASCADE,
     FOREIGN KEY (input_id) REFERENCES data_references(id) ON DELETE RESTRICT
 );

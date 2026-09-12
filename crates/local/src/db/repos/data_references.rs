@@ -105,7 +105,21 @@ impl DataReferenceRepository {
         job_run_id: &str,
     ) -> Result<Vec<DataReferenceModel>> {
         let connection = self.database.connection.lock().await;
-        let mut rows = connection.query(&format!("SELECT {SELECT_COLUMNS} FROM data_references WHERE workflow_run_id = (SELECT id FROM workflow_runs WHERE public_id = ?1) AND source_job_run_id = (SELECT id FROM job_runs WHERE public_id = ?2) ORDER BY created_at ASC, id ASC"), [workflow_run_id, job_run_id]).await?;
+        let mut rows = connection
+            .query(
+                &format!(
+                    "SELECT {SELECT_COLUMNS} FROM data_references
+                     WHERE workflow_run_id = (SELECT id FROM workflow_runs WHERE public_id = ?1)
+                       AND source_job_run_id = (
+                         SELECT id FROM job_runs
+                         WHERE public_id = ?2
+                           AND workflow_run_id = (SELECT id FROM workflow_runs WHERE public_id = ?1)
+                       )
+                     ORDER BY created_at ASC, id ASC"
+                ),
+                [workflow_run_id, job_run_id],
+            )
+            .await?;
         read_rows(&mut rows).await
     }
 
