@@ -32,4 +32,27 @@ impl WorkflowSchema {
             .find(|j| &j.id == job_id)
             .map(|j| j.entrypoint.clone())
     }
+
+    // Creates a workflow schema that would only run the specified job.
+    pub fn to_job_run(&self, job_id: &JobId) -> Option<WorkflowSchema> {
+        let job = self.get_job_by_id(job_id)?.clone();
+        let channels = self
+            .channels
+            .iter()
+            .filter(|channel| {
+                channel.id == job.input_channel_id || channel.id == job.output_channel_id
+            })
+            .cloned()
+            .collect();
+
+        Some(WorkflowSchema {
+            id: self.id.clone(),
+            entrypoint: self.entrypoint.clone(),
+            content_hash: job.content_hash.clone(),
+            input_channel_id: job.input_channel_id.clone(),
+            output_channel_id: job.output_channel_id.clone(), // todo: this is a lil awk but workable and may be a rabbit hole I don't want to deal with rn.
+            jobs: vec![job],
+            channels,
+        })
+    }
 }

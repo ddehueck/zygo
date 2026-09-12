@@ -23,9 +23,7 @@ use ratatui::{Terminal, TerminalOptions, Viewport};
 use zygo_core::ZygoConfig;
 use zygo_core::api::v0::PythonCli;
 use zygo_core::engine::{EngineSnapshot, RunCursor};
-use zygo_core::models::{
-    ChannelItemInsertedData, DataReference, Event, FileExtension, JobRunId, StreamItem,
-};
+use zygo_core::models::{DataReference, Event, FileExtension, JobRunId, StreamItem};
 
 use crate::tui::{JobLogView, WorkflowRunView, job_run_at_position};
 
@@ -208,13 +206,7 @@ pub async fn run_workflow(
         .iter()
         .find(|channel| channel.id == schema.input_channel_id)
         .map_or_else(Vec::new, |channel| channel.accepted_file_extensions.clone());
-    let inputs = input_data_references(&fsspec_uri, &input_extensions)?
-        .into_iter()
-        .map(|data_reference| ChannelItemInsertedData {
-            channel_id: schema.input_channel_id.clone(),
-            data_reference,
-        })
-        .collect();
+    let inputs = input_data_references(&fsspec_uri, &input_extensions)?;
 
     // 4. Create a zygo service and start the workflow
     let config = ZygoLocalConfig {
@@ -226,7 +218,7 @@ pub async fn run_workflow(
 
     let service = ZygoLocalService::new(config).await?;
     let workflow = service.register(schema).await?;
-    let run = workflow.run(inputs, None).await?;
+    let run = workflow.run(inputs).await?;
 
     // 5. Watch the engine state in an interactive fullscreen terminal view.
     let mut terminal_input = TerminalInput::new()?;

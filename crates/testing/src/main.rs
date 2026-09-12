@@ -53,7 +53,7 @@ async fn run() -> anyhow::Result<()> {
     let store = MemoryStore::new();
     let zygo = Zygo::new(store.clone(), ZygoConfig { num_workers: 1 });
     let workflow_run_id = WorkflowRunId::new();
-    let run = zygo.run(&workflow_run_id, inputs, world.schema, None).await?;
+    let run = zygo.run(&workflow_run_id, inputs, world.schema).await?;
     let run_id = run.id.clone();
     info!(%run_id, "submitted workflow run");
 
