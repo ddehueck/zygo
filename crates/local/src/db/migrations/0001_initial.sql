@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS workflows (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,  -- user-defined name
     path TEXT NOT NULL UNIQUE,  -- file system path to dir that contains the workflow definition
-    schema TEXT NOT NULL,  -- should this actually be stored on the run too? cause this will only ever be the latest.
+    schema TEXT NOT NULL,  -- latest registered schema; runs keep their own snapshot
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -12,7 +12,8 @@ CREATE TABLE IF NOT EXISTS workflow_runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     public_id TEXT NOT NULL UNIQUE,
     workflow_id INTEGER NOT NULL,
-    content_hash TEXT NOT NULL,  -- todo: add corresponding schema too
+    content_hash TEXT NOT NULL,
+    schema TEXT NOT NULL,  -- schema snapshot at runtime
     status TEXT NOT NULL,
     started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     completed_at TIMESTAMP,

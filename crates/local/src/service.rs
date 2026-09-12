@@ -155,6 +155,7 @@ impl ZygoLocalRun {
         repos: Repos,
     ) -> Result<Self> {
         let content_hash = schema.content_hash.to_string();
+        let serialized_schema = serde_json::to_string(&schema)?;
 
         // Each invocation is a distinct execution attempt. Job result reuse is
         // handled separately by deterministic job run IDs in the result cache.
@@ -163,7 +164,12 @@ impl ZygoLocalRun {
         // saves a record of the run before actually running it
         let db_run = repos
             .workflow_runs
-            .insert(&workflow_run_id.to_string(), workflow_id, &content_hash)
+            .insert(
+                &workflow_run_id.to_string(),
+                workflow_id,
+                &content_hash,
+                &serialized_schema,
+            )
             .await?;
 
         let run = zygo.run(&workflow_run_id, inputs, schema).await?;

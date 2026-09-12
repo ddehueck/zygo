@@ -6,8 +6,8 @@ use crate::DbResult;
 use crate::db::{Db, DbResult as Result, WorkflowRunModel};
 
 const CREATE_SQL: &str = "
-    INSERT INTO workflow_runs (public_id, workflow_id, content_hash, status)
-    VALUES (?1, ?2, ?3, ?4)
+    INSERT INTO workflow_runs (public_id, workflow_id, content_hash, schema, status)
+    VALUES (?1, ?2, ?3, ?4, ?5)
     ON CONFLICT(public_id) DO NOTHING
 ";
 
@@ -19,7 +19,7 @@ const UPDATE_SQL: &str = "
 ";
 
 const SELECT_COLUMNS: &str = "
-    id, public_id, workflow_id, content_hash, status,
+    id, public_id, workflow_id, content_hash, schema, status,
     started_at, completed_at, active_job_count, succeeded_job_count,
     errored_job_count, created_at
 ";
@@ -75,6 +75,7 @@ impl WorkflowRunRepository {
         workflow_run_id: &str,
         workflow_id: i64,
         content_hash: &str,
+        schema: &str,
     ) -> Result<WorkflowRunModel> {
         {
             let mut connection = self.database.connection.lock().await;
@@ -83,7 +84,7 @@ impl WorkflowRunRepository {
                 .await?;
             tx.execute(
                 CREATE_SQL,
-                params![workflow_run_id, workflow_id, content_hash, "running"],
+                params![workflow_run_id, workflow_id, content_hash, schema, "running"],
             )
             .await?;
             tx.commit().await?;
