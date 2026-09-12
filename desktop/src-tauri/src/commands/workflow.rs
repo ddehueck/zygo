@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 use tauri::State;
 use zygo_core::engine::RunCursor;
-use zygo_core::models::{DataReference, FileExtension};
+use zygo_core::models::{DataReference, FileExtension, JobId, WorkflowSchema};
 
 use crate::error::{CommandError, CommandResult};
 
@@ -17,6 +17,9 @@ pub struct StartWorkflowRunRequest {
     #[specta(type = specta_typescript::Number)]
     pub workflow_id: i64,
     pub input_paths: Vec<String>,
+    /// When set, run only this job using a job-scoped schema snapshot.
+    #[serde(default)]
+    pub job_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Type)]
@@ -47,11 +50,12 @@ pub async fn start_workflow_run(
         }
     })?;
 
-    let accepted_file_extensions = workflow
-        .schema
+    let run_schema = resolve_run_schema(&workflow.schema, request.job_id.as_deref())?;
+
+    let accepted_file_extensions = run_schema
         .channels
         .iter()
-        .find(|channel| channel.id == workflow.schema.input_channel_id)
+        .find(|channel| channel.id == run_schema.input_channel_id)
         .map(|channel| channel.accepted_file_extensions.clone())
         .unwrap_or_default();
 
@@ -63,8 +67,8 @@ pub async fn start_workflow_run(
         );
     }
 
-    let run = workflow
-        .run(inputs)
+    let run = state
+        .run(inputs, workflow.id, run_schema)
         .await
         .map_err(|error| CommandError::internal("start_workflow_run_failed", error.to_string()))?;
 
@@ -75,13 +79,32 @@ pub async fn start_workflow_run(
 
     // todo: add a service level workflow run pool, so that we can have a list
     // of active workflow runs and be able to issue commands to them
-    tauri::async_runtime::spawn_blocking(async move {
+    tauri::async_runtime::spawn(async move {
         if let Err(error) = process_run_until_complete(run).await {
             eprintln!("workflow run stream processor failed: {error}");
         }
     });
 
     Ok(response)
+}
+
+fn resolve_run_schema(
+    schema: &WorkflowSchema,
+    job_id: Option<&str>,
+) -> CommandResult<WorkflowSchema> {
+    let Some(job_id) = job_id else {
+        return Ok(schema.clone());
+    };
+
+    let job_id = JobId::try_from(job_id.to_owned())
+        .map_err(|error| CommandError::invalid_input("job_id", error.to_string()))?;
+
+    schema.to_job_run(&job_id).ok_or_else(|| {
+        CommandError::invalid_input(
+            "job_id",
+            format!("job `{job_id}` was not found in workflow schema"),
+        )
+    })
 }
 
 async fn process_run_until_complete(run: ZygoLocalRun) -> anyhow::Result<()> {

@@ -68,6 +68,8 @@ export type RowChange<T> = { operation: "insert"; row: T } | { operation: "updat
 export type StartWorkflowRunRequest = {
 	workflow_id: number,
 	input_paths: string[],
+	/**  When set, run only this job using a job-scoped schema snapshot. */
+	job_id?: string | null,
 };
 
 export type StartWorkflowRunResponse = {

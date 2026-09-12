@@ -63,7 +63,26 @@ impl JobRunRepository {
         let tx = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .await?;
-        tx.execute("INSERT INTO job_runs (public_id, workflow_run_id, input_id, job_id, status, duration_ms, retry_count) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) ON CONFLICT(public_id) DO UPDATE SET input_id = excluded.input_id, job_id = excluded.job_id, status = excluded.status, duration_ms = excluded.duration_ms, retry_count = excluded.retry_count", params![run.public_id.as_str(), run.workflow_run_id, run.input_id, run.job_id.as_str(), run.status.as_str(), run.duration_ms, run.retry_count]).await?;
+        tx.execute(
+            "INSERT INTO job_runs (public_id, workflow_run_id, input_id, job_id, status, duration_ms, retry_count)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+             ON CONFLICT(workflow_run_id, public_id) DO UPDATE SET
+               input_id = excluded.input_id,
+               job_id = excluded.job_id,
+               status = excluded.status,
+               duration_ms = excluded.duration_ms,
+               retry_count = excluded.retry_count",
+            params![
+                run.public_id.as_str(),
+                run.workflow_run_id,
+                run.input_id,
+                run.job_id.as_str(),
+                run.status.as_str(),
+                run.duration_ms,
+                run.retry_count
+            ],
+        )
+        .await?;
         tx.commit().await?;
         Ok(())
     }
@@ -79,7 +98,17 @@ impl JobRunRepository {
         let tx = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .await?;
-        tx.execute("INSERT INTO job_runs (public_id, workflow_run_id, input_id, job_id, status) SELECT ?1, id, ?4, ?3, 'running' FROM workflow_runs WHERE public_id = ?2 ON CONFLICT(public_id) DO UPDATE SET input_id = excluded.input_id, job_id = excluded.job_id, status = excluded.status, duration_ms = NULL", params![job_run_id, workflow_run_id, job_id, input_id]).await?;
+        tx.execute(
+            "INSERT INTO job_runs (public_id, workflow_run_id, input_id, job_id, status)
+             SELECT ?1, id, ?4, ?3, 'running' FROM workflow_runs WHERE public_id = ?2
+             ON CONFLICT(workflow_run_id, public_id) DO UPDATE SET
+               input_id = excluded.input_id,
+               job_id = excluded.job_id,
+               status = excluded.status,
+               duration_ms = NULL",
+            params![job_run_id, workflow_run_id, job_id, input_id],
+        )
+        .await?;
         tx.commit().await?;
         Ok(())
     }
@@ -118,12 +147,20 @@ impl JobRunRepository {
         })
     }
 
-    pub async fn get_by_id(&self, job_run_id: &str) -> Result<Option<JobRunModel>> {
+    pub async fn get_by_public_id(
+        &self,
+        workflow_run_id: &str,
+        job_run_id: &str,
+    ) -> Result<Option<JobRunModel>> {
         let connection = self.database.connection.lock().await;
         let mut rows = connection
             .query(
-                &format!("SELECT {SELECT_COLUMNS} FROM job_runs WHERE public_id = ?1"),
-                [job_run_id],
+                &format!(
+                    "SELECT {SELECT_COLUMNS} FROM job_runs
+                     WHERE public_id = ?1
+                       AND workflow_run_id = (SELECT id FROM workflow_runs WHERE public_id = ?2)"
+                ),
+                [job_run_id, workflow_run_id],
             )
             .await?;
         let Some(row) = rows.next().await? else {
