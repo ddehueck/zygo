@@ -9,10 +9,13 @@ type Progress = { afterId: number };
 export function useWatchLogs({
   workflowRunId,
   enabled = true,
+  /** When false, fetch once to hydrate then stop (completed runs). */
+  watch = true,
   initialAfterId,
 }: {
   workflowRunId: number;
   enabled?: boolean;
+  watch?: boolean;
   initialAfterId?: number;
 }) {
   const queryKey = ["log-watch", workflowRunId] as const;
@@ -23,7 +26,7 @@ export function useWatchLogs({
     networkMode: "always",
     refetchIntervalInBackground: true,
     refetchInterval: (query) =>
-      query.state.status === "error" ? false : NEW_LOGS_CHECK_INTERVAL_MS,
+      !watch || query.state.status === "error" ? false : NEW_LOGS_CHECK_INTERVAL_MS,
     queryFn: async (): Promise<Progress> => {
       // `after_id` present (including 0) pages ASC from that bound. Absent pages
       // DESC from the newest. Never default a missing cursor to 0 — that would
