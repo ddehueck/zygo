@@ -3,7 +3,7 @@ use crate::actor::{ActorHandle, ActorStateRx};
 use crate::context::{RunContext, ServiceContext};
 use crate::dependencies::{AppDeps, StorageProvider};
 use crate::models::{
-    ChannelItemInsertedData, DataReference, Event, EventId, EventKind, Source, WorkflowRunId,
+    ChannelItemInsertedData, Event, EventId, EventKind, JobId, Source, WorkflowRunId,
     WorkflowSchema,
 };
 use crate::store::KeySpace;
@@ -31,10 +31,11 @@ impl<D: AppDeps> Zygo<D> {
     pub async fn run(
         &self,
         id: &WorkflowRunId,
-        inputs: Vec<DataReference>,
+        inputs: Vec<ChannelItemInsertedData>,
         schema: WorkflowSchema,
+        disabled_jobs: Option<Vec<JobId>>,
     ) -> Result<ZygoRun<D>, anyhow::Error> {
-        ZygoRun::start(id, inputs, schema, self.context.clone()).await
+        ZygoRun::start(id, inputs, schema, self.context.clone(), disabled_jobs).await
     }
 }
 
@@ -45,12 +46,16 @@ pub struct ZygoRun<D: AppDeps> {
 }
 
 impl<D: AppDeps> ZygoRun<D> {
+    // The caller is responsible for defining a workflow run id and building the initial channel item inputs.
+    // This allows the caller to specify whether the whole workflow should be executed or specific jobs should be disabled.
     pub async fn start(
         id: &WorkflowRunId,
-        inputs: Vec<DataReference>,
+        inputs: Vec<ChannelItemInsertedData>,
         schema: WorkflowSchema,
         context: ServiceContext<D>,
+        disabled_jobs: Option<Vec<JobId>>,
     ) -> Result<Self, anyhow::Error> {
+        // todo: principled validation - validate that all jobs are defined in the schema and that schema is valid
         anyhow::ensure!(
             !inputs.is_empty(),
             "a workflow run requires at least one input"
@@ -62,10 +67,7 @@ impl<D: AppDeps> ZygoRun<D> {
                 id: EventId::new(),
                 is_replay: false,
                 timestamp: SystemTime::now(),
-                kind: EventKind::ChannelItemInserted(ChannelItemInsertedData {
-                    channel_id: schema.input_channel_id.clone(),
-                    data_reference: input,
-                }),
+                kind: EventKind::ChannelItemInserted(input),
                 source: Source::Input,
                 run_id: id.clone(),
             })
@@ -80,7 +82,12 @@ impl<D: AppDeps> ZygoRun<D> {
             .await?;
 
         let cancellation = CancellationGroup::new();
-        let run_context = RunContext::new(&context, id, cancellation);
+        let run_context = RunContext::new(
+            &context,
+            id,
+            cancellation,
+            disabled_jobs.unwrap_or_default(),
+        );
         let actor = ActorHandle::spawn(&run_context, input_events).await?;
 
         Ok(Self {

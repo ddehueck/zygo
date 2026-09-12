@@ -1,5 +1,10 @@
+use std::collections::HashSet;
+
 use crate::{
-    AppDeps, CancellationGroup, actor::ActorTx, models::WorkflowRunId, stream::StreamWriter,
+    AppDeps, CancellationGroup,
+    actor::ActorTx,
+    models::{JobId, WorkflowRunId},
+    stream::StreamWriter,
     workers::WorkerPool,
 };
 
@@ -28,6 +33,7 @@ pub struct RunContext<D: AppDeps> {
     pub worker_pool: WorkerPool<D>,
     pub run_id: WorkflowRunId,
     pub cancellation: CancellationGroup,
+    pub disabled_jobs: HashSet<JobId>,
 }
 
 impl<D: AppDeps> RunContext<D> {
@@ -35,12 +41,14 @@ impl<D: AppDeps> RunContext<D> {
         context: &ServiceContext<D>,
         run_id: &WorkflowRunId,
         cancellation: CancellationGroup,
+        disabled_jobs: Vec<JobId>,
     ) -> Self {
         Self {
             deps: context.deps.clone(),
             worker_pool: context.worker_pool.clone(),
             run_id: run_id.clone(),
             cancellation,
+            disabled_jobs: disabled_jobs.into_iter().collect(),
         }
     }
 }
@@ -61,6 +69,7 @@ impl<D: AppDeps> Clone for RunContext<D> {
             worker_pool: self.worker_pool.clone(),
             run_id: self.run_id.clone(),
             cancellation: self.cancellation.clone(),
+            disabled_jobs: self.disabled_jobs.clone(),
         }
     }
 }
@@ -72,6 +81,7 @@ pub struct ActorContext<D: AppDeps> {
     pub actor_tx: ActorTx,
     pub stream_writer: StreamWriter,
     pub cancellation: CancellationGroup,
+    pub disabled_jobs: HashSet<JobId>,
 }
 
 impl<D: AppDeps> ActorContext<D> {
@@ -83,6 +93,7 @@ impl<D: AppDeps> ActorContext<D> {
             actor_tx,
             stream_writer,
             cancellation: context.cancellation.clone(),
+            disabled_jobs: context.disabled_jobs.clone(),
         }
     }
 }
@@ -94,6 +105,7 @@ impl<D: AppDeps> From<&ActorContext<D>> for RunContext<D> {
             worker_pool: context.worker_pool.clone(),
             run_id: context.run_id.clone(),
             cancellation: context.cancellation.clone(),
+            disabled_jobs: context.disabled_jobs.clone(),
         }
     }
 }
@@ -107,6 +119,7 @@ impl<D: AppDeps> Clone for ActorContext<D> {
             actor_tx: self.actor_tx.clone(),
             stream_writer: self.stream_writer.clone(),
             cancellation: self.cancellation.clone(),
+            disabled_jobs: self.disabled_jobs.clone(),
         }
     }
 }

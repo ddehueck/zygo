@@ -7,6 +7,7 @@ use testing::generators::workflow::{Topology, WorkflowGenerator};
 use testing::generators::world::WorldGenerator;
 use testing::invariants;
 use tracing::{info, warn};
+use zygo_core::models::WorkflowRunId;
 use zygo_core::store::MemoryStore;
 use zygo_core::{WorkflowRunReader, Zygo, ZygoConfig};
 
@@ -50,8 +51,10 @@ async fn run() -> anyhow::Result<()> {
     let inputs = world.inputs;
 
     let store = MemoryStore::new();
-    let zygo = Zygo::new(store.clone(), ZygoConfig::new(1));
-    let run_id = zygo.run(inputs, world.schema).await?;
+    let zygo = Zygo::new(store.clone(), ZygoConfig { num_workers: 1 });
+    let workflow_run_id = WorkflowRunId::new();
+    let run = zygo.run(&workflow_run_id, inputs, world.schema, None).await?;
+    let run_id = run.id.clone();
     info!(%run_id, "submitted workflow run");
 
     let reader = WorkflowRunReader::new(store, run_id);

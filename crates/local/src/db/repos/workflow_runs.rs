@@ -75,18 +75,23 @@ impl WorkflowRunRepository {
         workflow_run_id: &str,
         workflow_id: i64,
         content_hash: &str,
-    ) -> Result<()> {
-        let mut connection = self.database.connection.lock().await;
-        let tx = connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)
+    ) -> Result<WorkflowRunModel> {
+        {
+            let mut connection = self.database.connection.lock().await;
+            let tx = connection
+                .transaction_with_behavior(TransactionBehavior::Immediate)
+                .await?;
+            tx.execute(
+                CREATE_SQL,
+                params![workflow_run_id, workflow_id, content_hash, "running"],
+            )
             .await?;
-        tx.execute(
-            CREATE_SQL,
-            params![workflow_run_id, workflow_id, content_hash, "running"],
-        )
-        .await?;
-        tx.commit().await?;
-        Ok(())
+            tx.commit().await?;
+        }
+
+        self.get_by_workflow_run_id(workflow_run_id)
+            .await?
+            .ok_or(turso::Error::QueryReturnedNoRows.into())
     }
 
     pub async fn upsert(

@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 use tauri::State;
 use zygo_core::engine::RunCursor;
-use zygo_core::models::{DataReference, FileExtension};
+use zygo_core::models::{ChannelItemInsertedData, DataReference, FileExtension};
 
 use crate::error::{CommandError, CommandResult};
 
@@ -59,12 +59,17 @@ pub async fn start_workflow_run(
     for path in &request.input_paths {
         inputs.extend(
             input_data_references(path, &accepted_file_extensions)
-                .map_err(|error| CommandError::invalid_input("input_paths", error.to_string()))?,
+                .map_err(|error| CommandError::invalid_input("input_paths", error.to_string()))?
+                .into_iter()
+                .map(|data_reference| ChannelItemInsertedData {
+                    channel_id: workflow.schema.input_channel_id.clone(),
+                    data_reference,
+                }),
         );
     }
 
     let run = workflow
-        .run(inputs)
+        .run(inputs, None)
         .await
         .map_err(|error| CommandError::internal("start_workflow_run_failed", error.to_string()))?;
 

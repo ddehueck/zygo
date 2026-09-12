@@ -1,7 +1,7 @@
 //! Top-level generation of a workflow schema and its candidate inputs.
 
 use rand_chacha::ChaCha8Rng;
-use zygo_core::models::{DataReference, OrchestratorMode, WorkflowSchema};
+use zygo_core::models::{ChannelItemInsertedData, OrchestratorMode, WorkflowSchema};
 
 use crate::generators::event::EventGenerator;
 use crate::generators::workflow::WorkflowGenerator;
@@ -10,7 +10,7 @@ use crate::generators::{Generate, choose};
 #[derive(Debug, Clone)]
 pub struct World {
     pub schema: WorkflowSchema,
-    pub inputs: Vec<DataReference>,
+    pub inputs: Vec<ChannelItemInsertedData>,
 }
 
 #[derive(Debug, Clone)]
@@ -36,10 +36,17 @@ impl Generate for WorldGenerator {
 
     fn generate(&self, rng: &mut ChaCha8Rng, _context: ()) -> World {
         let mode = *choose(rng, &self.modes);
-        World {
-            schema: self.workflow.generate(rng, mode),
-            inputs: self.event.generate(rng, ()),
-        }
+        let schema = self.workflow.generate(rng, mode);
+        let inputs = self
+            .event
+            .generate(rng, ())
+            .into_iter()
+            .map(|data_reference| ChannelItemInsertedData {
+                channel_id: schema.input_channel_id.clone(),
+                data_reference,
+            })
+            .collect();
+        World { schema, inputs }
     }
 }
 
@@ -68,7 +75,7 @@ mod tests {
             world
                 .inputs
                 .iter()
-                .all(|input| !input.uri.trim().is_empty())
+                .all(|input| !input.data_reference.uri.trim().is_empty())
         );
     }
 }

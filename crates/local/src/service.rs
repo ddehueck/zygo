@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use anyhow::{Result, anyhow};
 use zygo_core::actor::ActorStateRx;
-use zygo_core::models::{DataReference, WorkflowRunId, WorkflowSchema};
+use zygo_core::models::{ChannelItemInsertedData, JobId, WorkflowRunId, WorkflowSchema};
 use zygo_core::{Dependencies, Zygo, ZygoRun};
 
 use crate::ZygoLocalConfig;
@@ -99,9 +99,10 @@ impl ZygoLocalService {
 
     pub async fn run(
         &self,
-        inputs: Vec<DataReference>,
+        inputs: Vec<ChannelItemInsertedData>,
         workflow_id: i64,
         schema: WorkflowSchema,
+        disabled_jobs: Option<Vec<JobId>>,
     ) -> Result<ZygoLocalRun> {
         ZygoLocalRun::start(
             inputs,
@@ -109,6 +110,7 @@ impl ZygoLocalService {
             schema,
             self.zygo.clone(),
             self.repos.clone(),
+            disabled_jobs,
         )
         .await
     }
@@ -133,8 +135,14 @@ pub struct ZygoLocalWorkflow {
 }
 
 impl ZygoLocalWorkflow {
-    pub async fn run(&self, inputs: Vec<DataReference>) -> Result<ZygoLocalRun> {
-        self.service.run(inputs, self.id, self.schema.clone()).await
+    pub async fn run(
+        &self,
+        inputs: Vec<ChannelItemInsertedData>,
+        disabled_jobs: Option<Vec<JobId>>,
+    ) -> Result<ZygoLocalRun> {
+        self.service
+            .run(inputs, self.id, self.schema.clone(), disabled_jobs)
+            .await
     }
 }
 
@@ -148,11 +156,12 @@ pub struct ZygoLocalRun {
 
 impl ZygoLocalRun {
     pub async fn start(
-        inputs: Vec<DataReference>,
+        inputs: Vec<ChannelItemInsertedData>,
         workflow_id: i64,
         schema: WorkflowSchema,
         zygo: Zygo<Dependencies<KvRepository, LogsRepository>>,
         repos: Repos,
+        disabled_jobs: Option<Vec<JobId>>,
     ) -> Result<Self> {
         let content_hash = schema.content_hash.to_string();
 
@@ -166,7 +175,9 @@ impl ZygoLocalRun {
             .insert(&workflow_run_id.to_string(), workflow_id, &content_hash)
             .await?;
 
-        let run = zygo.run(&workflow_run_id, inputs, schema).await?;
+        let run = zygo
+            .run(&workflow_run_id, inputs, schema, disabled_jobs)
+            .await?;
 
         Ok(Self {
             id: workflow_run_id,
