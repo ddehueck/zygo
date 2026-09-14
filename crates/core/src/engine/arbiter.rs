@@ -118,7 +118,7 @@ impl Arbiter {
             &data_reference.version,
         ))?;
 
-        if let Some(cache_item) = context.get_item(&job_run_id).await? {
+        if let Some(cache_item) = context.get_result_cache_item(&job_run_id).await? {
             return Ok(Command::ReplayJob(ReplayJobCommand {
                 source: Source::JobRun(JobRunSource {
                     job_id: job_id.clone(),

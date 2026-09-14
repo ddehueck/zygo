@@ -20,6 +20,9 @@ pub struct StartWorkflowRunRequest {
     /// When set, run only this job using a job-scoped schema snapshot.
     #[serde(default)]
     pub job_id: Option<String>,
+    /// Ignore cached job results and execute jobs again.
+    #[serde(default)]
+    pub disable_cache: bool,
 }
 
 #[derive(Debug, Serialize, Type)]
@@ -68,7 +71,7 @@ pub async fn start_workflow_run(
     }
 
     let run = state
-        .run(inputs, workflow.id, run_schema)
+        .run(inputs, workflow.id, run_schema, request.disable_cache)
         .await
         .map_err(|error| CommandError::internal("start_workflow_run_failed", error.to_string()))?;
 

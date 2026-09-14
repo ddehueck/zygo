@@ -164,7 +164,9 @@ impl<D: AppDeps> Executor<D> {
             event_keys: event_keys.clone(),
         };
 
-        context.put(&command.job_run_id, &result_cache_item).await?;
+        context
+            .put_to_store(&command.job_run_id, &result_cache_item)
+            .await?;
 
         Ok(ExecuteResult {
             next_state: state.clone(),

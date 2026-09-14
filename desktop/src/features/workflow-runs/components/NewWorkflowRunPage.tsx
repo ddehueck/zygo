@@ -7,6 +7,7 @@ import type { Selection } from "react-aria-components/GridList";
 
 import { commands, type CommandError } from "@/bindings";
 import { Button } from "@/components/Button";
+import { Checkbox } from "@/components/Checkbox";
 import { GridList, GridListItem } from "@/components/GridList";
 import { Icon, iconDefinitions } from "@/components/icons";
 import { Description, Heading, Text } from "@/components/Text";
@@ -32,6 +33,7 @@ export function NewWorkflowRunPage({ workflowId }: NewWorkflowRunPageProps) {
   const [isStarting, setIsStarting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [selectedScopeKey, setSelectedScopeKey] = useState<string>(ENTIRE_WORKFLOW_KEY);
+  const [disableCache, setDisableCache] = useState(false);
 
   const { isDragging, dropTargetProps } = useFileDrop({
     onDrop: (paths) => {
@@ -111,6 +113,7 @@ export function NewWorkflowRunPage({ workflowId }: NewWorkflowRunPageProps) {
       workflow_id: workflowId,
       input_paths: [inputPath],
       job_id: selectedJobId,
+      disable_cache: disableCache,
     });
 
     setIsStarting(false);
@@ -204,6 +207,15 @@ export function NewWorkflowRunPage({ workflowId }: NewWorkflowRunPageProps) {
           selectedKey={selectedScopeKey}
           onSelectionChange={handleScopeChange}
         />
+      </section>
+
+      <section className="mt-8">
+        <Checkbox isSelected={disableCache} onChange={setDisableCache}>
+          <Text size="small">Disable cache</Text>
+        </Checkbox>
+        <Description className="mt-1 ms-6.5">
+          Run jobs again instead of reusing cached results.
+        </Description>
       </section>
 
       <section className="mt-8">
