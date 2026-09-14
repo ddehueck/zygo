@@ -27,19 +27,34 @@ pub struct RunContext<D: AppDeps> {
     pub deps: D,
     pub worker_pool: WorkerPool<D>,
     pub run_id: WorkflowRunId,
+    pub disable_cache: bool,
     pub cancellation: CancellationGroup,
+}
+
+impl<D: AppDeps> Clone for RunContext<D> {
+    fn clone(&self) -> Self {
+        Self {
+            deps: self.deps.clone(),
+            worker_pool: self.worker_pool.clone(),
+            run_id: self.run_id.clone(),
+            disable_cache: self.disable_cache,
+            cancellation: self.cancellation.clone(),
+        }
+    }
 }
 
 impl<D: AppDeps> RunContext<D> {
     pub fn new(
         context: &ServiceContext<D>,
         run_id: &WorkflowRunId,
+        disable_cache: bool,
         cancellation: CancellationGroup,
     ) -> Self {
         Self {
             deps: context.deps.clone(),
             worker_pool: context.worker_pool.clone(),
             run_id: run_id.clone(),
+            disable_cache,
             cancellation,
         }
     }
@@ -54,23 +69,13 @@ impl<D: AppDeps> From<&RunContext<D>> for ServiceContext<D> {
     }
 }
 
-impl<D: AppDeps> Clone for RunContext<D> {
-    fn clone(&self) -> Self {
-        Self {
-            deps: self.deps.clone(),
-            worker_pool: self.worker_pool.clone(),
-            run_id: self.run_id.clone(),
-            cancellation: self.cancellation.clone(),
-        }
-    }
-}
-
 pub struct ActorContext<D: AppDeps> {
     pub deps: D,
     pub worker_pool: WorkerPool<D>,
     pub run_id: WorkflowRunId,
     pub actor_tx: ActorTx,
     pub stream_writer: StreamWriter,
+    pub disable_cache: bool,
     pub cancellation: CancellationGroup,
 }
 
@@ -82,6 +87,7 @@ impl<D: AppDeps> ActorContext<D> {
             run_id: context.run_id.clone(),
             actor_tx,
             stream_writer,
+            disable_cache: context.disable_cache,
             cancellation: context.cancellation.clone(),
         }
     }
@@ -93,6 +99,7 @@ impl<D: AppDeps> From<&ActorContext<D>> for RunContext<D> {
             deps: context.deps.clone(),
             worker_pool: context.worker_pool.clone(),
             run_id: context.run_id.clone(),
+            disable_cache: context.disable_cache,
             cancellation: context.cancellation.clone(),
         }
     }
@@ -106,6 +113,7 @@ impl<D: AppDeps> Clone for ActorContext<D> {
             run_id: self.run_id.clone(),
             actor_tx: self.actor_tx.clone(),
             stream_writer: self.stream_writer.clone(),
+            disable_cache: self.disable_cache,
             cancellation: self.cancellation.clone(),
         }
     }

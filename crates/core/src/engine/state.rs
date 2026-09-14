@@ -25,10 +25,16 @@ impl<D: AppDeps> ResultCache<D> {
         Self { context, schema }
     }
 
-    pub async fn get_item(
+    pub async fn get_result_cache_item(
         &self,
         job_run_id: &JobRunId,
     ) -> Result<Option<ResultCacheItem>, anyhow::Error> {
+        // We let the cache be disabled via context.
+        // Still allow writes to the cache when disabled.
+        if self.context.disable_cache {
+            return Ok(None);
+        }
+
         let key = KeySpace::cache().result(job_run_id);
         self.context
             .deps
@@ -44,7 +50,7 @@ impl<D: AppDeps> ResultCache<D> {
             })
     }
 
-    pub async fn put(
+    pub async fn put_to_store(
         &self,
         job_run_id: &JobRunId,
         result_cache_item: &ResultCacheItem,

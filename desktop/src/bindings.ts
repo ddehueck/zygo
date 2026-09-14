@@ -70,6 +70,8 @@ export type StartWorkflowRunRequest = {
 	input_paths: string[],
 	/**  When set, run only this job using a job-scoped schema snapshot. */
 	job_id?: string | null,
+	/**  Ignore cached job results and execute jobs again. */
+	disable_cache?: boolean,
 };
 
 export type StartWorkflowRunResponse = {

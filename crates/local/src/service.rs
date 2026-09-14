@@ -102,11 +102,13 @@ impl ZygoLocalService {
         inputs: Vec<DataReference>,
         workflow_id: i64,
         schema: WorkflowSchema,
+        disable_cache: bool,
     ) -> Result<ZygoLocalRun> {
         ZygoLocalRun::start(
             inputs,
             workflow_id,
             schema,
+            disable_cache,
             self.zygo.clone(),
             self.repos.clone(),
         )
@@ -133,9 +135,13 @@ pub struct ZygoLocalWorkflow {
 }
 
 impl ZygoLocalWorkflow {
-    pub async fn run(&self, inputs: Vec<DataReference>) -> Result<ZygoLocalRun> {
+    pub async fn run(
+        &self,
+        inputs: Vec<DataReference>,
+        disable_cache: bool,
+    ) -> Result<ZygoLocalRun> {
         self.service
-            .run(inputs, self.id, self.schema.clone())
+            .run(inputs, self.id, self.schema.clone(), disable_cache)
             .await
     }
 
@@ -144,12 +150,15 @@ impl ZygoLocalWorkflow {
         &self,
         inputs: Vec<DataReference>,
         job_id: &JobId,
+        disable_cache: bool,
     ) -> Result<ZygoLocalRun> {
         let schema = self
             .schema
             .to_job_run(job_id)
             .ok_or_else(|| anyhow!("job `{job_id}` was not found in workflow schema"))?;
-        self.service.run(inputs, self.id, schema).await
+        self.service
+            .run(inputs, self.id, schema, disable_cache)
+            .await
     }
 }
 
@@ -166,6 +175,7 @@ impl ZygoLocalRun {
         inputs: Vec<DataReference>,
         workflow_id: i64,
         schema: WorkflowSchema,
+        disable_cache: bool,
         zygo: Zygo<Dependencies<KvRepository, LogsRepository>>,
         repos: Repos,
     ) -> Result<Self> {
@@ -187,7 +197,9 @@ impl ZygoLocalRun {
             )
             .await?;
 
-        let run = zygo.run(&workflow_run_id, inputs, schema).await?;
+        let run = zygo
+            .run(&workflow_run_id, inputs, schema, disable_cache)
+            .await?;
 
         Ok(Self {
             id: workflow_run_id,

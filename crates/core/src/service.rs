@@ -33,8 +33,9 @@ impl<D: AppDeps> Zygo<D> {
         id: &WorkflowRunId,
         inputs: Vec<DataReference>,
         schema: WorkflowSchema,
+        disable_cache: bool,
     ) -> Result<ZygoRun<D>, anyhow::Error> {
-        ZygoRun::start(id, inputs, schema, self.context.clone()).await
+        ZygoRun::start(id, inputs, schema, disable_cache, self.context.clone()).await
     }
 }
 
@@ -49,6 +50,7 @@ impl<D: AppDeps> ZygoRun<D> {
         id: &WorkflowRunId,
         inputs: Vec<DataReference>,
         schema: WorkflowSchema,
+        disable_cache: bool,
         context: ServiceContext<D>,
     ) -> Result<Self, anyhow::Error> {
         anyhow::ensure!(
@@ -80,7 +82,7 @@ impl<D: AppDeps> ZygoRun<D> {
             .await?;
 
         let cancellation = CancellationGroup::new();
-        let run_context = RunContext::new(&context, id, cancellation);
+        let run_context = RunContext::new(&context, id, disable_cache, cancellation);
         let actor = ActorHandle::spawn(&run_context, input_events).await?;
 
         Ok(Self {

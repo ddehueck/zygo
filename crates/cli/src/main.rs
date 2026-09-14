@@ -30,6 +30,9 @@ enum Command {
         path: String,
         #[arg(long)]
         workers: Option<usize>,
+        /// Ignore cached job results and execute jobs again.
+        #[arg(long)]
+        disable_cache: bool,
     },
 }
 
@@ -44,6 +47,7 @@ async fn main() -> anyhow::Result<()> {
             target,
             path,
             workers,
-        } => run_workflow(&target, &path, workers).await,
+            disable_cache,
+        } => run_workflow(&target, &path, workers, disable_cache).await,
     }
 }

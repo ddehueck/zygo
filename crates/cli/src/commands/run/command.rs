@@ -29,7 +29,6 @@ use crate::tui::{JobLogView, WorkflowRunView, job_run_at_position};
 
 use super::{JobRunSummary, WorkflowRunSummary};
 
-const ZYGO_PKG_INTERNAL_CLI_MODULE: &str = "zygo._internal.ipc.v0";
 const INPUT_POLL_INTERVAL: Duration = Duration::from_millis(50);
 const STREAM_RECORD_BATCH_SIZE: usize = 64;
 
@@ -182,6 +181,7 @@ pub async fn run_workflow(
     target: &str,
     input_path: &str,
     workers: Option<usize>,
+    disable_cache: bool,
 ) -> anyhow::Result<()> {
     // Covert the path into a fsspec URI with an absolute path
     // todo: this needs to mature
@@ -218,7 +218,7 @@ pub async fn run_workflow(
 
     let service = ZygoLocalService::new(config).await?;
     let workflow = service.register(schema).await?;
-    let run = workflow.run(inputs).await?;
+    let run = workflow.run(inputs, disable_cache).await?;
 
     // 5. Watch the engine state in an interactive fullscreen terminal view.
     let mut terminal_input = TerminalInput::new()?;
