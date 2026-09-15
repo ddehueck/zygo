@@ -24,6 +24,7 @@ export function SuggestionBar({
   const { suggestions } = useWorkflowRunsSearchSuggestions({
     filterValue: getFilterValue(searchString),
     limit: 10,
+    activeFilters: value.getFilterValues(),
   });
 
   const filteredSuggestions = suggestions.filter((item) =>
