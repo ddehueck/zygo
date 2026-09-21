@@ -43,30 +43,23 @@ pub struct WorkflowMetadata {
 pub struct RunCommandArgs {
     pub job_id: String,
     pub data_reference_uri: String,
-    pub data_reference_version: String,
+
     pub workflow_run_id: String,
     pub job_run_id: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub struct DataReference {
-    pub uri: String,
-    pub version: String,
 }
 
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum StdoutIPCMessage {
     DataReferenceCreated {
-        data_reference: DataReference,
+        data_reference: String,
     },
     ChannelItemInserted {
         channel_id: String,
-        data_reference: DataReference,
+        data_reference: String,
     },
     TagInserted {
         value: String,
-        data_reference: Option<DataReference>,
+        data_reference: Option<String>,
     },
 }

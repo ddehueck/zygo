@@ -3,7 +3,7 @@ use tokio::process::Command;
 
 use crate::api::error::{self, Result};
 use crate::api::v0::interface::{
-    DataReference, RunCommandArgs, STDOUT_IPC_PREFIX, StdoutIPCMessage, WorkflowMetadata,
+    RunCommandArgs, STDOUT_IPC_PREFIX, StdoutIPCMessage, WorkflowMetadata,
     ZYGO_PKG_INTERNAL_CLI_MODULE,
 };
 use crate::models::{
@@ -180,11 +180,58 @@ impl PythonCli {
     }
 }
 
-impl From<DataReference> for models::DataReference {
-    fn from(data_reference: DataReference) -> Self {
-        Self {
-            uri: data_reference.uri,
-            version: data_reference.version,
+#[cfg(test)]
+mod tests {
+    use super::PythonCli;
+    use crate::models::EventKind;
+
+    #[test]
+    fn parses_uri_only_references() {
+        let event = PythonCli::parse_run_stdout(
+            r#"ZYGO_IPC={"type":"data_reference_created","data_reference":"file:///input"}"#,
+        )
+        .unwrap()
+        .unwrap();
+        assert!(
+            matches!(event, EventKind::DataReferenceInserted(data) if data.uri.as_ref() == "file:///input")
+        );
+
+        let event = PythonCli::parse_run_stdout(
+            r#"ZYGO_IPC={"type":"channel_item_inserted","channel_id":"input","data_reference":"file:///input"}"#,
+        ).unwrap().unwrap();
+        assert!(
+            matches!(event, EventKind::ChannelItemInserted(data) if data.item.as_ref() == "file:///input")
+        );
+
+        for reference in [Some("file:///input"), None] {
+            let payload = serde_json::json!({
+                "type": "tag_inserted",
+                "value": "example",
+                "data_reference": reference,
+            });
+            let event = PythonCli::parse_run_stdout(&format!("ZYGO_IPC={payload}"))
+                .unwrap()
+                .unwrap();
+            assert!(
+                matches!(event, EventKind::TagInserted(data) if data.data_reference.as_ref().map(AsRef::as_ref) == reference)
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_blank_reference_uris() {
+        for kind in [
+            "data_reference_created",
+            "channel_item_inserted",
+            "tag_inserted",
+        ] {
+            let payload = serde_json::json!({
+                "type": kind,
+                "channel_id": "input",
+                "value": "example",
+                "data_reference": "   ",
+            });
+            assert!(PythonCli::parse_run_stdout(&format!("ZYGO_IPC={payload}")).is_err());
         }
     }
 }
@@ -196,7 +243,7 @@ impl TryFrom<StdoutIPCMessage> for EventKind {
         Ok(match message {
             StdoutIPCMessage::DataReferenceCreated { data_reference } => {
                 Self::DataReferenceInserted(DataReferenceInsertedData {
-                    data_reference: models::DataReference::from(data_reference),
+                    uri: models::DataReferenceUri::try_from(data_reference)?,
                 })
             }
             StdoutIPCMessage::ChannelItemInserted {
@@ -205,18 +252,17 @@ impl TryFrom<StdoutIPCMessage> for EventKind {
             } => Self::ChannelItemInserted(ChannelItemInsertedData {
                 // TODO: This should be just a from?
                 channel_id: models::ChannelId::try_from(channel_id)?,
-                data_reference: models::DataReference::from(data_reference),
+                item: models::DataReferenceUri::try_from(data_reference)?,
             }),
             StdoutIPCMessage::TagInserted {
                 value,
                 data_reference,
-            } => {
-                Self::TagInserted(TagInsertedData {
-                    value,
-                    // todo: this conversion is funky
-                    data_reference: data_reference.map(models::DataReference::from),
-                })
-            }
+            } => Self::TagInserted(TagInsertedData {
+                value,
+                data_reference: data_reference
+                    .map(models::DataReferenceUri::try_from)
+                    .transpose()?,
+            }),
         })
     }
 }
