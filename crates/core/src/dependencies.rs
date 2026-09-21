@@ -40,6 +40,7 @@ where
     }
 }
 
+/// An ordered run-scoped stream.
 pub trait EventStream: Clone + Send + Sync + 'static {
     fn append(&self, events: Vec<Event>) -> impl Future<Output = Result<(), anyhow::Error>> + Send;
     fn get(

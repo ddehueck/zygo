@@ -14,8 +14,8 @@ pub use channel::Channel;
 
 pub use entrypoint::Entrypoint;
 pub use event::{
-    ChannelItemInsertedData, DataReferenceInsertedData, Event, EventKind, JobFailedData,
-    JobRunSource, JobStartedData, JobSucceededData, Source, TagInsertedData,
+    ChannelItemInsertedData, DataReferenceInsertedData, Event, EventKind, JobEnqueuedData,
+    JobFailedData, JobRunSource, JobStartedData, JobSucceededData, Source, TagInsertedData,
 };
 pub use file_extension::FileExtension;
 pub use ids::*;

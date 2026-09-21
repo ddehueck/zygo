@@ -1,6 +1,9 @@
 use std::time::Duration;
 
-use zygo_core::ZygoConfig;
+/// Configuration for the local worker pool.
+pub struct ZygoConfig {
+    pub num_workers: usize,
+}
 
 pub const DEFAULT_DATABASE_BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 

@@ -3,4 +3,4 @@ mod handler;
 mod state;
 
 pub use engine::{Engine, EngineStepResult};
-pub use state::EngineState;
+pub use state::{EngineState, RunCursor};

@@ -1,8 +1,7 @@
 use std::path::PathBuf;
 
-use local::{ZygoLocalConfig, ZygoLocalService, DEFAULT_DATABASE_BUSY_TIMEOUT};
+use local::{ZygoConfig, ZygoLocalConfig, ZygoLocalService, DEFAULT_DATABASE_BUSY_TIMEOUT};
 use tauri_specta::{collect_commands, Builder};
-use zygo_core::ZygoConfig;
 
 mod commands;
 mod error;

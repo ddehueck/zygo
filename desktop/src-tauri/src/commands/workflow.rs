@@ -5,8 +5,8 @@ use local::{ZygoLocalRun, ZygoLocalService};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use tauri::State;
-use zygo_core::engine::RunCursor;
-use zygo_core::models::{DataReference, FileExtension, JobId, WorkflowSchema};
+use zygo_core::models::{DataReferenceUri, FileExtension, JobId, WorkflowSchema};
+use zygo_core::RunCursor;
 
 use crate::error::{CommandError, CommandResult};
 
@@ -152,7 +152,7 @@ async fn process_run_until_complete(run: ZygoLocalRun) -> anyhow::Result<()> {
 fn input_data_references(
     input_path: &str,
     accepted_file_extensions: &[FileExtension],
-) -> anyhow::Result<Vec<DataReference>> {
+) -> anyhow::Result<Vec<DataReferenceUri>> {
     let fsspec_uri = if input_path.starts_with("file://") {
         input_path.to_owned()
     } else {
@@ -160,18 +160,12 @@ fn input_data_references(
     };
 
     let Some(path) = local_path(&fsspec_uri) else {
-        return Ok(vec![DataReference {
-            uri: fsspec_uri,
-            version: String::from("1"),
-        }]);
+        return Ok(vec![DataReferenceUri::try_from(fsspec_uri)?]);
     };
 
     if !path.is_dir() {
         ensure_extension_accepted(&path, accepted_file_extensions)?;
-        return Ok(vec![DataReference {
-            uri: fsspec_uri,
-            version: String::from("1"),
-        }]);
+        return Ok(vec![DataReferenceUri::try_from(fsspec_uri)?]);
     }
 
     let accepted_extensions = accepted_file_extensions
@@ -199,13 +193,10 @@ fn input_data_references(
         path.display()
     );
 
-    Ok(files
+    files
         .into_iter()
-        .map(|file| DataReference {
-            uri: format!("file://{}", file.display()),
-            version: String::from("1"),
-        })
-        .collect())
+        .map(|file| DataReferenceUri::try_from(format!("file://{}", file.display())))
+        .collect()
 }
 
 fn ensure_extension_accepted(

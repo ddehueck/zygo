@@ -30,7 +30,7 @@ enum Command {
         path: String,
         #[arg(long)]
         workers: Option<usize>,
-        /// Ignore cached job results and execute jobs again.
+        /// Deprecated: has no effect; jobs always execute without caching.
         #[arg(long)]
         disable_cache: bool,
     },

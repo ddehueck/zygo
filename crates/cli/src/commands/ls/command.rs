@@ -1,6 +1,5 @@
 use anyhow::{Result, bail};
-use local::{DEFAULT_DATABASE_BUSY_TIMEOUT, ZygoLocalConfig, ZygoLocalService};
-use zygo_core::ZygoConfig;
+use local::{DEFAULT_DATABASE_BUSY_TIMEOUT, ZygoConfig, ZygoLocalConfig, ZygoLocalService};
 
 pub async fn list_workflow_runs(filter: Option<&str>) -> Result<()> {
     let filter = filter.map(parse_filter).transpose()?;

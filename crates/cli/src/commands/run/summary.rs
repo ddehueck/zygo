@@ -1,7 +1,7 @@
 use std::{collections::HashMap, time::SystemTime};
 
 use zygo_core::{
-    engine::EngineSnapshot,
+    EngineState,
     models::{Event, EventKind, WorkflowRunStatus},
 };
 
@@ -30,8 +30,8 @@ impl WorkflowRunSummary {
         }
     }
 
-    pub fn update_by_snapshot(&mut self, snapshot: &EngineSnapshot) {
-        self.workflow_status = snapshot.state.status.to_string();
+    pub fn update_by_snapshot(&mut self, snapshot: &EngineState) {
+        self.workflow_status = snapshot.status.to_string();
     }
 
     pub fn update_by_event(&mut self, event: Event) {
@@ -72,7 +72,8 @@ impl WorkflowRunSummary {
                 "failed",
                 timestamp,
             ),
-            EventKind::DataReferenceInserted(_)
+            EventKind::JobEnqueued(_)
+            | EventKind::DataReferenceInserted(_)
             | EventKind::ChannelItemInserted(_)
             | EventKind::TagInserted(_) => {}
         }

@@ -53,7 +53,7 @@ impl<D: AppDeps> Engine<D> {
 
         // Publish state update
         if let Some(tx) = &self.state_tx {
-            tx.send(self.state.clone()).ok();
+            tx.send_replace(self.state.clone());
         }
 
         Ok(EngineStepResult::Continue)

@@ -14,16 +14,15 @@ use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
 use local::{
-    DEFAULT_DATABASE_BUSY_TIMEOUT, DbResult, LogRow, LogWatcher, LogsRepository, ZygoLocalConfig,
-    ZygoLocalService,
+    DEFAULT_DATABASE_BUSY_TIMEOUT, DbResult, LogRow, LogWatcher, LogsRepository, ZygoConfig,
+    ZygoLocalConfig, ZygoLocalService,
 };
 use ratatui::backend::CrosstermBackend;
 use ratatui::widgets::TableState;
 use ratatui::{Terminal, TerminalOptions, Viewport};
-use zygo_core::ZygoConfig;
 use zygo_core::api::v0::PythonCli;
-use zygo_core::engine::{EngineSnapshot, RunCursor};
-use zygo_core::models::{DataReference, Event, FileExtension, JobRunId, StreamItem};
+use zygo_core::models::{DataReferenceUri, Event, FileExtension, JobRunId};
+use zygo_core::{EngineState, RunCursor};
 
 use crate::tui::{JobLogView, WorkflowRunView, job_run_at_position};
 
@@ -137,7 +136,7 @@ impl LogViewState {
 }
 
 struct StreamUpdate {
-    snapshot: EngineSnapshot,
+    snapshot: EngineState,
     events: Vec<Event>,
 }
 
@@ -274,12 +273,10 @@ pub async fn run_workflow(
                     break;
                 };
 
-                if let StreamItem::Event(event) = record.item {
-                    events.push(event);
-                }
+                events.push(record);
             }
             pending_records = !reached_end;
-            let is_complete = reached_end && snapshot.state.status.is_terminal();
+            let is_complete = reached_end && snapshot.status.is_terminal();
 
             if stream_updates_tx
                 .send(StreamMessage::Update(StreamUpdate { snapshot, events }))
@@ -475,19 +472,13 @@ pub async fn run_workflow(
 fn input_data_references(
     input_uri: &str,
     accepted_file_extensions: &[FileExtension],
-) -> anyhow::Result<Vec<DataReference>> {
+) -> anyhow::Result<Vec<DataReferenceUri>> {
     let Some(path) = local_path(input_uri) else {
-        return Ok(vec![DataReference {
-            uri: input_uri.to_owned(),
-            version: String::from("1"),
-        }]);
+        return Ok(vec![DataReferenceUri::try_from(input_uri.to_owned())?]);
     };
 
     if !path.is_dir() {
-        return Ok(vec![DataReference {
-            uri: input_uri.to_owned(),
-            version: String::from("1"),
-        }]);
+        return Ok(vec![DataReferenceUri::try_from(input_uri.to_owned())?]);
     }
 
     let accepted_extensions = accepted_file_extensions
@@ -517,11 +508,8 @@ fn input_data_references(
 
     Ok(files
         .into_iter()
-        .map(|file| DataReference {
-            uri: file.to_string_lossy().into_owned(),
-            version: String::from("1"),
-        })
-        .collect())
+        .map(|file| DataReferenceUri::try_from(file.to_string_lossy().into_owned()))
+        .collect::<Result<Vec<_>, _>>()?)
 }
 
 fn local_path(uri: &str) -> Option<PathBuf> {
