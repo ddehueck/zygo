@@ -12,26 +12,9 @@ from pathlib import Path
 import sys
 from typing import TYPE_CHECKING, Literal, TextIO
 
-if TYPE_CHECKING:
-    from zygo.store import Reference
 
 STDOUT_IPC_PREFIX: str = "ZYGO_IPC="
 
-
-@dataclass(frozen=True)
-class DataReference:
-    """The data-reference shape consumed by the Rust IPC parser."""
-
-    uri: str
-    version: str
-
-    @classmethod
-    def from_reference(cls, reference: Reference) -> DataReference:
-        """Convert a store reference to the cross-language IPC representation."""
-        return cls(
-            uri=str(reference.uri),
-            version="1",  # TODO: implement or remove versioning?
-        )
 
 
 @dataclass(frozen=True)
@@ -39,7 +22,7 @@ class DataReferenceCreated:
     type: Literal["data_reference_created"] = field(
         default="data_reference_created", init=False
     )
-    data_reference: DataReference
+    data_reference: str
 
 
 @dataclass(frozen=True)
@@ -48,14 +31,14 @@ class ChannelItemInserted:
         default="channel_item_inserted", init=False
     )
     channel_id: str
-    data_reference: DataReference
+    data_reference: str
 
 
 @dataclass(frozen=True)
 class TagInserted:
     type: Literal["tag_inserted"] = field(default="tag_inserted", init=False)
     value: str
-    data_reference: DataReference | None = None
+    data_reference: str | None = None
 
 
 type StdoutIPCMessage = DataReferenceCreated | ChannelItemInserted | TagInserted
@@ -112,6 +95,5 @@ class WorkflowMetadata:
 class JobRunArgs:
     job_id: str
     data_reference_uri: str
-    data_reference_version: str
     workflow_run_id: str
     job_run_id: str

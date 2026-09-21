@@ -21,7 +21,9 @@ use ratatui::backend::CrosstermBackend;
 use ratatui::widgets::TableState;
 use ratatui::{Terminal, TerminalOptions, Viewport};
 use zygo_core::api::v0::PythonCli;
-use zygo_core::models::{DataReferenceUri, Event, FileExtension, JobRunId};
+use zygo_core::models::{
+    DataReferenceUri, Event, EventKind, FileExtension, JobRunId, WorkflowRunStatus,
+};
 use zygo_core::{EngineState, RunCursor};
 
 use crate::tui::{JobLogView, WorkflowRunView, job_run_at_position};
@@ -343,12 +345,28 @@ pub async fn run_workflow(
 
         match loop_event {
             LoopEvent::StreamUpdate(update) => {
+                let failure = update.events.iter().find_map(|event| match &event.kind {
+                    EventKind::JobFailed(data) => Some(format!(
+                        "job {} ({}): {}",
+                        data.job_id, data.job_run_id, data.error
+                    )),
+                    _ => None,
+                });
+
                 for event in update.events {
                     summary.update_by_event(event);
                 }
 
                 summary.update_by_snapshot(&update.snapshot);
                 has_snapshot = true;
+
+                if update.snapshot.status == WorkflowRunStatus::Failed {
+                    stream_task.abort();
+                    return Err(anyhow::anyhow!(
+                        "workflow `{target}` failed: {}",
+                        failure.unwrap_or_else(|| "no failure details available".to_owned())
+                    ));
+                }
 
                 if let Screen::Logs(log) = &mut screen {
                     log.is_running = summary

@@ -141,12 +141,13 @@ impl<S: EventStream> LocalRuntime<S> {
             .await
     }
 
-    async fn fail(&self, source: &JobRunSource) -> Result<()> {
+    async fn fail(&self, source: &JobRunSource, error: String) -> Result<()> {
         self.publish(
             source,
             EventKind::JobFailed(JobFailedData {
                 job_id: source.job_id.clone(),
                 job_run_id: source.job_run_id.clone(),
+                error,
             }),
         )
         .await
@@ -306,8 +307,13 @@ impl<S: EventStream> JobRuntime for LocalRuntime<S> {
             let result = match runtime.worker(&source, args, entrypoint, cancel_rx).await {
                 Ok(()) => Ok(()),
                 Err(error) => {
-                    eprintln!("local job {} failed: {error:#}", source.job_run_id);
-                    runtime.fail(&source).await
+                    let error_message = format!("{error:#}");
+                    match runtime.fail(&source, error_message.clone()).await {
+                        Ok(()) => Ok(()),
+                        Err(publish_error) => {
+                            Err(publish_error.context(format!("job failed: {error_message}")))
+                        }
+                    }
                 }
             };
             if let Err(error) = &result {

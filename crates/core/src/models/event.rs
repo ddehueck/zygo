@@ -48,6 +48,7 @@ pub struct JobSucceededData {
 pub struct JobFailedData {
     pub job_id: JobId,
     pub job_run_id: JobRunId,
+    pub error: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
