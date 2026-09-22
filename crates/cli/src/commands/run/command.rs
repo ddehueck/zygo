@@ -14,7 +14,7 @@ use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
 use local::{
-    DEFAULT_DATABASE_BUSY_TIMEOUT, DbResult, LogRow, LogWatcher, LogsRepository, ZygoConfig,
+    DEFAULT_DATABASE_BUSY_TIMEOUT, DbResult, LogRow, LogWatcher, LogsRepository, RunOptions,
     ZygoLocalConfig, ZygoLocalService,
 };
 use ratatui::backend::CrosstermBackend;
@@ -212,14 +212,15 @@ pub async fn run_workflow(
     // 4. Create a zygo service and start the workflow
     let config = ZygoLocalConfig {
         database_busy_timeout: DEFAULT_DATABASE_BUSY_TIMEOUT,
-        base: ZygoConfig {
-            num_workers: workers.unwrap_or(1),
-        },
+    };
+    let options = RunOptions {
+        num_workers: workers.unwrap_or(1),
+        disable_cache,
     };
 
     let service = ZygoLocalService::new(config).await?;
     let workflow = service.register(schema).await?;
-    let run = workflow.run(inputs, disable_cache).await?;
+    let run = workflow.run(inputs, options).await?;
 
     // 5. Watch the engine state in an interactive fullscreen terminal view.
     let mut terminal_input = TerminalInput::new()?;

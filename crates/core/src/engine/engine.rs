@@ -2,7 +2,6 @@ use super::state::EngineState;
 use crate::context::ActorContext;
 use crate::dependencies::{AppDeps, EventStream};
 use crate::engine::handler::EventHandler;
-use crate::models::WorkflowRunStatus;
 use tokio::sync::watch;
 
 pub struct Engine<D: AppDeps> {
@@ -35,7 +34,7 @@ impl<D: AppDeps> Engine<D> {
 
         let Some(event) = stream.get(next_id).await? else {
             return Ok(if self.state.status.is_terminal() {
-                EngineStepResult::Terminal(self.state.status.clone())
+                EngineStepResult::Terminal
             } else {
                 EngineStepResult::Idle
             });
@@ -67,5 +66,5 @@ impl<D: AppDeps> Engine<D> {
 pub enum EngineStepResult {
     Continue,
     Idle,
-    Terminal(WorkflowRunStatus),
+    Terminal,
 }

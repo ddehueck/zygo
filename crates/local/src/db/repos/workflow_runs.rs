@@ -84,7 +84,13 @@ impl WorkflowRunRepository {
                 .await?;
             tx.execute(
                 CREATE_SQL,
-                params![workflow_run_id, workflow_id, content_hash, schema, "running"],
+                params![
+                    workflow_run_id,
+                    workflow_id,
+                    content_hash,
+                    schema,
+                    "running"
+                ],
             )
             .await?;
             tx.commit().await?;

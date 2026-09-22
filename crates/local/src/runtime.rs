@@ -1,66 +1,85 @@
+mod managed_process;
+mod worker;
+mod worker_pool;
+
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::SystemTime;
 
 use anyhow::{Result, anyhow, bail};
-use tokio::fs::File;
-use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::sync::{Mutex, Semaphore, oneshot, watch};
+use tokio::sync::{Mutex, watch};
 use zygo_core::api::interface::{RunJobArgs, RunJobResult};
-use zygo_core::api::v0::{PythonCli, RunCommandArgs};
+use zygo_core::api::v0::PythonCli;
 use zygo_core::dependencies::{EventStream, JobRuntime};
-use zygo_core::models::JobEnqueuedData;
 use zygo_core::models::{
-    Entrypoint, Event, EventId, EventKind, JobFailedData, JobRunId, JobRunSource, JobStartedData,
-    JobSucceededData, Source, WorkflowRunId, WorkflowSchema,
+    Event, EventId, EventKind, JobEnqueuedData, JobFailedData, JobRunId, JobRunSource, Source,
+    WorkflowRunId,
 };
 
 use crate::LogsRepository;
+use managed_process::ManagedProcess;
+use worker::WorkerOutcome;
+use worker_pool::WorkerPool;
 
 /// Run-scoped local execution - todo: add caching at this layer.
 ///
-/// Share the semaphore across runtime instances to enforce a service-wide limit.
-/// Writes to event stream directly which is picked up by the polling loop of the core actor.
+/// Each runtime owns a FIFO worker pool and writes to the event stream directly,
+/// which is picked up by the core actor's polling loop.
 ///
-/// Queued cancellation emits `JobFailed`.
-/// Active cancellation is unsupported for now. todo: clean up descendants.
-#[derive(Clone)]
+/// Runtime cancellation stops queued and active jobs without publishing a
+/// terminal job event, then waits for active process trees to terminate.
 pub struct LocalRuntime<S> {
-    schema: Arc<WorkflowSchema>,
+    worker: Worker<S>,
+    worker_pool: WorkerPool,
+}
+
+struct Worker<S> {
+    ctx: Arc<RuntimeContext<S>>,
+    state: Arc<RuntimeState>,
+}
+
+struct RuntimeContext<S> {
+    python_cli: PythonCli,
     run_id: WorkflowRunId,
     stream: S,
     logs: LogsRepository,
-    semaphore: Arc<Semaphore>,
-    jobs: Arc<Mutex<HashMap<JobRunId, RunningJob>>>,
-    cancelled: Arc<AtomicBool>,
 }
 
-struct RunningJob {
-    source: JobRunSource,
-    state: JobState,
+struct RuntimeState {
+    jobs: Mutex<HashMap<JobRunId, TrackedJob>>,
+    cancelled: AtomicBool,
+    cancellation: watch::Sender<bool>,
+}
+
+struct TrackedJob {
     completion: watch::Receiver<Option<std::result::Result<(), String>>>,
 }
 
-enum JobState {
-    Queued(oneshot::Sender<()>),
-    Active,
-    Cancelling,
+struct JobCompletion {
+    sender: watch::Sender<Option<std::result::Result<(), String>>>,
+    completed: AtomicBool,
 }
 
-impl RunningJob {
-    fn cancel_queued(&mut self) -> Result<()> {
-        if matches!(self.state, JobState::Active) {
-            // TODO: Cancel active children and their process groups, drain/reap them,
-            // and suppress further worker events before acknowledging cancellation.
-            bail!("cancellation of an active local child is not implemented");
+impl<S> Clone for LocalRuntime<S> {
+    fn clone(&self) -> Self {
+        Self {
+            worker: self.worker.clone(),
+            worker_pool: self.worker_pool.clone(),
         }
-        if let JobState::Queued(cancel) = std::mem::replace(&mut self.state, JobState::Cancelling) {
-            let _ = cancel.send(());
-        }
-        Ok(())
     }
+}
 
+impl<S> Clone for Worker<S> {
+    fn clone(&self) -> Self {
+        Self {
+            ctx: self.ctx.clone(),
+            state: self.state.clone(),
+        }
+    }
+}
+
+impl TrackedJob {
     async fn wait_for_completion(
         mut completion: watch::Receiver<Option<std::result::Result<(), String>>>,
     ) -> Result<()> {
@@ -76,67 +95,92 @@ impl RunningJob {
     }
 }
 
+impl JobCompletion {
+    fn complete(&self, result: Result<()>) {
+        if !self.completed.swap(true, Ordering::SeqCst) {
+            self.sender
+                .send_replace(Some(result.map_err(|error| format!("{error:#}"))));
+        }
+    }
+}
+
+impl Drop for JobCompletion {
+    fn drop(&mut self) {
+        if !self.completed.swap(true, Ordering::SeqCst) {
+            self.sender.send_replace(Some(Err(
+                "local worker stopped without reporting completion".to_owned(),
+            )));
+        }
+    }
+}
+
 impl<S: EventStream> LocalRuntime<S> {
     pub fn new(
-        schema: WorkflowSchema,
+        python_cli: PythonCli,
         run_id: WorkflowRunId,
         stream: S,
         logs: LogsRepository,
-        semaphore: Arc<Semaphore>,
+        num_workers: usize,
     ) -> Self {
+        let (cancellation, _) = watch::channel(false);
         Self {
-            schema: Arc::new(schema),
-            run_id,
-            stream,
-            logs,
-            semaphore,
-            jobs: Arc::new(Mutex::new(HashMap::new())),
-            cancelled: Arc::new(AtomicBool::new(false)),
+            worker: Worker {
+                ctx: Arc::new(RuntimeContext {
+                    python_cli,
+                    run_id,
+                    stream,
+                    logs,
+                }),
+                state: Arc::new(RuntimeState {
+                    jobs: Mutex::new(HashMap::new()),
+                    cancelled: AtomicBool::new(false),
+                    cancellation,
+                }),
+            },
+            worker_pool: WorkerPool::new(num_workers),
         }
     }
 
-    /// Stop admitting work and wait for queued jobs to publish their failures.
-    /// Active jobs are left running and cause an explicit unsupported-cancellation error.
+    /// Stop admitting work, terminate all active process trees, drain queued
+    /// jobs, and wait for every active worker to finish.
     pub async fn cancel(&self) -> Result<()> {
-        let mut first_error = None;
         let completions = {
-            let mut jobs = self.jobs.lock().await;
-            self.cancelled.store(true, Ordering::SeqCst);
-            let mut completions = Vec::new();
-            // Mark every queued job before unlocking, so permit acquisition cannot
-            // admit a waiting worker between cancellation requests.
-            for job in jobs.values_mut() {
-                match job.cancel_queued() {
-                    Ok(()) => completions.push(job.completion.clone()),
-                    Err(error) => {
-                        first_error.get_or_insert(error);
-                    }
-                }
-            }
-            completions
+            let jobs = self.worker.state.jobs.lock().await;
+            self.worker.state.cancelled.store(true, Ordering::SeqCst);
+            self.worker_pool.close();
+            self.worker.state.cancellation.send_replace(true);
+            jobs.values()
+                .map(|job| job.completion.clone())
+                .collect::<Vec<_>>()
         };
+
+        let pool_error = self.worker_pool.join().await.err();
+        let mut first_error = None;
         for completion in completions {
-            if let Err(error) = RunningJob::wait_for_completion(completion).await {
+            if let Err(error) = TrackedJob::wait_for_completion(completion).await {
                 first_error.get_or_insert(error);
             }
         }
-        // TODO: Wait for active children to stop and be reaped before acknowledging
-        // actor cancellation. This lifecycle belongs to the local worker pool.
-        match first_error {
+        self.worker.state.jobs.lock().await.clear();
+
+        match first_error.or(pool_error) {
             Some(error) => Err(error),
             None => Ok(()),
         }
     }
+}
 
+impl<S: EventStream> Worker<S> {
     async fn publish(&self, source: &JobRunSource, kind: EventKind) -> Result<()> {
-        self.stream
+        self.ctx
+            .stream
             .append(vec![Event {
                 id: EventId::new(),
                 is_replay: false,
                 timestamp: SystemTime::now(),
                 kind,
                 source: Source::JobRun(source.clone()),
-                run_id: self.run_id.clone(),
+                run_id: self.ctx.run_id.clone(),
             }])
             .await
     }
@@ -152,207 +196,103 @@ impl<S: EventStream> LocalRuntime<S> {
         )
         .await
     }
-
-    async fn worker(
-        &self,
-        source: &JobRunSource,
-        args: RunJobArgs,
-        entrypoint: Entrypoint,
-        mut cancel: oneshot::Receiver<()>,
-    ) -> Result<()> {
-        let permit = tokio::select! {
-            biased;
-            _ = &mut cancel => bail!("queued job cancelled"),
-            permit = self.semaphore.clone().acquire_owned() => permit?,
-        };
-        {
-            let mut jobs = self.jobs.lock().await;
-            let Some(job) = jobs.get_mut(&source.job_run_id) else {
-                return Ok(());
-            };
-            // This transition serializes admission against queued cancellation.
-            if self.cancelled.load(Ordering::SeqCst) || matches!(job.state, JobState::Cancelling) {
-                bail!("queued job cancelled");
-            }
-            job.state = JobState::Active;
-        }
-        let result = self.execute(source, args, entrypoint).await;
-        drop(permit);
-        result
-    }
-
-    async fn execute(
-        &self,
-        source: &JobRunSource,
-        args: RunJobArgs,
-        entrypoint: Entrypoint,
-    ) -> Result<()> {
-        let command_args = RunCommandArgs {
-            job_id: args.job_id.to_string(),
-            data_reference_uri: args.input.to_string(),
-            workflow_run_id: self.run_id.to_string(),
-            job_run_id: args.job_run_id.to_string(),
-        };
-        let mut command = match entrypoint {
-            Entrypoint::Python(cli) => cli.build_run_job_command(command_args),
-        };
-        // One pipe preserves kernel arrival order across stdout and stderr.
-        let (reader, writer) = std::io::pipe()?;
-        command.stdout(writer.try_clone()?);
-        command.stderr(writer);
-        // TODO: Restore process-group cleanup, including descendants that outlive
-        // the leader or keep its output pipe open, when active cancellation lands.
-        command.kill_on_drop(true);
-        let mut child = command.spawn()?;
-        drop(command);
-
-        let result = async {
-            self.publish(
-                source,
-                EventKind::JobStarted(JobStartedData {
-                    job_id: source.job_id.clone(),
-                    job_run_id: source.job_run_id.clone(),
-                    input: args.input,
-                }),
-            )
-            .await?;
-            self.process_output(source, pipe_file(reader)).await?;
-            let status = child.wait().await?;
-            if !status.success() {
-                bail!("job process exited with {status}");
-            }
-            Ok::<_, anyhow::Error>(())
-        }
-        .await;
-        if let Err(error) = result {
-            if let Err(cleanup) = child.kill().await {
-                return Err(error.context(format!("child cleanup failed: {cleanup}")));
-            }
-            return Err(error);
-        }
-        self.publish(
-            source,
-            EventKind::JobSucceeded(JobSucceededData {
-                job_id: source.job_id.clone(),
-                job_run_id: source.job_run_id.clone(),
-            }),
-        )
-        .await
-    }
-
-    async fn process_output(&self, source: &JobRunSource, pipe: File) -> Result<()> {
-        let mut reader = BufReader::new(pipe);
-        let mut line = Vec::new();
-        while reader.read_until(b'\n', &mut line).await? != 0 {
-            self.logs.write_all(&self.run_id, source, &line).await?;
-            let payload = line.strip_suffix(b"\n").unwrap_or(&line);
-            let payload = payload.strip_suffix(b"\r").unwrap_or(payload);
-            if let Ok(payload) = std::str::from_utf8(payload) {
-                if let Some(kind) = PythonCli::parse_run_stdout(payload)? {
-                    self.publish(source, kind).await?;
-                }
-            }
-            line.clear();
-        }
-        Ok(())
-    }
 }
 
 impl<S: EventStream> JobRuntime for LocalRuntime<S> {
     async fn run_job(&self, args: RunJobArgs) -> Result<RunJobResult> {
-        if args.workflow_run_id != self.run_id {
+        if args.workflow_run_id != self.worker.ctx.run_id {
             bail!("job belongs to a different workflow run");
         }
-        let entrypoint = self
-            .schema
-            .get_job_entrypoint(&args.job_id)
-            .ok_or_else(|| anyhow!("unknown job: {}", args.job_id))?;
-        let mut jobs = self.jobs.lock().await;
-        if self.cancelled.load(Ordering::SeqCst) {
+
+        let mut jobs = self.worker.state.jobs.lock().await;
+        if self.worker.state.cancelled.load(Ordering::SeqCst) {
             bail!("local workflow runtime has been cancelled");
         }
-        if self.semaphore.is_closed() {
-            bail!("local worker semaphore is closed");
+        if self.worker_pool.is_closed() {
+            bail!("local worker pool is closed");
         }
         if jobs.contains_key(&args.job_run_id) {
             bail!("job run is already queued or running: {}", args.job_run_id);
         }
+
         let source = JobRunSource {
             job_id: args.job_id.clone(),
             job_run_id: args.job_run_id.clone(),
         };
-        self.publish(
-            &source,
-            EventKind::JobEnqueued(JobEnqueuedData {
-                job_id: args.job_id.clone(),
-                job_run_id: args.job_run_id.clone(),
-                input: args.input.clone(),
-            }),
-        )
-        .await?;
-        let (cancel_tx, cancel_rx) = oneshot::channel();
+        self.worker
+            .publish(
+                &source,
+                EventKind::JobEnqueued(JobEnqueuedData {
+                    job_id: args.job_id.clone(),
+                    job_run_id: args.job_run_id.clone(),
+                    input: args.input.clone(),
+                }),
+            )
+            .await?;
+
+        let cancellation = self.worker.state.cancellation.subscribe();
         let (completion_tx, completion_rx) = watch::channel(None);
+        let completion = Arc::new(JobCompletion {
+            sender: completion_tx,
+            completed: AtomicBool::new(false),
+        });
         jobs.insert(
             args.job_run_id.clone(),
-            RunningJob {
-                source: source.clone(),
-                state: JobState::Queued(cancel_tx),
+            TrackedJob {
                 completion: completion_rx,
             },
         );
-        let runtime = self.clone();
-        tokio::spawn(async move {
-            // The worker owns terminal publication, including queued cancellation
-            // and semaphore closure. Cancellation callers never publish a second failure.
-            let result = match runtime.worker(&source, args, entrypoint, cancel_rx).await {
-                Ok(()) => Ok(()),
-                Err(error) => {
-                    let error_message = format!("{error:#}");
-                    match runtime.fail(&source, error_message.clone()).await {
-                        Ok(()) => Ok(()),
-                        Err(publish_error) => {
-                            Err(publish_error.context(format!("job failed: {error_message}")))
-                        }
+
+        let worker = self.worker.clone();
+        let cancelled_completion = completion.clone();
+        let job_run_id = source.job_run_id.clone();
+        let enqueue_result = self.worker_pool.enqueue(
+            async move {
+                let result = match worker.worker(&source, args, cancellation).await {
+                    Ok(WorkerOutcome::Succeeded | WorkerOutcome::Cancelled) => Ok(()),
+                    Err(error) => {
+                        let jobs = worker.state.jobs.lock().await;
+                        let result =
+                            if worker.state.cancelled.load(Ordering::SeqCst) {
+                                Err(error)
+                            } else {
+                                let error_message = format!("{error:#}");
+                                match worker.fail(&source, error_message.clone()).await {
+                                    Ok(()) => Err(anyhow!(error_message)),
+                                    Err(publish_error) => Err(publish_error
+                                        .context(format!("job failed: {error_message}"))),
+                                }
+                            };
+                        drop(jobs);
+                        result
                     }
-                }
-            };
-            if let Err(error) = &result {
-                eprintln!(
-                    "failed to publish JobFailed for {}: {error:#}",
-                    source.job_run_id
-                );
-            }
-            runtime.jobs.lock().await.remove(&source.job_run_id);
-            completion_tx.send_replace(Some(result.map_err(|error| format!("{error:#}"))));
-        });
+                };
+                worker.state.jobs.lock().await.remove(&source.job_run_id);
+                completion.complete(result);
+            },
+            move || cancelled_completion.complete(Ok(())),
+        );
+
+        if let Err(error) = enqueue_result {
+            jobs.remove(&job_run_id);
+            return Err(error);
+        }
+
         Ok(RunJobResult::Enqueued)
     }
 
-    async fn stop_job(&self, source: JobRunSource) -> Result<()> {
-        let mut jobs = self.jobs.lock().await;
-        let Some(job) = jobs.get_mut(&source.job_run_id) else {
-            return Ok(());
-        };
-        if job.source.job_id != source.job_id {
-            bail!("job source does not match the queued or running job");
-        }
-        job.cancel_queued()?;
-        let completion = job.completion.clone();
-        drop(jobs);
-        RunningJob::wait_for_completion(completion).await
+    async fn stop_job(&self, _source: JobRunSource) -> Result<()> {
+        self.cancel().await
     }
 }
 
-fn pipe_file(reader: std::io::PipeReader) -> File {
-    #[cfg(unix)]
-    let file = {
-        use std::os::fd::OwnedFd;
-        std::fs::File::from(OwnedFd::from(reader))
-    };
-    #[cfg(windows)]
-    let file = {
-        use std::os::windows::io::OwnedHandle;
-        std::fs::File::from(OwnedHandle::from(reader))
-    };
-    File::from_std(file)
+async fn wait_for_cancellation(cancellation: &mut watch::Receiver<bool>) {
+    loop {
+        if *cancellation.borrow_and_update() {
+            return;
+        }
+        if cancellation.changed().await.is_err() {
+            return;
+        }
+    }
 }

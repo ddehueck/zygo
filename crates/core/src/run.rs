@@ -11,12 +11,12 @@ const EVENT_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
 pub type ActorStateRx = watch::Receiver<EngineState>;
 
-pub struct ActorHandle {
+pub struct RunHandle {
     pub state_rx: ActorStateRx,
     handle: tokio::task::JoinHandle<()>,
 }
 
-impl ActorHandle {
+impl RunHandle {
     pub async fn spawn<D: AppDeps>(
         context: &RunContext<D>,
         initial_events: Vec<Event>,
@@ -30,7 +30,7 @@ impl ActorHandle {
         // Start the actor task.
         let context = context.clone();
         let handle = tokio::spawn(async move {
-            if let Err(error) = run_actor(&context, &state_tx).await {
+            if let Err(error) = run_engine(&context, &state_tx).await {
                 eprintln!("workflow actor {} stopped: {error:#}", context.run_id);
             }
         });
@@ -43,7 +43,7 @@ impl ActorHandle {
     }
 }
 
-async fn run_actor<D: AppDeps>(
+async fn run_engine<D: AppDeps>(
     context: &RunContext<D>,
     state_tx: &watch::Sender<EngineState>,
 ) -> Result<()> {
@@ -56,10 +56,7 @@ async fn run_actor<D: AppDeps>(
             EngineStepResult::Idle => {
                 sleep(EVENT_POLL_INTERVAL).await;
             }
-            EngineStepResult::Terminal(status) => {
-                // TODO: Ask the runtime to cancel remaining jobs when a run fails.
-                // Active process cancellation belongs to its worker pool, not core.
-                debug_assert!(status.is_terminal());
+            EngineStepResult::Terminal => {
                 return Ok(());
             }
         }

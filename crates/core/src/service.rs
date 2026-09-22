@@ -1,15 +1,15 @@
-use crate::actor::{ActorHandle, ActorStateRx};
 use crate::context::RunContext;
 use crate::dependencies::AppDeps;
 use crate::models::{
     ChannelItemInsertedData, DataReferenceUri, Event, EventId, EventKind, Source, WorkflowRunId,
     WorkflowSchema,
 };
+use crate::run::{ActorStateRx, RunHandle};
 use std::time::SystemTime;
 
 pub struct ZygoRun {
     pub id: WorkflowRunId,
-    actor: ActorHandle,
+    actor: RunHandle,
 }
 
 impl ZygoRun {
@@ -45,7 +45,7 @@ impl ZygoRun {
             schema,
         };
 
-        let actor = ActorHandle::spawn(&run_context, input_events).await?;
+        let actor = RunHandle::spawn(&run_context, input_events).await?;
 
         Ok(Self {
             id: id.clone(),

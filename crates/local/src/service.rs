@@ -1,15 +1,12 @@
 use std::io;
 use std::path::PathBuf;
 
-use crate::{EventStreamRepository, LocalEventStream, LocalRuntime};
+use crate::{EventStreamRepository, LocalEventStream, LocalRuntime, RunOptions, ZygoLocalConfig};
 use anyhow::{Result, anyhow};
-use std::sync::Arc;
-use tokio::sync::Semaphore;
 use zygo_core::ActorStateRx;
-use zygo_core::models::{DataReferenceUri, JobId, WorkflowRunId, WorkflowSchema};
+use zygo_core::models::{DataReferenceUri, Entrypoint, JobId, WorkflowRunId, WorkflowSchema};
 use zygo_core::{Dependencies, ZygoRun};
 
-use crate::ZygoLocalConfig;
 use crate::db::{
     CdcRepository, DataReferenceRepository, Db, JobRunRepository, LogsRepository, Repos,
     TagsRepository, WorkflowRepository, WorkflowRunModel, WorkflowRunRepository,
@@ -19,7 +16,6 @@ use crate::stream_processor::LocalStreamProcessor;
 
 #[derive(Clone)]
 pub struct ZygoLocalService {
-    workers: Arc<Semaphore>,
     pub repos: Repos,
 }
 
@@ -33,10 +29,6 @@ impl ZygoLocalService {
     }
 
     pub async fn new(config: ZygoLocalConfig) -> Result<Self> {
-        anyhow::ensure!(
-            config.base.num_workers > 0,
-            "at least one local worker is required"
-        );
         let path = Self::database_path()?.to_string_lossy().into_owned();
         let database = Db::open(&path, config.database_busy_timeout, true).await?;
         let no_cdc_database = Db::open(&path, config.database_busy_timeout, false).await?;
@@ -55,7 +47,6 @@ impl ZygoLocalService {
         let cdc = CdcRepository::new(no_cdc_database);
 
         Ok(Self {
-            workers: Arc::new(Semaphore::new(config.base.num_workers)),
             repos: Repos {
                 cdc,
                 events,
@@ -107,17 +98,9 @@ impl ZygoLocalService {
         inputs: Vec<DataReferenceUri>,
         workflow_id: i64,
         schema: WorkflowSchema,
-        disable_cache: bool,
+        options: RunOptions,
     ) -> Result<ZygoLocalRun> {
-        ZygoLocalRun::start(
-            inputs,
-            workflow_id,
-            schema,
-            disable_cache,
-            self.workers.clone(),
-            self.repos.clone(),
-        )
-        .await
+        ZygoLocalRun::start(inputs, workflow_id, schema, options, self.repos.clone()).await
     }
 
     // todo: don't love that this is here. There's a repository/deps refactor brewing.
@@ -143,10 +126,10 @@ impl ZygoLocalWorkflow {
     pub async fn run(
         &self,
         inputs: Vec<DataReferenceUri>,
-        disable_cache: bool,
+        options: RunOptions,
     ) -> Result<ZygoLocalRun> {
         self.service
-            .run(inputs, self.id, self.schema.clone(), disable_cache)
+            .run(inputs, self.id, self.schema.clone(), options)
             .await
     }
 
@@ -155,15 +138,13 @@ impl ZygoLocalWorkflow {
         &self,
         inputs: Vec<DataReferenceUri>,
         job_id: &JobId,
-        disable_cache: bool,
+        options: RunOptions,
     ) -> Result<ZygoLocalRun> {
         let schema = self
             .schema
             .to_job_run(job_id)
             .ok_or_else(|| anyhow!("job `{job_id}` was not found in workflow schema"))?;
-        self.service
-            .run(inputs, self.id, schema, disable_cache)
-            .await
+        self.service.run(inputs, self.id, schema, options).await
     }
 }
 
@@ -182,10 +163,15 @@ impl ZygoLocalRun {
         inputs: Vec<DataReferenceUri>,
         workflow_id: i64,
         schema: WorkflowSchema,
-        _disable_cache: bool,
-        workers: Arc<Semaphore>,
+        options: RunOptions,
         repos: Repos,
     ) -> Result<Self> {
+        anyhow::ensure!(
+            options.num_workers > 0,
+            "at least one local worker is required"
+        );
+        let _disable_cache = options.disable_cache;
+
         let content_hash = schema.content_hash.to_string();
         let serialized_schema = serde_json::to_string(&schema)?;
 
@@ -209,13 +195,14 @@ impl ZygoLocalRun {
             .await?;
 
         let stream = LocalEventStream::new(repos.events.clone(), workflow_run_id.clone());
+        let Entrypoint::Python(python_cli) = schema.entrypoint.clone();
 
         let runtime = LocalRuntime::new(
-            schema.clone(),
+            python_cli,
             workflow_run_id.clone(),
             stream.clone(),
             repos.logs.clone(),
-            workers,
+            options.num_workers,
         );
 
         let run = ZygoRun::start(

@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use local::{ZygoLocalRun, ZygoLocalService};
+use local::{RunOptions, ZygoLocalRun, ZygoLocalService};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use tauri::State;
@@ -12,6 +12,10 @@ use crate::error::{CommandError, CommandResult};
 
 const STREAM_RECORD_BATCH_SIZE: usize = 64;
 
+fn default_num_workers() -> usize {
+    1
+}
+
 #[derive(Debug, Deserialize, Type)]
 pub struct StartWorkflowRunRequest {
     #[specta(type = specta_typescript::Number)]
@@ -20,6 +24,9 @@ pub struct StartWorkflowRunRequest {
     /// When set, run only this job using a job-scoped schema snapshot.
     #[serde(default)]
     pub job_id: Option<String>,
+    /// Number of workers available to this run.
+    #[serde(default = "default_num_workers")]
+    pub num_workers: usize,
     /// Ignore cached job results and execute jobs again.
     #[serde(default)]
     pub disable_cache: bool,
@@ -70,8 +77,12 @@ pub async fn start_workflow_run(
         );
     }
 
+    let options = RunOptions {
+        num_workers: request.num_workers,
+        disable_cache: request.disable_cache,
+    };
     let run = state
-        .run(inputs, workflow.id, run_schema, request.disable_cache)
+        .run(inputs, workflow.id, run_schema, options)
         .await
         .map_err(|error| CommandError::internal("start_workflow_run_failed", error.to_string()))?;
 
@@ -139,7 +150,7 @@ async fn process_run_until_complete(run: ZygoLocalRun) -> anyhow::Result<()> {
         }
         pending_records = !reached_end;
 
-        if reached_end && snapshot.state.status.is_terminal() {
+        if reached_end && snapshot.status.is_terminal() {
             return Ok(());
         }
 

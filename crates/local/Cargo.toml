@@ -9,9 +9,18 @@ license.workspace = true
 anyhow = { workspace = true }
 chrono = { version = "0.4", features = ["serde"] }
 directories = "6.0.0"
+process-wrap = { version = "10", default-features = false, features = [
+    "job-object",
+    "kill-on-drop",
+    "process-group",
+    "tokio1",
+] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["time"] }
 turso = "=0.7.2"
 zygo-core = { path = "../core" }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

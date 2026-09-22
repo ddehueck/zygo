@@ -1,10 +1,9 @@
 use anyhow::{Result, bail};
-use local::{DEFAULT_DATABASE_BUSY_TIMEOUT, ZygoConfig, ZygoLocalConfig, ZygoLocalService};
+use local::{DEFAULT_DATABASE_BUSY_TIMEOUT, ZygoLocalConfig, ZygoLocalService};
 
 pub async fn list_workflow_runs(filter: Option<&str>) -> Result<()> {
     let filter = filter.map(parse_filter).transpose()?;
     let service = ZygoLocalService::new(ZygoLocalConfig {
-        base: ZygoConfig { num_workers: 1 },
         database_busy_timeout: DEFAULT_DATABASE_BUSY_TIMEOUT,
     })
     .await?;
