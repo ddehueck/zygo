@@ -23,7 +23,6 @@ class RunJobArgs:
     run_id: WorkflowRunId
     job_id: JobId
     data_reference_uri: str
-    data_reference_version: str
     job_run_id: str
 
 

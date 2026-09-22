@@ -1,7 +1,7 @@
 # zygo-core
 
 `zygo-core` is Zygo's in-process orchestration runtime. It accepts a runtime
-`WorkflowSchema` and an input `DataReference`, advances the resulting workflow
+`WorkflowSchema` and an input `DataReferenceUri`, advances the resulting workflow
 run, and persists its orchestration state through a given `StorageProvider`.
 
 ## Role in the architecture
@@ -17,7 +17,7 @@ Core owns the domain model and mechanics of orchestration:
 Core exposes a single `Zygo` service that allows consumers to start and subscribe to workflow runs.
 
 ```text
-WorkflowSchema + DataReference
+WorkflowSchema + DataReferenceUri
               |
               v
           Zygo service

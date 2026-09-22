@@ -26,7 +26,6 @@ from zygo.store.protocol import TmpFileProtocol
 
 from zygo._internal.ipc.v0.types import (
     DataReferenceCreated,
-    DataReference,
     write_stdout_ipc_message,
 )
 
@@ -145,10 +144,7 @@ class StoreImpl(StoreProtocol):
         # Send an IPC message to the parent process to notify it of the new data reference.
         write_stdout_ipc_message(
             DataReferenceCreated(
-                data_reference=DataReference(
-                    uri=str(uri),
-                    version="0",
-                )
+                data_reference=str(uri)
             )
         )
 
@@ -290,10 +286,7 @@ def ingest(*, data_uri: FsspecUri, store_options: StoreOptions) -> Reference:
     # Send an IPC message to the parent process to notify it of the new data reference.
     write_stdout_ipc_message(
         DataReferenceCreated(
-            data_reference=DataReference(
-                uri=str(uri),
-                version="0",
-            )
+            data_reference=str(uri)
         )
     )
 

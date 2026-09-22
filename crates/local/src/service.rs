@@ -1,22 +1,21 @@
 use std::io;
 use std::path::PathBuf;
 
+use crate::{EventStreamRepository, LocalEventStream, LocalRuntime, RunOptions, ZygoLocalConfig};
 use anyhow::{Result, anyhow};
-use zygo_core::actor::ActorStateRx;
-use zygo_core::models::{DataReference, JobId, WorkflowRunId, WorkflowSchema};
-use zygo_core::{Dependencies, Zygo, ZygoRun};
+use zygo_core::ActorStateRx;
+use zygo_core::models::{DataReferenceUri, Entrypoint, JobId, WorkflowRunId, WorkflowSchema};
+use zygo_core::{Dependencies, ZygoRun};
 
-use crate::ZygoLocalConfig;
 use crate::db::{
-    CdcRepository, DataReferenceRepository, Db, JobRunRepository, KvRepository, LogsRepository,
-    Repos, TagsRepository, WorkflowRepository, WorkflowRunModel, WorkflowRunRepository,
+    CdcRepository, DataReferenceRepository, Db, JobRunRepository, LogsRepository, Repos,
+    TagsRepository, WorkflowRepository, WorkflowRunModel, WorkflowRunRepository,
 };
 use crate::paths;
 use crate::stream_processor::LocalStreamProcessor;
 
 #[derive(Clone)]
 pub struct ZygoLocalService {
-    pub zygo: Zygo<Dependencies<KvRepository, LogsRepository>>,
     pub repos: Repos,
 }
 
@@ -44,16 +43,13 @@ impl ZygoLocalService {
         // These repos should not result in any CDC events being generated,
         // so we open a separate database connection for them.
         let logs = LogsRepository::new(no_cdc_database.clone());
-        let kv = KvRepository::new(no_cdc_database.clone());
+        let events = EventStreamRepository::new(no_cdc_database.clone());
         let cdc = CdcRepository::new(no_cdc_database);
 
-        let dependencies = Dependencies::new(kv.clone(), logs.clone());
-
         Ok(Self {
-            zygo: Zygo::new(dependencies, config.base),
             repos: Repos {
                 cdc,
-                kv,
+                events,
                 tags,
                 data_references,
                 workflow_runs,
@@ -99,20 +95,12 @@ impl ZygoLocalService {
 
     pub async fn run(
         &self,
-        inputs: Vec<DataReference>,
+        inputs: Vec<DataReferenceUri>,
         workflow_id: i64,
         schema: WorkflowSchema,
-        disable_cache: bool,
+        options: RunOptions,
     ) -> Result<ZygoLocalRun> {
-        ZygoLocalRun::start(
-            inputs,
-            workflow_id,
-            schema,
-            disable_cache,
-            self.zygo.clone(),
-            self.repos.clone(),
-        )
-        .await
+        ZygoLocalRun::start(inputs, workflow_id, schema, options, self.repos.clone()).await
     }
 
     // todo: don't love that this is here. There's a repository/deps refactor brewing.
@@ -137,28 +125,26 @@ pub struct ZygoLocalWorkflow {
 impl ZygoLocalWorkflow {
     pub async fn run(
         &self,
-        inputs: Vec<DataReference>,
-        disable_cache: bool,
+        inputs: Vec<DataReferenceUri>,
+        options: RunOptions,
     ) -> Result<ZygoLocalRun> {
         self.service
-            .run(inputs, self.id, self.schema.clone(), disable_cache)
+            .run(inputs, self.id, self.schema.clone(), options)
             .await
     }
 
     /// Runs a single job by creating a job-scoped schema via [`WorkflowSchema::to_job_run`].
     pub async fn run_job(
         &self,
-        inputs: Vec<DataReference>,
+        inputs: Vec<DataReferenceUri>,
         job_id: &JobId,
-        disable_cache: bool,
+        options: RunOptions,
     ) -> Result<ZygoLocalRun> {
         let schema = self
             .schema
             .to_job_run(job_id)
             .ok_or_else(|| anyhow!("job `{job_id}` was not found in workflow schema"))?;
-        self.service
-            .run(inputs, self.id, schema, disable_cache)
-            .await
+        self.service.run(inputs, self.id, schema, options).await
     }
 }
 
@@ -166,24 +152,35 @@ pub struct ZygoLocalRun {
     pub id: WorkflowRunId,
     pub db_id: i64,
     pub workflow_id: i64,
-    run: ZygoRun<Dependencies<KvRepository, LogsRepository>>,
+    run: ZygoRun,
+    stream: LocalEventStream,
+    runtime: LocalRuntime<LocalEventStream>,
     repos: Repos,
 }
 
 impl ZygoLocalRun {
     pub async fn start(
-        inputs: Vec<DataReference>,
+        inputs: Vec<DataReferenceUri>,
         workflow_id: i64,
         schema: WorkflowSchema,
-        disable_cache: bool,
-        zygo: Zygo<Dependencies<KvRepository, LogsRepository>>,
+        options: RunOptions,
         repos: Repos,
     ) -> Result<Self> {
+        anyhow::ensure!(
+            options.num_workers > 0,
+            "at least one local worker is required"
+        );
+        let _disable_cache = options.disable_cache;
+
         let content_hash = schema.content_hash.to_string();
         let serialized_schema = serde_json::to_string(&schema)?;
 
-        // Each invocation is a distinct execution attempt. Job result reuse is
-        // handled separately by deterministic job run IDs in the result cache.
+        anyhow::ensure!(
+            !inputs.is_empty(),
+            "a workflow run requires at least one input"
+        );
+        // Each invocation is a distinct execution attempt.
+        // todo: add caching at the runtime layer.
         let workflow_run_id = WorkflowRunId::new();
 
         // saves a record of the run before actually running it
@@ -197,30 +194,44 @@ impl ZygoLocalRun {
             )
             .await?;
 
-        let run = zygo
-            .run(&workflow_run_id, inputs, schema, disable_cache)
-            .await?;
+        let stream = LocalEventStream::new(repos.events.clone(), workflow_run_id.clone());
+        let Entrypoint::Python(python_cli) = schema.entrypoint.clone();
+
+        let runtime = LocalRuntime::new(
+            python_cli,
+            workflow_run_id.clone(),
+            stream.clone(),
+            repos.logs.clone(),
+            options.num_workers,
+        );
+
+        let run = ZygoRun::start(
+            &workflow_run_id,
+            inputs,
+            schema,
+            Dependencies::new(stream.clone(), runtime.clone()),
+        )
+        .await?;
 
         Ok(Self {
             id: workflow_run_id,
             db_id: db_run.id,
             workflow_id,
             run,
+            stream,
+            runtime,
             repos,
         })
     }
 
     pub async fn cancel(&self) -> Result<()> {
         // todo: add db cleanup side effects
-        self.run.cancel(&self.id).await
+        self.run.cancel().await?;
+        self.runtime.cancel().await
     }
 
     pub fn stream_processor(&self) -> LocalStreamProcessor {
-        LocalStreamProcessor::new(
-            self.repos.clone(),
-            self.id.clone(),
-            self.run.stream(&self.id),
-        )
+        LocalStreamProcessor::new(self.repos.clone(), self.id.clone(), self.stream.clone())
     }
 
     pub fn subscribe(&self) -> Result<ActorStateRx> {

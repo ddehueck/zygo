@@ -14,16 +14,17 @@ use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
 use local::{
-    DEFAULT_DATABASE_BUSY_TIMEOUT, DbResult, LogRow, LogWatcher, LogsRepository, ZygoLocalConfig,
-    ZygoLocalService,
+    DEFAULT_DATABASE_BUSY_TIMEOUT, DbResult, LogRow, LogWatcher, LogsRepository, RunOptions,
+    ZygoLocalConfig, ZygoLocalService,
 };
 use ratatui::backend::CrosstermBackend;
 use ratatui::widgets::TableState;
 use ratatui::{Terminal, TerminalOptions, Viewport};
-use zygo_core::ZygoConfig;
 use zygo_core::api::v0::PythonCli;
-use zygo_core::engine::{EngineSnapshot, RunCursor};
-use zygo_core::models::{DataReference, Event, FileExtension, JobRunId, StreamItem};
+use zygo_core::models::{
+    DataReferenceUri, Event, EventKind, FileExtension, JobRunId, WorkflowRunStatus,
+};
+use zygo_core::{EngineState, RunCursor};
 
 use crate::tui::{JobLogView, WorkflowRunView, job_run_at_position};
 
@@ -137,7 +138,7 @@ impl LogViewState {
 }
 
 struct StreamUpdate {
-    snapshot: EngineSnapshot,
+    snapshot: EngineState,
     events: Vec<Event>,
 }
 
@@ -211,14 +212,15 @@ pub async fn run_workflow(
     // 4. Create a zygo service and start the workflow
     let config = ZygoLocalConfig {
         database_busy_timeout: DEFAULT_DATABASE_BUSY_TIMEOUT,
-        base: ZygoConfig {
-            num_workers: workers.unwrap_or(1),
-        },
+    };
+    let options = RunOptions {
+        num_workers: workers.unwrap_or(1),
+        disable_cache,
     };
 
     let service = ZygoLocalService::new(config).await?;
     let workflow = service.register(schema).await?;
-    let run = workflow.run(inputs, disable_cache).await?;
+    let run = workflow.run(inputs, options).await?;
 
     // 5. Watch the engine state in an interactive fullscreen terminal view.
     let mut terminal_input = TerminalInput::new()?;
@@ -274,12 +276,10 @@ pub async fn run_workflow(
                     break;
                 };
 
-                if let StreamItem::Event(event) = record.item {
-                    events.push(event);
-                }
+                events.push(record);
             }
             pending_records = !reached_end;
-            let is_complete = reached_end && snapshot.state.status.is_terminal();
+            let is_complete = reached_end && snapshot.status.is_terminal();
 
             if stream_updates_tx
                 .send(StreamMessage::Update(StreamUpdate { snapshot, events }))
@@ -346,12 +346,28 @@ pub async fn run_workflow(
 
         match loop_event {
             LoopEvent::StreamUpdate(update) => {
+                let failure = update.events.iter().find_map(|event| match &event.kind {
+                    EventKind::JobFailed(data) => Some(format!(
+                        "job {} ({}): {}",
+                        data.job_id, data.job_run_id, data.error
+                    )),
+                    _ => None,
+                });
+
                 for event in update.events {
                     summary.update_by_event(event);
                 }
 
                 summary.update_by_snapshot(&update.snapshot);
                 has_snapshot = true;
+
+                if update.snapshot.status == WorkflowRunStatus::Failed {
+                    stream_task.abort();
+                    return Err(anyhow::anyhow!(
+                        "workflow `{target}` failed: {}",
+                        failure.unwrap_or_else(|| "no failure details available".to_owned())
+                    ));
+                }
 
                 if let Screen::Logs(log) = &mut screen {
                     log.is_running = summary
@@ -475,19 +491,13 @@ pub async fn run_workflow(
 fn input_data_references(
     input_uri: &str,
     accepted_file_extensions: &[FileExtension],
-) -> anyhow::Result<Vec<DataReference>> {
+) -> anyhow::Result<Vec<DataReferenceUri>> {
     let Some(path) = local_path(input_uri) else {
-        return Ok(vec![DataReference {
-            uri: input_uri.to_owned(),
-            version: String::from("1"),
-        }]);
+        return Ok(vec![DataReferenceUri::try_from(input_uri.to_owned())?]);
     };
 
     if !path.is_dir() {
-        return Ok(vec![DataReference {
-            uri: input_uri.to_owned(),
-            version: String::from("1"),
-        }]);
+        return Ok(vec![DataReferenceUri::try_from(input_uri.to_owned())?]);
     }
 
     let accepted_extensions = accepted_file_extensions
@@ -517,11 +527,8 @@ fn input_data_references(
 
     Ok(files
         .into_iter()
-        .map(|file| DataReference {
-            uri: file.to_string_lossy().into_owned(),
-            version: String::from("1"),
-        })
-        .collect())
+        .map(|file| DataReferenceUri::try_from(file.to_string_lossy().into_owned()))
+        .collect::<Result<Vec<_>, _>>()?)
 }
 
 fn local_path(uri: &str) -> Option<PathBuf> {

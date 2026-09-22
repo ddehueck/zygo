@@ -1,174 +1,42 @@
-//! Engine runtime state and durable restart snapshots.
-
-use std::{collections::HashMap, time::SystemTime};
+use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    context::RunContext,
-    dependencies::{AppDeps, StorageProvider},
-    models::{
-        Event, EventId, EventKind, JobRunId, JobRunStatus, ResultCacheItem, SequenceId, Source,
-        WorkflowRunStatus, WorkflowSchema,
-    },
-    store::{KeySpace, StoreKey},
+use crate::models::{
+    JobRunId, JobRunStatus, SequenceId, WorkflowRunId, WorkflowRunStatus, WorkflowSchema,
 };
 
-#[derive(Clone)]
-pub struct ResultCache<D: AppDeps> {
-    pub context: RunContext<D>,
-    pub schema: WorkflowSchema,
-}
-
-impl<D: AppDeps> ResultCache<D> {
-    pub fn new(context: RunContext<D>, schema: WorkflowSchema) -> Self {
-        Self { context, schema }
-    }
-
-    pub async fn get_result_cache_item(
-        &self,
-        job_run_id: &JobRunId,
-    ) -> Result<Option<ResultCacheItem>, anyhow::Error> {
-        // We let the cache be disabled via context.
-        // Still allow writes to the cache when disabled.
-        if self.context.disable_cache {
-            return Ok(None);
-        }
-
-        let key = KeySpace::cache().result(job_run_id);
-        self.context
-            .deps
-            .store()
-            .get(&key)
-            .await?
-            .map(serde_json::from_value)
-            .transpose()
-            .map_err(|error| {
-                anyhow::anyhow!(
-                    "failed to deserialize result cache item for job run {job_run_id}: {error}"
-                )
-            })
-    }
-
-    pub async fn put_to_store(
-        &self,
-        job_run_id: &JobRunId,
-        result_cache_item: &ResultCacheItem,
-    ) -> Result<(), anyhow::Error> {
-        let key = KeySpace::cache().result(job_run_id);
-        let value = serde_json::to_value(result_cache_item)?;
-        self.context.deps.store().put(&[(key, value)]).await
-    }
-
-    pub fn make_replay_event(&self, kind: EventKind, source: Source) -> Event {
-        Event {
-            id: EventId::new(),
-            is_replay: true,
-            timestamp: SystemTime::now(),
-            kind,
-            source,
-            run_id: self.context.run_id.clone(),
-        }
-    }
-}
-
 #[derive(Clone, Serialize, Deserialize)]
-pub struct RunCursor {
-    pub next_id: SequenceId,
-}
-
-impl RunCursor {
-    pub fn new(next_read_sequence_id: SequenceId) -> Self {
-        Self {
-            next_id: next_read_sequence_id,
-        }
-    }
-
-    pub fn default() -> Self {
-        Self {
-            next_id: SequenceId::new(0),
-        }
-    }
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct EngineSnapshot {
-    pub cursor: RunCursor,
-    pub state: RunState,
-}
-
-impl Default for EngineSnapshot {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl EngineSnapshot {
-    pub fn new() -> Self {
-        Self {
-            cursor: RunCursor::new(SequenceId::new(0)),
-            state: RunState::new(),
-        }
-    }
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct RunState {
+pub struct EngineState {
+    pub id: WorkflowRunId,
     pub status: WorkflowRunStatus,
-    pub status_by_job_run_id: HashMap<JobRunId, JobRunStatus>,
-    pub event_keys_by_job_run_id: HashMap<JobRunId, Vec<StoreKey>>,
+    pub schema: WorkflowSchema,
+    cursor: RunCursor,
+    status_by_job_run_id: HashMap<JobRunId, JobRunStatus>,
 }
 
-impl Default for RunState {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl RunState {
-    pub fn new() -> Self {
+impl EngineState {
+    pub fn new(id: &WorkflowRunId, schema: &WorkflowSchema) -> Self {
         Self {
+            id: id.clone(),
             status: WorkflowRunStatus::Running,
+            schema: schema.clone(),
+            cursor: RunCursor::default(),
             status_by_job_run_id: HashMap::new(),
-            event_keys_by_job_run_id: HashMap::new(),
         }
     }
 
-    pub fn from(
-        status_by_job_run_id: HashMap<JobRunId, JobRunStatus>,
-        event_keys_by_job_run_id: HashMap<JobRunId, Vec<StoreKey>>,
-    ) -> Self {
-        let status = compute_run_status(&status_by_job_run_id);
-        Self {
-            status,
-            status_by_job_run_id,
-            event_keys_by_job_run_id,
-        }
+    pub fn set_job_status(&mut self, job_run_id: JobRunId, status: JobRunStatus) -> () {
+        self.status_by_job_run_id.insert(job_run_id, status);
+        self.status = compute_run_status(&self.status_by_job_run_id);
     }
 
-    pub fn add_event_key(&self, job_run_id: JobRunId, event_key: StoreKey) -> RunState {
-        let mut new_event_keys_by_job_run_id = self.event_keys_by_job_run_id.clone();
-
-        new_event_keys_by_job_run_id
-            .entry(job_run_id)
-            .or_default()
-            .push(event_key);
-
-        Self::from(
-            self.status_by_job_run_id.clone(),
-            new_event_keys_by_job_run_id,
-        )
+    pub fn next_id(&self) -> SequenceId {
+        self.cursor.next_id
     }
 
-    pub fn set_job_status(&self, job_run_id: JobRunId, status: JobRunStatus) -> RunState {
-        let mut new_status_by_job_run_id = self.status_by_job_run_id.clone();
-
-        new_status_by_job_run_id.insert(job_run_id, status);
-
-        Self::from(
-            new_status_by_job_run_id,
-            self.event_keys_by_job_run_id.clone(),
-        )
+    pub fn increment_cursor(&mut self) {
+        self.cursor.next_id = self.cursor.next_id.increment();
     }
 }
 
@@ -192,4 +60,17 @@ fn compute_run_status(status_by_job_run_id: &HashMap<JobRunId, JobRunStatus>) ->
     }
 
     WorkflowRunStatus::Running
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct RunCursor {
+    pub next_id: SequenceId,
+}
+
+impl RunCursor {
+    pub fn default() -> Self {
+        Self {
+            next_id: SequenceId::new(0),
+        }
+    }
 }

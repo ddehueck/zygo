@@ -6,7 +6,6 @@ from zygo._internal.fsspec import FsspecUri
 from zygo._internal.ipc.importer import load_workflow
 from zygo._internal.ipc.v0.types import (
     ChannelItemInserted,
-    DataReference,
     write_stdout_ipc_message,
 )
 from zygo._internal.meta.injection import build_injected_job_fn
@@ -102,7 +101,7 @@ def run(
             write_stdout_ipc_message(
                 ChannelItemInserted(
                     channel_id=job_entry.output_channel.id,
-                    data_reference=DataReference.from_reference(reference),
+                    data_reference=str(reference.uri),
                 )
             )
 

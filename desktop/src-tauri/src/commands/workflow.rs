@@ -1,16 +1,20 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use local::{ZygoLocalRun, ZygoLocalService};
+use local::{RunOptions, ZygoLocalRun, ZygoLocalService};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use tauri::State;
-use zygo_core::engine::RunCursor;
-use zygo_core::models::{DataReference, FileExtension, JobId, WorkflowSchema};
+use zygo_core::models::{DataReferenceUri, FileExtension, JobId, WorkflowSchema};
+use zygo_core::RunCursor;
 
 use crate::error::{CommandError, CommandResult};
 
 const STREAM_RECORD_BATCH_SIZE: usize = 64;
+
+fn default_num_workers() -> usize {
+    1
+}
 
 #[derive(Debug, Deserialize, Type)]
 pub struct StartWorkflowRunRequest {
@@ -20,6 +24,9 @@ pub struct StartWorkflowRunRequest {
     /// When set, run only this job using a job-scoped schema snapshot.
     #[serde(default)]
     pub job_id: Option<String>,
+    /// Number of workers available to this run.
+    #[serde(default = "default_num_workers")]
+    pub num_workers: usize,
     /// Ignore cached job results and execute jobs again.
     #[serde(default)]
     pub disable_cache: bool,
@@ -70,8 +77,12 @@ pub async fn start_workflow_run(
         );
     }
 
+    let options = RunOptions {
+        num_workers: request.num_workers,
+        disable_cache: request.disable_cache,
+    };
     let run = state
-        .run(inputs, workflow.id, run_schema, request.disable_cache)
+        .run(inputs, workflow.id, run_schema, options)
         .await
         .map_err(|error| CommandError::internal("start_workflow_run_failed", error.to_string()))?;
 
@@ -139,7 +150,7 @@ async fn process_run_until_complete(run: ZygoLocalRun) -> anyhow::Result<()> {
         }
         pending_records = !reached_end;
 
-        if reached_end && snapshot.state.status.is_terminal() {
+        if reached_end && snapshot.status.is_terminal() {
             return Ok(());
         }
 
@@ -152,7 +163,7 @@ async fn process_run_until_complete(run: ZygoLocalRun) -> anyhow::Result<()> {
 fn input_data_references(
     input_path: &str,
     accepted_file_extensions: &[FileExtension],
-) -> anyhow::Result<Vec<DataReference>> {
+) -> anyhow::Result<Vec<DataReferenceUri>> {
     let fsspec_uri = if input_path.starts_with("file://") {
         input_path.to_owned()
     } else {
@@ -160,18 +171,12 @@ fn input_data_references(
     };
 
     let Some(path) = local_path(&fsspec_uri) else {
-        return Ok(vec![DataReference {
-            uri: fsspec_uri,
-            version: String::from("1"),
-        }]);
+        return Ok(vec![DataReferenceUri::try_from(fsspec_uri)?]);
     };
 
     if !path.is_dir() {
         ensure_extension_accepted(&path, accepted_file_extensions)?;
-        return Ok(vec![DataReference {
-            uri: fsspec_uri,
-            version: String::from("1"),
-        }]);
+        return Ok(vec![DataReferenceUri::try_from(fsspec_uri)?]);
     }
 
     let accepted_extensions = accepted_file_extensions
@@ -199,13 +204,10 @@ fn input_data_references(
         path.display()
     );
 
-    Ok(files
+    files
         .into_iter()
-        .map(|file| DataReference {
-            uri: format!("file://{}", file.display()),
-            version: String::from("1"),
-        })
-        .collect())
+        .map(|file| DataReferenceUri::try_from(format!("file://{}", file.display())))
+        .collect()
 }
 
 fn ensure_extension_accepted(

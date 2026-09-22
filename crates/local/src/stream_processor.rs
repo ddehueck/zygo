@@ -1,30 +1,30 @@
 use std::collections::HashMap;
 use std::time::SystemTime;
 
-use zygo_core::engine::RunCursor;
-use zygo_core::models::{EventKind, Source, StreamItem, WorkflowRunId, WorkflowRunStatus};
-use zygo_core::stream::{ReadResult, StreamReader};
+use zygo_core::RunCursor;
+use zygo_core::dependencies::EventStream;
+use zygo_core::models::{Event, EventKind, Source, WorkflowRunId, WorkflowRunStatus};
 
-use crate::db::KvRepository;
-use crate::{Repos, format_database_timestamp};
+use crate::{JobRunModel, LocalEventStream, Repos, format_database_timestamp};
+
+pub struct ReadResult {
+    pub record: Option<Event>,
+    pub next_cursor: RunCursor,
+}
 
 /// Processes workflow stream records and projects local read models.
 /// While still exposing the underlying stream for local clients. e.g. ui updates.
 pub struct LocalStreamProcessor {
     repos: Repos,
     workflow_run_id: WorkflowRunId,
-    stream_reader: StreamReader<KvRepository>,
+    stream: LocalEventStream,
     job_started_at: HashMap<String, SystemTime>,
 }
 
 impl LocalStreamProcessor {
-    pub fn new(
-        repos: Repos,
-        workflow_run_id: WorkflowRunId,
-        stream_reader: StreamReader<KvRepository>,
-    ) -> Self {
+    pub fn new(repos: Repos, workflow_run_id: WorkflowRunId, stream: LocalEventStream) -> Self {
         Self {
-            stream_reader,
+            stream,
             repos,
             workflow_run_id,
             job_started_at: HashMap::new(),
@@ -32,10 +32,12 @@ impl LocalStreamProcessor {
     }
 
     pub async fn process_next(&mut self, cursor: RunCursor) -> anyhow::Result<ReadResult> {
-        let result = self.stream_reader.next(cursor).await?;
+        let mut result = ReadResult {
+            record: self.stream.get(cursor.next_id).await?,
+            next_cursor: cursor,
+        };
 
-        let Some(StreamItem::Event(event)) = result.record.as_ref().map(|record| &record.item)
-        else {
+        let Some(event) = result.record.as_ref() else {
             return Ok(result);
         };
 
@@ -44,17 +46,71 @@ impl LocalStreamProcessor {
         let timestamp_value = format_database_timestamp(timestamp);
 
         match &event.kind {
+            EventKind::JobEnqueued(data) => {
+                let input_id = match self
+                    .repos
+                    .data_references
+                    .get_id_by_uri(&workflow_run_id, data.input.as_ref())
+                    .await?
+                {
+                    Some(input_id) => input_id,
+                    None => {
+                        self.repos
+                            .data_references
+                            .insert(&workflow_run_id, None, data.input.as_ref(), event.is_replay)
+                            .await?;
+                        self.repos
+                            .data_references
+                            .get_id_by_uri(&workflow_run_id, data.input.as_ref())
+                            .await?
+                            .ok_or_else(|| {
+                                anyhow::anyhow!("queued job input reference was not inserted")
+                            })?
+                    }
+                };
+                let job_run_id = data.job_run_id.to_string();
+                if self
+                    .repos
+                    .job_runs
+                    .get_by_public_id(&workflow_run_id, &job_run_id)
+                    .await?
+                    .is_none()
+                {
+                    let workflow_run = self
+                        .repos
+                        .workflow_runs
+                        .get_by_workflow_run_id(&workflow_run_id)
+                        .await?
+                        .ok_or_else(|| {
+                            anyhow::anyhow!("workflow run {workflow_run_id} not found")
+                        })?;
+                    self.repos
+                        .job_runs
+                        .upsert(&JobRunModel {
+                            id: 0,
+                            public_id: job_run_id,
+                            workflow_run_id: workflow_run.id,
+                            input_id,
+                            job_id: data.job_id.to_string(),
+                            status: "queued".to_owned(),
+                            duration_ms: None,
+                            retry_count: 0,
+                            created_at: timestamp_value.clone(),
+                        })
+                        .await?;
+                }
+            }
             EventKind::JobStarted(data) => {
                 let job_run_id = data.job_run_id.to_string();
                 let input_id = self
                     .repos
                     .data_references
-                    .get_id_by_uri(&workflow_run_id, &data.input.uri)
+                    .get_id_by_uri(&workflow_run_id, data.input.as_ref())
                     .await?
                     .ok_or_else(|| {
                         anyhow::anyhow!(
                             "input data reference with URI {:?} not found for workflow run {}",
-                            data.input.uri,
+                            data.input,
                             workflow_run_id
                         )
                     })?;
@@ -102,7 +158,7 @@ impl LocalStreamProcessor {
                         .insert(
                             &workflow_run_id,
                             Some(&source.job_run_id.to_string()),
-                            &data.data_reference.uri,
+                            data.uri.as_ref(),
                             event.is_replay,
                         )
                         .await?;
@@ -111,12 +167,7 @@ impl LocalStreamProcessor {
             EventKind::ChannelItemInserted(data) => {
                 self.repos
                     .data_references
-                    .insert(
-                        &workflow_run_id,
-                        None,
-                        &data.data_reference.uri,
-                        event.is_replay,
-                    )
+                    .insert(&workflow_run_id, None, data.item.as_ref(), event.is_replay)
                     .await?;
             }
         }
@@ -124,6 +175,7 @@ impl LocalStreamProcessor {
         self.refresh_workflow_run(&workflow_run_id, &timestamp_value)
             .await?;
 
+        result.next_cursor.next_id = result.next_cursor.next_id.increment();
         Ok(result)
     }
 
@@ -154,11 +206,23 @@ impl LocalStreamProcessor {
         workflow_run_id: &str,
         timestamp: &str,
     ) -> anyhow::Result<()> {
-        let counts = self
+        let mut counts = self
             .repos
             .job_runs
             .counts_by_workflow_run_id(workflow_run_id)
             .await?;
+
+        // The repository aggregate counts running jobs only. Read queued jobs from
+        // persisted state so starting a job cannot leave a stale queued count.
+        let queued_count = self
+            .repos
+            .job_runs
+            .list_by_workflow_run_id(workflow_run_id)
+            .await?
+            .iter()
+            .filter(|run| run.status == "queued")
+            .count();
+        counts.active_job_count += i64::try_from(queued_count)?;
 
         let status = if counts.errored_job_count > 0 {
             WorkflowRunStatus::Failed

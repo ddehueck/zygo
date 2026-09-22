@@ -2,7 +2,6 @@ use std::path::PathBuf;
 
 use local::{ZygoLocalConfig, ZygoLocalService, DEFAULT_DATABASE_BUSY_TIMEOUT};
 use tauri_specta::{collect_commands, Builder};
-use zygo_core::ZygoConfig;
 
 mod commands;
 mod error;
@@ -31,7 +30,6 @@ fn specta_builder() -> Builder<tauri::Wry> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let service = tauri::async_runtime::block_on(ZygoLocalService::new(ZygoLocalConfig {
-        base: ZygoConfig { num_workers: 1 },
         database_busy_timeout: DEFAULT_DATABASE_BUSY_TIMEOUT,
     }))
     .expect("failed to start the local Zygo service");

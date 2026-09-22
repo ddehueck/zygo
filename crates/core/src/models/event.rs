@@ -1,11 +1,7 @@
-use std::time::SystemTime;
-
-use serde::{Deserialize, Serialize};
-
-use crate::models::{EventId, WorkflowRunId};
-
-use super::data_reference::DataReference;
 use super::ids::{ChannelId, JobId, JobRunId};
+use crate::models::{DataReferenceUri, EventId, WorkflowRunId};
+use serde::{Deserialize, Serialize};
+use std::time::SystemTime;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Event {
@@ -21,6 +17,7 @@ pub struct Event {
 pub enum EventKind {
     DataReferenceInserted(DataReferenceInsertedData),
     ChannelItemInserted(ChannelItemInsertedData),
+    JobEnqueued(JobEnqueuedData),
     JobStarted(JobStartedData),
     JobSucceeded(JobSucceededData),
     JobFailed(JobFailedData),
@@ -28,10 +25,17 @@ pub enum EventKind {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JobEnqueuedData {
+    pub job_id: JobId,
+    pub job_run_id: JobRunId,
+    pub input: DataReferenceUri,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JobStartedData {
     pub job_id: JobId,
     pub job_run_id: JobRunId,
-    pub input: DataReference,
+    pub input: DataReferenceUri,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,23 +48,24 @@ pub struct JobSucceededData {
 pub struct JobFailedData {
     pub job_id: JobId,
     pub job_run_id: JobRunId,
+    pub error: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DataReferenceInsertedData {
-    pub data_reference: DataReference,
+    pub uri: DataReferenceUri,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TagInsertedData {
     pub value: String,
-    pub data_reference: Option<DataReference>,
+    pub data_reference: Option<DataReferenceUri>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChannelItemInsertedData {
     pub channel_id: ChannelId,
-    pub data_reference: DataReference,
+    pub item: DataReferenceUri,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

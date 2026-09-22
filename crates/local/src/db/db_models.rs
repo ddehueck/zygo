@@ -371,53 +371,6 @@ impl From<DataReferenceSqlRow> for DataReferenceModel {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct KvModel {
-    pub key: String,
-    pub value: Value,
-    pub created_at: String,
-}
-
-impl KvModel {
-    pub fn from_sql_value(value: Value) -> Result<Self> {
-        let sql_row: KvSqlRow = serde_json::from_value(value)?;
-        sql_row.try_into()
-    }
-
-    pub fn from_row(row: &Row, rows: &Rows) -> Result<Self> {
-        KvSqlRow::from_row(row, rows)?.try_into()
-    }
-}
-
-#[derive(Deserialize)]
-struct KvSqlRow {
-    key: String,
-    value: String,
-    created_at: String,
-}
-
-impl KvSqlRow {
-    fn from_row(row: &Row, rows: &Rows) -> Result<Self> {
-        Ok(Self {
-            key: row.get(rows.column_index("key")?)?,
-            value: row.get(rows.column_index("value")?)?,
-            created_at: row.get(rows.column_index("created_at")?)?,
-        })
-    }
-}
-
-impl TryFrom<KvSqlRow> for KvModel {
-    type Error = Error;
-
-    fn try_from(row: KvSqlRow) -> Result<Self> {
-        Ok(Self {
-            key: row.key,
-            value: serde_json::from_str(&row.value)?,
-            created_at: row.created_at,
-        })
-    }
-}
-
 // TODO: remove this
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct WorkflowRunJobCounts {

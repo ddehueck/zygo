@@ -21,13 +21,12 @@ pub struct Job {
 /// A core assumption of the system is that a job is a pure function of its input data.
 /// Therefore, the job run ID is a UUID5 derived from the job ID, job content hash,
 /// and data reference (URI + version). This is the global idempotency boundary for a job run.
-pub fn job_run_id(job: &Job, data_reference_uri: &str, data_reference_version: &str) -> String {
+pub fn job_run_id(job: &Job, data_reference_uri: &str) -> String {
     let name = format!(
-        "{}\0{}\0{}\0{}",
+        "{}\0{}\0{}",
         job.id.as_ref(),
         job.content_hash.as_ref(),
-        data_reference_uri,
-        data_reference_version
+        data_reference_uri
     );
     Uuid::new_v5(&JOB_RUN_NAMESPACE, name.as_bytes()).to_string()
 }

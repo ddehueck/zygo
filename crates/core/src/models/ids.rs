@@ -1,8 +1,6 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::models::DomainError;
-
 macro_rules! define_value {
     ($name:ident, $label:literal) => {
         #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -10,11 +8,11 @@ macro_rules! define_value {
         pub struct $name(String);
 
         impl TryFrom<String> for $name {
-            type Error = DomainError;
+            type Error = anyhow::Error;
 
             fn try_from(value: String) -> Result<Self, Self::Error> {
                 if value.trim().is_empty() {
-                    Err(DomainError::empty($label))
+                    Err(anyhow::anyhow!("{} cannot be empty", $label))
                 } else {
                     Ok(Self(value))
                 }
@@ -47,6 +45,7 @@ define_value!(ChannelId, "channel_id");
 define_value!(JobId, "job_id");
 define_value!(JobRunId, "job_run_id");
 define_value!(EventId, "event_id");
+define_value!(DataReferenceUri, "data_reference_uri");
 define_value!(ContentHash, "content_hash");
 define_value!(PythonFunctionName, "python_function_name");
 

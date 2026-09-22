@@ -1,180 +1,70 @@
-use super::arbiter::Arbiter;
-use super::executor::Executor;
-use super::state::{EngineSnapshot, ResultCache, RunCursor};
-use super::step::{StepOutcome, StepResult};
-use crate::context::{ActorContext, RunContext};
-use crate::models::{StreamItem, StreamRecord, WorkflowSchema};
-use crate::stream::StreamReader;
-use crate::{
-    dependencies::{AppDeps, StorageProvider},
-    store::{KeySpace, StoreKey},
-};
+use super::state::EngineState;
+use crate::context::ActorContext;
+use crate::dependencies::{AppDeps, EventStream};
+use crate::engine::handler::EventHandler;
 use tokio::sync::watch;
 
 pub struct Engine<D: AppDeps> {
     context: ActorContext<D>,
-    snapshot: EngineSnapshot,
-    result_cache: ResultCache<D>,
-    arbiter: Arbiter,
-    executor: Executor<D>,
-    stream_reader: StreamReader<D::Store>,
-    state_tx: Option<watch::Sender<EngineSnapshot>>,
+    handler: EventHandler<D>,
+    state: EngineState,
+    state_tx: Option<watch::Sender<EngineState>>,
 }
 
 impl<D: AppDeps> Engine<D> {
     pub async fn new(context: ActorContext<D>) -> Result<Self, anyhow::Error> {
-        let run_keyspace = KeySpace::run(&context.run_id);
-        let schema_key = run_keyspace.schema();
-        let schema_value = context.deps.store().get(&schema_key).await?.ok_or_else(|| {
-            anyhow::anyhow!(
-                "workflow schema is missing for run {}; store the run schema before starting the engine",
-                context.run_id
-            )
-        })?;
-        let schema = serde_json::from_value::<WorkflowSchema>(schema_value).map_err(|error| {
-            anyhow::anyhow!(
-                "failed to deserialize workflow schema for run {}: {error}",
-                context.run_id
-            )
-        })?;
-
-        let snapshot_key = run_keyspace.snapshot();
-        let snapshot = context
-            .deps
-            .store()
-            .get(&snapshot_key)
-            .await?
-            .map(serde_json::from_value::<EngineSnapshot>)
-            .transpose()
-            .map_err(|error| {
-                anyhow::anyhow!(
-                    "failed to deserialize engine snapshot for run {}: {error}",
-                    context.run_id
-                )
-            })?
-            .unwrap_or_else(EngineSnapshot::new);
-
-        let run_context = RunContext::from(&context);
-        let result_cache = ResultCache::new(run_context, schema);
-        let stream_reader = StreamReader::new(context.deps.store().clone(), &context.run_id);
-        let executor = Executor::new(context.clone());
+        let state = EngineState::new(&context.run_id, &context.schema);
+        let handler = EventHandler::new(context.deps.clone(), context.schema.clone());
 
         Ok(Self {
-            snapshot,
-            result_cache,
-            executor,
-            arbiter: Arbiter,
-            stream_reader,
             context,
+            handler,
+            state,
             state_tx: None,
         })
     }
 
     /// Execute a single step of the engine.
-    /// - Read the next item from the stream.
-    /// - If it's an event, arbitrate to produce commands, increment the sequence id. Flush to durable storage.
-    /// - If it's a command, execute it, increment the sequence id. Flush to durable storage.
-    pub async fn step(&mut self) -> Result<StepResult, anyhow::Error> {
-        let stream_read = self
-            .stream_reader
-            .next(self.snapshot.cursor.clone())
-            .await?;
+    /// - Reads the next item from the event stream.
+    /// - Handles the event.
+    /// - Updates engine state and publishes new events.
+    pub async fn step(&mut self) -> Result<EngineStepResult, anyhow::Error> {
+        let stream = self.context.deps.stream();
+        let next_id = self.state.next_id();
 
-        let Some(record) = stream_read.record else {
-            return Ok(if self.snapshot.state.status.is_terminal() {
-                StepResult::Terminal(self.snapshot.state.status.clone())
+        let Some(event) = stream.get(next_id).await? else {
+            return Ok(if self.state.status.is_terminal() {
+                EngineStepResult::Terminal
             } else {
-                StepResult::Idle
+                EngineStepResult::Idle
             });
         };
 
-        let key = KeySpace::run(&self.context.run_id).stream_item(&record.id);
+        // Handle the event
+        let result = self.handler.handle(&event, &self.state).await?;
 
-        let outcome = self.evaluate(key, record).await?;
-        let snapshot = self.commit(outcome, stream_read.next_cursor).await?;
-
-        self.snapshot = snapshot.clone();
-
-        if let Some(tx) = &self.state_tx {
-            tx.send(snapshot.clone()).ok();
+        // Commit results and increment stream cursor
+        self.state = result.new_state.clone();
+        self.state.increment_cursor();
+        if !result.new_events.is_empty() {
+            stream.append(result.new_events).await?;
         }
 
-        Ok(StepResult::Continue)
+        // Publish state update
+        if let Some(tx) = &self.state_tx {
+            tx.send_replace(self.state.clone());
+        }
+
+        Ok(EngineStepResult::Continue)
     }
 
-    pub async fn subscribe(&mut self, state_tx: &tokio::sync::watch::Sender<EngineSnapshot>) {
+    pub async fn subscribe(&mut self, state_tx: &tokio::sync::watch::Sender<EngineState>) {
         self.state_tx = Some(state_tx.clone());
     }
+}
 
-    async fn evaluate(
-        &self,
-        key: StoreKey,
-        record: StreamRecord,
-    ) -> Result<StepOutcome, anyhow::Error> {
-        let mut next_state = self.snapshot.state.clone();
-        let mut append = Vec::new();
-
-        // An event records what has happened
-        // A command records what should happen next.
-        match record.item {
-            StreamItem::Event(event) => {
-                let commands = self
-                    .arbiter
-                    .arbitrate(&key, &event, &self.result_cache)
-                    .await?;
-                append.extend(commands.into_iter().map(StreamItem::Command));
-            }
-            StreamItem::Command(command) => {
-                let result = self
-                    .executor
-                    .execute(command, &self.result_cache, &next_state)
-                    .await?;
-                append.extend(result.next_events.into_iter().map(StreamItem::Event));
-                next_state = result.next_state;
-            }
-        }
-
-        Ok(StepOutcome {
-            processed_id: record.id,
-            next_state,
-            append,
-        })
-    }
-
-    async fn commit(
-        &self,
-        outcome: StepOutcome,
-        next_cursor: RunCursor,
-    ) -> Result<EngineSnapshot, anyhow::Error> {
-        let StepOutcome {
-            processed_id,
-            next_state,
-            append,
-        } = outcome;
-
-        // 1) Guard: commit must follow the currently readable sequence item.
-        assert!(
-            self.snapshot.cursor.next_id <= processed_id,
-            "cannot commit run step for {}; next readable item is {}",
-            processed_id,
-            self.snapshot.cursor.next_id
-        );
-
-        // 2) Build the next snapshot.
-        let snapshot = EngineSnapshot {
-            state: next_state,
-            cursor: next_cursor,
-        };
-
-        // 3) Commit newly produced stream items and the snapshot atomically.
-        let mut write_set = self.context.stream_writer.append(append).await?;
-        write_set.push(self.engine_snapshot_key(), serde_json::to_value(&snapshot)?);
-        write_set.commit(self.context.deps.store()).await?;
-
-        Ok(snapshot)
-    }
-
-    fn engine_snapshot_key(&self) -> StoreKey {
-        KeySpace::run(&self.context.run_id).snapshot()
-    }
+pub enum EngineStepResult {
+    Continue,
+    Idle,
+    Terminal,
 }
