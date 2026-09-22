@@ -1,53 +1,59 @@
-use serde::{Deserialize, Serialize};
+use nutype::nutype;
 use uuid::Uuid;
 
-macro_rules! define_value {
-    ($name:ident, $label:literal) => {
-        #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-        #[serde(transparent)]
-        pub struct $name(String);
+#[nutype(
+    validate(predicate = |value: &str| !value.trim().is_empty()),
+    derive(Debug, Clone, PartialEq, Eq, Hash, AsRef, Display, Into, TryFrom, Serialize, Deserialize),
+)]
+pub struct WorkflowId(String);
 
-        impl TryFrom<String> for $name {
-            type Error = anyhow::Error;
+#[nutype(
+    validate(predicate = |value: &str| !value.trim().is_empty()),
+    derive(Debug, Clone, PartialEq, Eq, Hash, AsRef, Display, Into, TryFrom, Serialize, Deserialize),
+)]
+pub struct WorkflowRunId(String);
 
-            fn try_from(value: String) -> Result<Self, Self::Error> {
-                if value.trim().is_empty() {
-                    Err(anyhow::anyhow!("{} cannot be empty", $label))
-                } else {
-                    Ok(Self(value))
-                }
-            }
-        }
+#[nutype(
+    validate(predicate = |value: &str| !value.trim().is_empty()),
+    derive(Debug, Clone, PartialEq, Eq, Hash, AsRef, Display, Into, TryFrom, Serialize, Deserialize),
+)]
+pub struct ChannelId(String);
 
-        impl AsRef<str> for $name {
-            fn as_ref(&self) -> &str {
-                &self.0
-            }
-        }
+#[nutype(
+    validate(predicate = |value: &str| !value.trim().is_empty()),
+    derive(Debug, Clone, PartialEq, Eq, Hash, AsRef, Display, Into, TryFrom, Serialize, Deserialize),
+)]
+pub struct JobId(String);
 
-        impl From<$name> for String {
-            fn from(id: $name) -> String {
-                id.0
-            }
-        }
+#[nutype(
+    validate(predicate = |value: &str| !value.trim().is_empty()),
+    derive(Debug, Clone, PartialEq, Eq, Hash, AsRef, Display, Into, TryFrom, Serialize, Deserialize),
+)]
+pub struct JobRunId(String);
 
-        impl std::fmt::Display for $name {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                write!(f, "{}", self.0)
-            }
-        }
-    };
-}
+#[nutype(
+    validate(predicate = |value: &str| !value.trim().is_empty()),
+    derive(Debug, Clone, PartialEq, Eq, Hash, AsRef, Display, Into, TryFrom, Serialize, Deserialize),
+)]
+pub struct EventId(String);
 
-define_value!(WorkflowId, "workflow_id");
-define_value!(WorkflowRunId, "workflow_run_id");
-define_value!(ChannelId, "channel_id");
-define_value!(JobId, "job_id");
-define_value!(JobRunId, "job_run_id");
-define_value!(EventId, "event_id");
-define_value!(DataReferenceUri, "data_reference_uri");
-define_value!(ContentHash, "content_hash");
-define_value!(PythonFunctionName, "python_function_name");
+#[nutype(
+    validate(predicate = |value: &str| !value.trim().is_empty()),
+    derive(Debug, Clone, PartialEq, Eq, Hash, AsRef, Display, Into, TryFrom, Serialize, Deserialize),
+)]
+pub struct DataReferenceUri(String);
+
+#[nutype(
+    validate(predicate = |value: &str| !value.trim().is_empty()),
+    derive(Debug, Clone, PartialEq, Eq, Hash, AsRef, Display, Into, TryFrom, Serialize, Deserialize),
+)]
+pub struct ContentHash(String);
+
+#[nutype(
+    validate(predicate = |value: &str| !value.trim().is_empty()),
+    derive(Debug, Clone, PartialEq, Eq, Hash, AsRef, Display, Into, TryFrom, Serialize, Deserialize),
+)]
+pub struct PythonFunctionName(String);
 
 impl EventId {
     pub fn new() -> Self {
@@ -69,10 +75,20 @@ impl WorkflowRunId {
 
 #[cfg(test)]
 mod tests {
-    use super::WorkflowRunId;
+    use super::{WorkflowId, WorkflowRunId};
 
     #[test]
     fn workflow_execution_attempts_have_unique_ids() {
         assert_ne!(WorkflowRunId::new(), WorkflowRunId::new());
+    }
+
+    #[test]
+    fn ids_reject_empty_and_whitespace_only_values() {
+        assert!(WorkflowId::try_from(String::new()).is_err());
+        assert!(WorkflowId::try_from("   ".to_owned()).is_err());
+        let id = WorkflowId::try_from("workflow-1".to_owned()).unwrap();
+        assert_eq!(id.as_ref(), "workflow-1");
+        assert_eq!(id.to_string(), "workflow-1");
+        assert_eq!(String::from(id), "workflow-1");
     }
 }
