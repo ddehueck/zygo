@@ -7,14 +7,9 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 import json
-import os
-from pathlib import Path
-import sys
-from typing import TYPE_CHECKING, Literal, TextIO
-
+from typing import Literal
 
 STDOUT_IPC_PREFIX: str = "ZYGO_IPC="
-
 
 
 @dataclass(frozen=True)
@@ -41,30 +36,12 @@ class TagInserted:
     data_reference: str | None = None
 
 
-type StdoutIPCMessage = DataReferenceCreated | ChannelItemInserted | TagInserted
+type IpcMessage = DataReferenceCreated | ChannelItemInserted | TagInserted
 
 
-def _serialize_stdout_ipc_message(message: StdoutIPCMessage) -> str:
-    """Serialize an IPC message, including the prefix expected by Rust."""
-    payload = json.dumps(asdict(message), separators=(",", ":"))
-    return f"{STDOUT_IPC_PREFIX}{payload}"
-
-
-def write_stdout_ipc_message(message: StdoutIPCMessage) -> None:
-    """Write one flushed, parseable IPC message line to stdout.
-
-    A closed IPC reader leaves Python's stdout buffer pointing at a broken
-    pipe. Replace it with ``os.devnull`` after handling that condition so
-    interpreter shutdown does not report a second flush error.
-    """
-    serialized = _serialize_stdout_ipc_message(message)
-    stdout: TextIO = sys.stdout
-    try:
-        stdout.write(f"{serialized}\n")
-        stdout.flush()
-    except BrokenPipeError:
-        # Keep stdout open for interpreter shutdown, but detach it from the pipe.
-        sys.stdout = Path(os.devnull).open("w", encoding="utf-8")  # ruff: ignore[open-file-with-context-handler]
+def serialize_ipc_message(message: IpcMessage) -> str:
+    """Serialize an IPC message to a compact JSON payload."""
+    return json.dumps(asdict(message), separators=(",", ":"))
 
 
 @dataclass

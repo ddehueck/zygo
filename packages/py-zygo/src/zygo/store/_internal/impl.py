@@ -21,19 +21,16 @@ from typing import TYPE_CHECKING, BinaryIO, Literal, TextIO, cast, overload, ove
 import fsspec  # type: ignore
 
 from zygo._internal.fsspec import FsspecUri
+from zygo._internal.ipc.v0.types import DataReferenceCreated
 from zygo.store import Reference, StoreProtocol
 from zygo.store.protocol import TmpFileProtocol
-
-from zygo._internal.ipc.v0.types import (
-    DataReferenceCreated,
-    write_stdout_ipc_message,
-)
 
 if TYPE_CHECKING:
     from types import TracebackType
 
     from fsspec.spec import AbstractFileSystem  # type: ignore
 
+    from zygo._internal.ipc.v0.transport import IpcTransport
     from zygo.store._internal.types import PartitionKey
     from zygo.store.protocol import StoreContextManager
     from zygo.store.types import Scope, StoreOptions
@@ -46,6 +43,7 @@ def _partition(partition_key: PartitionKey, value: str) -> str:
 
 def _contains_any_partition_key(key: str, partition_keys: list[PartitionKey]) -> bool:
     return any(f"{pk}=" in key for pk in partition_keys)
+
 
 def _is_global_uri(value: str) -> bool:
     return "store/global" in value
@@ -71,10 +69,17 @@ class StoreImpl(StoreProtocol):
     A high-level store built on fsspec.
     """
 
-    def __init__(self, *, context: JobRunContext, options: StoreOptions) -> None:
+    def __init__(
+        self,
+        *,
+        context: JobRunContext,
+        options: StoreOptions,
+        ipc_transport: IpcTransport,
+    ) -> None:
         super().__init__()
         self._context = context
         self._options = options
+        self.ipc_transport = ipc_transport
         self._fs = _build_fs(options)
 
     def _is_uri(self, value: str) -> bool:
@@ -142,7 +147,7 @@ class StoreImpl(StoreProtocol):
             f.write(data)  # type: ignore
 
         # Send an IPC message to the parent process to notify it of the new data reference.
-        write_stdout_ipc_message(
+        self.ipc_transport.emit(
             DataReferenceCreated(
                 data_reference=str(uri)
             )
@@ -244,7 +249,12 @@ class StoreImpl(StoreProtocol):
 _COPY_CHUNK = 8 * 1024 * 1024  # 8 MiB
 
 
-def ingest(*, data_uri: FsspecUri, store_options: StoreOptions) -> Reference:
+def ingest(
+    *,
+    data_uri: FsspecUri,
+    store_options: StoreOptions,
+    ipc_transport: IpcTransport,
+) -> Reference:
     """
     Ingest local data into the store's global scope and return its Reference.
 
@@ -255,6 +265,7 @@ def ingest(*, data_uri: FsspecUri, store_options: StoreOptions) -> Reference:
         data_uri: Local fsspec-compatible URI, such as ``file://./data.csv`` or
             ``memory://input.bin``.
         store_options: Target store configuration.
+        ipc_transport: IPC transport used to notify about the created data reference.
     """
     if not data_uri.is_local():
         raise ValueError("Local input URI is required")
@@ -284,7 +295,7 @@ def ingest(*, data_uri: FsspecUri, store_options: StoreOptions) -> Reference:
     uri = FsspecUri(f"{store_options.root_uri.protocol}://{dest}")
 
     # Send an IPC message to the parent process to notify it of the new data reference.
-    write_stdout_ipc_message(
+    ipc_transport.emit(
         DataReferenceCreated(
             data_reference=str(uri)
         )

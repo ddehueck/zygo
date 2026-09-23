@@ -4,10 +4,7 @@ from typing import TYPE_CHECKING, cast
 
 from zygo._internal.fsspec import FsspecUri
 from zygo._internal.ipc.importer import load_workflow
-from zygo._internal.ipc.v0.types import (
-    ChannelItemInserted,
-    write_stdout_ipc_message,
-)
+from zygo._internal.ipc.v0.types import ChannelItemInserted
 from zygo._internal.meta.injection import build_injected_job_fn
 from zygo._internal.meta.job_context import JobContextImpl
 from zygo.store import Reference, StoreOptions
@@ -17,6 +14,7 @@ from zygo.types import JobId, JobRunContext, JobRunId, WorkflowRunId
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from zygo._internal.ipc.v0.transport import IpcTransport
     from zygo._internal.ipc.v0.types import JobRunArgs
 
 
@@ -24,6 +22,7 @@ def run(
     *,
     target: str,
     args: JobRunArgs,
+    ipc_transport: IpcTransport,
 ) -> None:
     workflow = load_workflow(target)
 
@@ -47,6 +46,7 @@ def run(
                 # TODO: Where to pipe these options through - allow setting this as config
                 root_uri=FsspecUri(uri="file://./zygo_workflow_results")
             ),
+            ipc_transport=ipc_transport,
         )
 
         input_bytes = store.get(run_context.data_ref)
@@ -57,7 +57,7 @@ def run(
         callable_w_deps = build_injected_job_fn(
             cast("Callable[..., object]", job_entry.job_fn),
             input_data=decoded_input,
-            ctx=JobContextImpl(store=store),
+            ctx=JobContextImpl(store=store, ipc_transport=ipc_transport),
         )
         # Run the user-defined job function with injected dependencies.
         result = callable_w_deps()
@@ -71,11 +71,7 @@ def run(
         #
         # e.g. if the return value is a list and the channel type is a scalar,
         #      save each item in a separate file and publish a reference to each file.
-
-        is_returned_list = isinstance(result, list)
-        is_channel_scalar = job_entry.output_channel.is_scalar
-        is_batch = is_returned_list and is_channel_scalar
-
+        is_batch = isinstance(result, list) and job_entry.output_channel.is_scalar
         result_as_batch = result if is_batch else [result]
 
         # Save to store to get a data reference.
@@ -94,11 +90,10 @@ def run(
             )
             data_references.append(reference)
 
-
-        # Then send data reference to output channel via stdout ipc
+        # Then send data reference to output channel via IPC
         # todo: atomic batch?
         for reference in data_references:
-            write_stdout_ipc_message(
+            ipc_transport.emit(
                 ChannelItemInserted(
                     channel_id=job_entry.output_channel.id,
                     data_reference=str(reference.uri),

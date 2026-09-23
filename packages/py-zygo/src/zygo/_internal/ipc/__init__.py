@@ -16,11 +16,13 @@ This interface follows the form of:
 `python -m zygo._internal.ipc.version <command> <users_workflow_module>`
 
 For example:
-`python -m zygo._internal.ipc.v0 meta examples.main:workflow
+`python -m zygo._internal.ipc.v0 metadata examples.main:workflow`
 
-python -m zygo._internal.ipc.v0 run examples.main:workflow \
-  --args '{...}'
-`
+`python -m zygo._internal.ipc.v0 run examples.main:workflow --args '{...}'`
+
+`python -m zygo._internal.ipc.v0 run examples.main:workflow --args '{...}' \\
+  --use-http --http-host http://myservice.com/api/events`
+
 """
 
 from zygo._internal.ipc.importer import load_workflow
