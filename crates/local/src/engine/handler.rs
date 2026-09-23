@@ -1,31 +1,24 @@
-use crate::AppDeps;
-use crate::api::interface::{RunJobArgs, RunJobResult};
-use crate::dependencies::JobRuntime;
-use crate::engine::state::EngineState;
+use super::state::EngineState;
 use crate::models::{
     ChannelItemInsertedData, Event, EventKind, JobRunId, JobRunStatus, WorkflowSchema, job_run_id,
 };
+use crate::{LocalRuntime, RunJobArgs};
 
-pub struct EventHandlerResult {
-    pub new_state: EngineState,
-    pub new_events: Vec<Event>,
-}
-
-pub struct EventHandler<D: AppDeps> {
-    deps: D,
+pub struct EventHandler {
+    runtime: LocalRuntime,
     schema: WorkflowSchema,
 }
 
-impl<D: AppDeps> EventHandler<D> {
-    pub fn new(deps: D, schema: WorkflowSchema) -> Self {
-        Self { deps, schema }
+impl EventHandler {
+    pub fn new(runtime: LocalRuntime, schema: WorkflowSchema) -> Self {
+        Self { runtime, schema }
     }
 
     pub async fn handle(
         &self,
         event: &Event,
         state: &EngineState,
-    ) -> Result<EventHandlerResult, anyhow::Error> {
+    ) -> Result<EngineState, anyhow::Error> {
         match &event.kind {
             EventKind::DataReferenceInserted(_) => self.noop(state),
             EventKind::TagInserted(_) => self.noop(state),
@@ -49,29 +42,23 @@ impl<D: AppDeps> EventHandler<D> {
         }
     }
 
-    fn noop(&self, state: &EngineState) -> Result<EventHandlerResult, anyhow::Error> {
-        Ok(EventHandlerResult {
-            new_state: state.clone(),
-            new_events: vec![],
-        })
+    fn noop(&self, state: &EngineState) -> Result<EngineState, anyhow::Error> {
+        Ok(state.clone())
     }
 
     async fn handle_channel_item_inserted(
         &self,
         state: &EngineState,
         data: &ChannelItemInsertedData,
-    ) -> Result<EventHandlerResult, anyhow::Error> {
+    ) -> Result<EngineState, anyhow::Error> {
         // Find all jobs that have the given channel as an input.
         // Request each job to be run.
         let jobs = self.schema.get_jobs_by_input_channel_id(&data.channel_id);
-        let mut new_events = Vec::new();
 
         for job in jobs {
             let job_run_id = JobRunId::try_from(job_run_id(&job, data.item.as_ref()))?;
 
-            let run_result = self
-                .deps
-                .runtime()
+            self.runtime
                 .run_job(RunJobArgs {
                     input: data.item.clone(),
                     job_id: job.id.clone(),
@@ -79,19 +66,9 @@ impl<D: AppDeps> EventHandler<D> {
                     job_run_id: job_run_id.clone(),
                 })
                 .await?;
-
-            match run_result {
-                RunJobResult::Enqueued => {}
-                RunJobResult::Cached { events } => {
-                    new_events.extend(events);
-                }
-            }
         }
 
-        Ok(EventHandlerResult {
-            new_state: state.clone(),
-            new_events,
-        })
+        Ok(state.clone())
     }
 
     fn handle_job_status_update(
@@ -99,13 +76,10 @@ impl<D: AppDeps> EventHandler<D> {
         state: &EngineState,
         job_run_id: JobRunId,
         new_status: JobRunStatus,
-    ) -> Result<EventHandlerResult, anyhow::Error> {
+    ) -> Result<EngineState, anyhow::Error> {
         let mut new_state = state.clone();
         new_state.set_job_status(job_run_id, new_status);
 
-        Ok(EventHandlerResult {
-            new_state,
-            new_events: vec![],
-        })
+        Ok(new_state)
     }
 }

@@ -7,42 +7,47 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::SystemTime;
 
-use anyhow::{Result, anyhow, bail};
-use tokio::sync::{Mutex, watch};
-use zygo_core::api::interface::{RunJobArgs, RunJobResult};
-use zygo_core::api::v0::PythonCli;
-use zygo_core::dependencies::{EventStream, JobRuntime};
-use zygo_core::models::{
-    Event, EventId, EventKind, JobEnqueuedData, JobFailedData, JobRunId, JobRunSource, Source,
-    WorkflowRunId,
+use crate::api::v0::PythonCli;
+use crate::models::{
+    DataReferenceUri, Event, EventId, EventKind, JobEnqueuedData, JobFailedData, JobId, JobRunId,
+    JobRunSource, Source, WorkflowRunId,
 };
+use anyhow::{Result, anyhow, bail};
+use tokio::sync::{Mutex, mpsc, watch};
 
 use crate::LogsRepository;
 use managed_process::ManagedProcess;
 use worker::WorkerOutcome;
 use worker_pool::WorkerPool;
 
+pub struct RunJobArgs {
+    pub input: DataReferenceUri,
+    pub job_id: JobId,
+    pub workflow_run_id: WorkflowRunId,
+    pub job_run_id: JobRunId,
+}
+
 /// Run-scoped local execution - todo: add caching at this layer.
 ///
-/// Each runtime owns a FIFO worker pool and writes to the event stream directly,
-/// which is picked up by the core actor's polling loop.
+/// Each runtime owns a FIFO worker pool and publishes events to the run actor.
+/// The actor projects and handles each event in arrival order.
 ///
 /// Runtime cancellation stops queued and active jobs without publishing a
 /// terminal job event, then waits for active process trees to terminate.
-pub struct LocalRuntime<S> {
-    worker: Worker<S>,
+pub struct LocalRuntime {
+    worker: Worker,
     worker_pool: WorkerPool,
 }
 
-struct Worker<S> {
-    ctx: Arc<RuntimeContext<S>>,
+struct Worker {
+    ctx: Arc<RuntimeContext>,
     state: Arc<RuntimeState>,
 }
 
-struct RuntimeContext<S> {
+struct RuntimeContext {
     python_cli: PythonCli,
     run_id: WorkflowRunId,
-    stream: S,
+    events: mpsc::UnboundedSender<Event>,
     logs: LogsRepository,
 }
 
@@ -61,7 +66,7 @@ struct JobCompletion {
     completed: AtomicBool,
 }
 
-impl<S> Clone for LocalRuntime<S> {
+impl Clone for LocalRuntime {
     fn clone(&self) -> Self {
         Self {
             worker: self.worker.clone(),
@@ -70,7 +75,7 @@ impl<S> Clone for LocalRuntime<S> {
     }
 }
 
-impl<S> Clone for Worker<S> {
+impl Clone for Worker {
     fn clone(&self) -> Self {
         Self {
             ctx: self.ctx.clone(),
@@ -114,11 +119,11 @@ impl Drop for JobCompletion {
     }
 }
 
-impl<S: EventStream> LocalRuntime<S> {
+impl LocalRuntime {
     pub fn new(
         python_cli: PythonCli,
         run_id: WorkflowRunId,
-        stream: S,
+        events: mpsc::UnboundedSender<Event>,
         logs: LogsRepository,
         num_workers: usize,
     ) -> Self {
@@ -128,7 +133,7 @@ impl<S: EventStream> LocalRuntime<S> {
                 ctx: Arc::new(RuntimeContext {
                     python_cli,
                     run_id,
-                    stream,
+                    events,
                     logs,
                 }),
                 state: Arc::new(RuntimeState {
@@ -170,19 +175,19 @@ impl<S: EventStream> LocalRuntime<S> {
     }
 }
 
-impl<S: EventStream> Worker<S> {
+impl Worker {
     async fn publish(&self, source: &JobRunSource, kind: EventKind) -> Result<()> {
         self.ctx
-            .stream
-            .append(vec![Event {
+            .events
+            .send(Event {
                 id: EventId::new(),
                 is_replay: false,
                 timestamp: SystemTime::now(),
                 kind,
                 source: Source::JobRun(source.clone()),
                 run_id: self.ctx.run_id.clone(),
-            }])
-            .await
+            })
+            .map_err(|_| anyhow!("workflow actor stopped before accepting job event"))
     }
 
     async fn fail(&self, source: &JobRunSource, error: String) -> Result<()> {
@@ -198,8 +203,8 @@ impl<S: EventStream> Worker<S> {
     }
 }
 
-impl<S: EventStream> JobRuntime for LocalRuntime<S> {
-    async fn run_job(&self, args: RunJobArgs) -> Result<RunJobResult> {
+impl LocalRuntime {
+    pub async fn run_job(&self, args: RunJobArgs) -> Result<()> {
         if args.workflow_run_id != self.worker.ctx.run_id {
             bail!("job belongs to a different workflow run");
         }
@@ -278,11 +283,7 @@ impl<S: EventStream> JobRuntime for LocalRuntime<S> {
             return Err(error);
         }
 
-        Ok(RunJobResult::Enqueued)
-    }
-
-    async fn stop_job(&self, _source: JobRunSource) -> Result<()> {
-        self.cancel().await
+        Ok(())
     }
 }
 

@@ -48,8 +48,8 @@ impl Db {
         connection.busy_timeout(busy_timeout)?;
         connection.pragma_update("foreign_keys", 1).await?;
 
-        // Conditionally enabled so only stream processing which projects run state
-        // tables write to the cdc table.
+        // Conditionally enabled so actor projection writes generate CDC changes,
+        // while log writes use a separate connection.
         if enable_cdc {
             connection
                 .execute("PRAGMA capture_data_changes_conn('after')", ())

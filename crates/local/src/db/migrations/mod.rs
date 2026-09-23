@@ -2,11 +2,7 @@ use turso::{Connection, transaction::TransactionBehavior};
 
 use super::error::Result;
 
-const MIGRATIONS: &[(i64, &str)] = &[
-    (1, include_str!("0001_initial.sql")),
-    (2, include_str!("0002_event_stream.sql")),
-    (3, include_str!("0003_logs.sql")),
-];
+const MIGRATIONS: &[(i64, &str)] = &[(1, include_str!("0001_initial.sql"))];
 
 pub async fn migrate(connection: &mut Connection) -> Result<()> {
     let tx = connection

@@ -37,8 +37,8 @@ This means you there is no limit to the size of the data you can pass between jo
 ## The Pieces
 
 - `Python Library`: The interface developers use to define workflows and jobs.
-- `Core Crate`: The core logic of the framework. Given a workflow definition, it handles what job should run when with what data.
-- `Local Crate`: The local application layer that the CLI and desktop are built on top of.
+- `Protocol`: The versioned CLI contract implemented by the Python library and consumed by orchestrators.
+- `Local Crate`: The Rust implementation used by the CLI and desktop.
 
 ### The Python Library
 
@@ -88,47 +88,15 @@ class LabResult(TypedDict):
 results = Channel(id="results", type=LabResult)
 ```
 
-### The Core Crate
+### The Protocol
 
-The heart of zygo is written in rust in the zygo-core crate. Rust was chosen for it's expressive type system, ecosystem, and performance as zygo may venture into high performance tooling for specific workloads.
-
-This crate defines the core data models and workflow execution engine.
-
-#### The Stream
-
-Each workflow run is an ordered stream of `Event`s and `Command`s - referred to as `StreamItems`.
-
-Each `StreamItem` is linearized via a single `StreamWriter` and written to the stream keyspace with contigous monotonic integer ids. This makes it easy to read the stream and make decisions at a given point in time.
-
-#### The Engine
-
-The engine is designed to process a workflow stream one at a time, applying the workflow rules and executing the associated jobs.
-
-It is spilt into two main components **The Arbiter** and **The Executor**.
-
-The **Arbiter** is responsible for deciding what action to take next based the `Event` history at one point in time. When a decision is made, it issues `Command`s that the executor can then execute.
-
-The **Executor** is responsible for executing `Command`s issued by the arbiter. It may run a job locally, replay events for a cached job, or mark a job as completed.
-
-This is analgous to a standard inbox/outbox pattern where the arbiter reads `Event`s from the inbox and writes `Command`s to the outbox. The executor reads `Command`s from the outbox and executes them - sometimes resulting in more `Event`s being written to the inbox.
-
-In principle, there are optimizations to further parallelize the engine's operations we favor the simplicity of a single-threaded, ordered execution model. 
-
-#### The Actor
-
-todo
-
-#### Cancellation
-
-Cancellation is scoped to a single workflow run. A run-level cancellation group signals its actor and workers and tracks their tasks so `Zygo::cancel` does not return until cleanup completes; local Python jobs run in OS process groups (Job Objects on Windows), allowing cancellation to terminate each worker and its descendants before the runtime exits. Persisted `Cancelled` workflow and job statuses are not yet modeled.
+The Python CLI implements the versioned job-provider protocol in [`protocol/v0`](protocol/v0). Orchestrators can use this contract without depending on the local Rust crate.
 
 ### The Local Crate
 
-The local crate is responsible for providing simple application layer for building local tools to interact with the core create. 
+The `local` crate contains the Rust workflow models, Python CLI adapter, and one implementation of the workflow orchestrator used by the desktop app and CLI.
 
-For example, the desktop app and CLI tool can both be used to run workflows locally. When running workflows locally, we want to keep a history of workflow runs and provide easy search and filtering capabilities. So, we need a local db to store this information and index it. We don't want this in the core crate because this is a local-only concern.
 
-This way zygo's core logic can be extended to build various applications and services e.g. a cloud zygo service.
 
 
 # WIPs

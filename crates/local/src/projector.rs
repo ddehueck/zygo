@@ -1,46 +1,26 @@
 use std::collections::HashMap;
 use std::time::SystemTime;
 
-use zygo_core::RunCursor;
-use zygo_core::dependencies::EventStream;
-use zygo_core::models::{Event, EventKind, Source, WorkflowRunId, WorkflowRunStatus};
+use crate::models::{Event, EventKind, Source, WorkflowRunId, WorkflowRunStatus};
+use crate::{JobRunModel, Repos, format_database_timestamp};
 
-use crate::{JobRunModel, LocalEventStream, Repos, format_database_timestamp};
-
-pub struct ReadResult {
-    pub record: Option<Event>,
-    pub next_cursor: RunCursor,
-}
-
-/// Processes workflow stream records and projects local read models.
-/// While still exposing the underlying stream for local clients. e.g. ui updates.
-pub struct LocalStreamProcessor {
+/// Maintains the local database read models from events handled by the run actor.
+pub struct LocalProjector {
     repos: Repos,
     workflow_run_id: WorkflowRunId,
-    stream: LocalEventStream,
     job_started_at: HashMap<String, SystemTime>,
 }
 
-impl LocalStreamProcessor {
-    pub fn new(repos: Repos, workflow_run_id: WorkflowRunId, stream: LocalEventStream) -> Self {
+impl LocalProjector {
+    pub fn new(repos: Repos, workflow_run_id: WorkflowRunId) -> Self {
         Self {
-            stream,
             repos,
             workflow_run_id,
             job_started_at: HashMap::new(),
         }
     }
 
-    pub async fn process_next(&mut self, cursor: RunCursor) -> anyhow::Result<ReadResult> {
-        let mut result = ReadResult {
-            record: self.stream.get(cursor.next_id).await?,
-            next_cursor: cursor,
-        };
-
-        let Some(event) = result.record.as_ref() else {
-            return Ok(result);
-        };
-
+    pub async fn project(&mut self, event: &Event) -> anyhow::Result<()> {
         let workflow_run_id = self.workflow_run_id.to_string();
         let timestamp = event.timestamp;
         let timestamp_value = format_database_timestamp(timestamp);
@@ -94,6 +74,7 @@ impl LocalStreamProcessor {
                             job_id: data.job_id.to_string(),
                             status: "queued".to_owned(),
                             duration_ms: None,
+                            error_message: None,
                             retry_count: 0,
                             created_at: timestamp_value.clone(),
                         })
@@ -132,6 +113,7 @@ impl LocalStreamProcessor {
                     &data.job_id.to_string(),
                     "succeeded",
                     timestamp,
+                    None,
                 )
                 .await?;
             }
@@ -142,6 +124,7 @@ impl LocalStreamProcessor {
                     &data.job_id.to_string(),
                     "failed",
                     timestamp,
+                    Some(&data.error),
                 )
                 .await?;
             }
@@ -175,8 +158,7 @@ impl LocalStreamProcessor {
         self.refresh_workflow_run(&workflow_run_id, &timestamp_value)
             .await?;
 
-        result.next_cursor.next_id = result.next_cursor.next_id.increment();
-        Ok(result)
+        Ok(())
     }
 
     async fn record_job_completed(
@@ -186,6 +168,7 @@ impl LocalStreamProcessor {
         job_id: &str,
         status: &str,
         timestamp: SystemTime,
+        error_message: Option<&str>,
     ) -> anyhow::Result<()> {
         let duration_ms = self
             .job_started_at
@@ -195,7 +178,14 @@ impl LocalStreamProcessor {
 
         self.repos
             .job_runs
-            .record_completed(workflow_run_id, job_run_id, job_id, status, duration_ms)
+            .record_completed(
+                workflow_run_id,
+                job_run_id,
+                job_id,
+                status,
+                duration_ms,
+                error_message,
+            )
             .await?;
 
         Ok(())

@@ -1,22 +1,21 @@
 use std::sync::atomic::Ordering;
 
+use crate::api::v0::{PythonCli, RunCommandArgs};
+
+use crate::models::{EventKind, JobRunSource, JobStartedData, JobSucceededData};
 use anyhow::{Result, bail};
 use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::watch;
-use zygo_core::api::interface::RunJobArgs;
-use zygo_core::api::v0::{PythonCli, RunCommandArgs};
-use zygo_core::dependencies::EventStream;
-use zygo_core::models::{EventKind, JobRunSource, JobStartedData, JobSucceededData};
 
-use super::{ManagedProcess, Worker, wait_for_cancellation};
+use super::{ManagedProcess, RunJobArgs, Worker, wait_for_cancellation};
 
 pub enum WorkerOutcome {
     Succeeded,
     Cancelled,
 }
 
-impl<S: EventStream> Worker<S> {
+impl Worker {
     pub async fn worker(
         &self,
         source: &JobRunSource,

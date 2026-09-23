@@ -1155,7 +1155,6 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-specta",
  "tokio",
- "zygo-core",
 ]
 
 [[package]]
@@ -2908,16 +2907,25 @@ name = "local"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
+ "blake3",
  "chrono",
  "directories",
+ "dotenvy",
+ "hex",
  "libc",
+ "num_cpus",
+ "nutype",
+ "os_pipe",
  "process-wrap",
+ "reqwest 0.12.28",
  "serde",
  "serde_json",
  "thiserror 2.0.20",
  "tokio",
+ "tokio-util",
  "turso",
- "zygo-core",
+ "uuid",
 ]
 
 [[package]]
@@ -7652,27 +7660,4 @@ dependencies = [
  "serde",
  "syn 3.0.4",
  "winnow 1.0.4",
-]
-
-[[package]]
-name = "zygo-core"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "blake3",
- "chrono",
- "directories",
- "dotenvy",
- "hex",
- "num_cpus",
- "nutype",
- "os_pipe",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "tokio",
- "tokio-util",
- "uuid",
 ]

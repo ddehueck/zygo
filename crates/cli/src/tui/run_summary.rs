@@ -1,4 +1,4 @@
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use ratatui::{
     buffer::Buffer,
@@ -218,15 +218,61 @@ fn job_run_row(job_run: &JobRunSummary) -> Row<'static> {
 }
 
 fn job_run_duration(job_run: &JobRunSummary) -> String {
-    let Some(started_at) = job_run.started_at else {
+    let duration = if let Some(ms) = job_run.duration_ms {
+        Duration::from_millis(ms.max(0) as u64)
+    } else if job_run.status == "running" {
+        let Some(started_at) = parse_database_timestamp(&job_run.created_at) else {
+            return "—".to_owned();
+        };
+        SystemTime::now()
+            .duration_since(started_at)
+            .unwrap_or(Duration::ZERO)
+    } else {
         return "—".to_owned();
     };
-    let ended_at = job_run.ended_at.unwrap_or_else(SystemTime::now);
-    let duration = ended_at
-        .duration_since(started_at)
-        .unwrap_or(Duration::ZERO);
 
     format_duration(duration)
+}
+
+// SQLite CURRENT_TIMESTAMP is a UTC timestamp without a timezone suffix.
+fn parse_database_timestamp(value: &str) -> Option<SystemTime> {
+    let (date, time) = value.split_once(' ')?;
+    let mut date = date.split('-').map(str::parse::<i64>);
+    let year = date.next()?.ok()?;
+    let month = date.next()?.ok()?;
+    let day = date.next()?.ok()?;
+    let mut time = time.split(':').map(str::parse::<i64>);
+    let hour = time.next()?.ok()?;
+    let minute = time.next()?.ok()?;
+    let second = time.next()?.ok()?;
+    if date.next().is_some()
+        || time.next().is_some()
+        || !(1..=12).contains(&month)
+        || !(1..=31).contains(&day)
+        || hour > 23
+        || minute > 59
+        || second > 59
+        || hour < 0
+        || minute < 0
+        || second < 0
+    {
+        return None;
+    }
+
+    // Convert the Gregorian calendar date to days since the Unix epoch.
+    let year = year - i64::from(month <= 2);
+    let era = year.div_euclid(400);
+    let year_of_era = year - era * 400;
+    let month = month + if month > 2 { -3 } else { 9 };
+    let day_of_year = (153 * month + 2) / 5 + day - 1;
+    let year_of_era_days = year_of_era * 365 + year_of_era / 4 - year_of_era / 100;
+    let days = era * 146097 + year_of_era_days + day_of_year - 719468;
+    let seconds = days * 86400 + hour * 3600 + minute * 60 + second;
+    if seconds >= 0 {
+        UNIX_EPOCH.checked_add(Duration::from_secs(seconds as u64))
+    } else {
+        UNIX_EPOCH.checked_sub(Duration::from_secs(seconds.unsigned_abs()))
+    }
 }
 
 fn status_style(status: &str) -> Style {

@@ -1,4 +1,4 @@
-use zygo_core::models::{JobRunSource, WorkflowRunId};
+use crate::models::{JobRunSource, WorkflowRunId};
 
 use crate::LogsRepository;
 

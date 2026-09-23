@@ -1,7 +1,7 @@
 use std::time::Duration;
 
+use crate::models::JobRunId;
 use tokio::time::{Instant, sleep_until};
-use zygo_core::models::JobRunId;
 
 use crate::{DbResult, LogRow, LogsRepository};
 

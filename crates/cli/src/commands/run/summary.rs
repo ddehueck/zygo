@@ -1,106 +1,48 @@
-use std::{collections::HashMap, time::SystemTime};
-
-use zygo_core::{
-    EngineState,
-    models::{Event, EventKind, WorkflowRunStatus},
-};
+use local::{JobRunModel, WorkflowRunModel};
 
 pub struct WorkflowRunSummary {
     pub workflow_id: String,
     pub workflow_status: String,
     pub job_runs: Vec<JobRunSummary>,
-    job_run_indices: HashMap<String, usize>,
 }
 
 pub struct JobRunSummary {
     pub job_id: String,
     pub public_id: String,
     pub status: String,
-    pub started_at: Option<SystemTime>,
-    pub ended_at: Option<SystemTime>,
+    pub created_at: String,
+    pub duration_ms: Option<i64>,
+    pub error_message: Option<String>,
 }
 
 impl WorkflowRunSummary {
     pub fn new(workflow_id: String) -> Self {
         Self {
             workflow_id,
-            workflow_status: WorkflowRunStatus::Running.to_string(),
-            job_runs: vec![],
-            job_run_indices: HashMap::new(),
+            workflow_status: "running".to_owned(),
+            job_runs: Vec::new(),
         }
     }
 
-    pub fn update_by_snapshot(&mut self, snapshot: &EngineState) {
-        self.workflow_status = snapshot.status.to_string();
-    }
-
-    pub fn update_by_event(&mut self, event: Event) {
-        let timestamp = event.timestamp;
-
-        match event.kind {
-            EventKind::JobStarted(data) => {
-                let job_run_id = data.job_run_id.to_string();
-                let job_id = data.job_id.to_string();
-
-                if let Some(&index) = self.job_run_indices.get(&job_run_id) {
-                    let job_run = &mut self.job_runs[index];
-                    job_run.job_id = job_id;
-                    job_run.status = "running".to_owned();
-                    job_run.started_at = Some(timestamp);
-                    job_run.ended_at = None;
-                } else {
-                    let index = self.job_runs.len();
-                    self.job_runs.push(JobRunSummary {
-                        job_id,
-                        public_id: job_run_id.clone(),
-                        status: "running".to_owned(),
-                        started_at: Some(timestamp),
-                        ended_at: None,
-                    });
-                    self.job_run_indices.insert(job_run_id, index);
-                }
-            }
-            EventKind::JobSucceeded(data) => self.complete_job_run(
-                data.job_id.to_string(),
-                data.job_run_id.to_string(),
-                "succeeded",
-                timestamp,
-            ),
-            EventKind::JobFailed(data) => self.complete_job_run(
-                data.job_id.to_string(),
-                data.job_run_id.to_string(),
-                "failed",
-                timestamp,
-            ),
-            EventKind::JobEnqueued(_)
-            | EventKind::DataReferenceInserted(_)
-            | EventKind::ChannelItemInserted(_)
-            | EventKind::TagInserted(_) => {}
-        }
-    }
-
-    fn complete_job_run(
-        &mut self,
-        job_id: String,
-        job_run_id: String,
-        status: &str,
-        ended_at: SystemTime,
-    ) {
-        if let Some(&index) = self.job_run_indices.get(&job_run_id) {
-            let job_run = &mut self.job_runs[index];
-            job_run.job_id = job_id;
-            job_run.status = status.to_owned();
-            job_run.ended_at = Some(ended_at);
-        } else {
-            let index = self.job_runs.len();
-            self.job_runs.push(JobRunSummary {
-                job_id,
-                public_id: job_run_id.clone(),
-                status: status.to_owned(),
-                started_at: None,
-                ended_at: Some(ended_at),
-            });
-            self.job_run_indices.insert(job_run_id, index);
+    pub fn from_models(
+        workflow_id: String,
+        workflow_run: WorkflowRunModel,
+        job_runs: Vec<JobRunModel>,
+    ) -> Self {
+        Self {
+            workflow_id,
+            workflow_status: workflow_run.status,
+            job_runs: job_runs
+                .into_iter()
+                .map(|job_run| JobRunSummary {
+                    job_id: job_run.job_id,
+                    public_id: job_run.public_id,
+                    status: job_run.status,
+                    created_at: job_run.created_at,
+                    duration_ms: job_run.duration_ms,
+                    error_message: job_run.error_message,
+                })
+                .collect(),
         }
     }
 }

@@ -8,7 +8,6 @@ pub mod job;
 pub mod job_run;
 pub mod run;
 pub mod schema;
-pub mod sequence_id;
 
 pub use channel::Channel;
 
@@ -23,4 +22,3 @@ pub use job::{Job, job_run_id};
 pub use job_run::{JobRun, JobRunStatus};
 pub use run::WorkflowRunStatus;
 pub use schema::WorkflowSchema;
-pub use sequence_id::SequenceId;

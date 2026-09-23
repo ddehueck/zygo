@@ -2,16 +2,14 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::models::{
-    JobRunId, JobRunStatus, SequenceId, WorkflowRunId, WorkflowRunStatus, WorkflowSchema,
-};
+use crate::models::{JobRunId, JobRunStatus, WorkflowRunId, WorkflowRunStatus, WorkflowSchema};
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct EngineState {
     pub id: WorkflowRunId,
     pub status: WorkflowRunStatus,
     pub schema: WorkflowSchema,
-    cursor: RunCursor,
+
     status_by_job_run_id: HashMap<JobRunId, JobRunStatus>,
 }
 
@@ -21,7 +19,7 @@ impl EngineState {
             id: id.clone(),
             status: WorkflowRunStatus::Running,
             schema: schema.clone(),
-            cursor: RunCursor::default(),
+
             status_by_job_run_id: HashMap::new(),
         }
     }
@@ -29,14 +27,6 @@ impl EngineState {
     pub fn set_job_status(&mut self, job_run_id: JobRunId, status: JobRunStatus) -> () {
         self.status_by_job_run_id.insert(job_run_id, status);
         self.status = compute_run_status(&self.status_by_job_run_id);
-    }
-
-    pub fn next_id(&self) -> SequenceId {
-        self.cursor.next_id
-    }
-
-    pub fn increment_cursor(&mut self) {
-        self.cursor.next_id = self.cursor.next_id.increment();
     }
 }
 
@@ -60,17 +50,4 @@ fn compute_run_status(status_by_job_run_id: &HashMap<JobRunId, JobRunStatus>) ->
     }
 
     WorkflowRunStatus::Running
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct RunCursor {
-    pub next_id: SequenceId,
-}
-
-impl RunCursor {
-    pub fn default() -> Self {
-        Self {
-            next_id: SequenceId::new(0),
-        }
-    }
 }

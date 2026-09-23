@@ -1,5 +1,5 @@
-use zygo_core::ipc;
-use zygo_core::models::{
+use local::ipc;
+use local::models::{
     Channel, ChannelId, ContentHash, Entrypoint, FileExtension, Job, WorkflowId, WorkflowSchema,
 };
 
@@ -14,7 +14,7 @@ pub fn workflow_schema_from_metadata(
     cwd: &str,
     target: &str,
     python: &str,
-) -> Result<WorkflowSchema, zygo_core::models::DomainError> {
+) -> Result<WorkflowSchema, local::models::DomainError> {
     let content_hash = ContentHash::try_from(metadata.content_hash)?;
     let entrypoint = Entrypoint::Python(ipc::v0::PythonCli::new(
         python.into(),
@@ -35,7 +35,7 @@ pub fn workflow_schema_from_metadata(
                     .collect(),
             })
         })
-        .collect::<Result<Vec<_>, zygo_core::models::DomainError>>()?;
+        .collect::<Result<Vec<_>, local::models::DomainError>>()?;
 
     let jobs = metadata
         .jobs
@@ -49,7 +49,7 @@ pub fn workflow_schema_from_metadata(
                 output_channel_id: ChannelId::try_from(job.output_channel_id)?,
             })
         })
-        .collect::<Result<Vec<_>, zygo_core::models::DomainError>>()?;
+        .collect::<Result<Vec<_>, local::models::DomainError>>()?;
 
     Ok(WorkflowSchema {
         id: WorkflowId::try_from(metadata.id)?,
