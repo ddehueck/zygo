@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, override
 
-from zygo._internal.ipc.v0.types import TagInserted
+from zygo.cli.v0.types import TagInserted
 from zygo.context import JobContext, TagsProtocol
 
 if TYPE_CHECKING:
-    from zygo._internal.ipc.v0.transport import IpcTransport
     from zygo.store._internal.impl import StoreImpl
+    from zygo.cli.v0.transport import IpcTransport
 
 
 class JobContextImpl(JobContext):
@@ -24,4 +24,4 @@ class TagsImpl(TagsProtocol):
     @override
     def add(self, value: str) -> None:
         cleaned_value = value.strip()
-        self.ipc_transport.emit(TagInserted(value=cleaned_value))
+        self.ipc_transport.emit(TagInserted(type="tag_inserted", value=cleaned_value))

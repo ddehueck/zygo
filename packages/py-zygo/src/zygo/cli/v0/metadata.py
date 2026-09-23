@@ -3,14 +3,14 @@ import json
 import sys
 from typing import TypeVar
 
-from zygo._internal.ipc.importer import load_workflow
-from zygo._internal.ipc.v0.types import (
+from zygo.channel import Channel
+from zygo.cli.importer import load_workflow
+from zygo.cli.v0.types import (
     STDOUT_IPC_PREFIX,
     ChannelMetadata,
     JobMetadata,
     WorkflowMetadata,
 )
-from zygo.channel import Channel
 from zygo.workflow import Workflow
 
 C = TypeVar("C")

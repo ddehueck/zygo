@@ -4,7 +4,7 @@ use tokio::process::Command;
 use crate::api::error::{self, Result};
 use crate::api::v0::interface::{
     RunCommandArgs, STDOUT_IPC_PREFIX, StdoutIPCMessage, WorkflowMetadata,
-    ZYGO_PKG_INTERNAL_CLI_MODULE,
+    ZYGO_PKG_CLI_MODULE,
 };
 use crate::models::{
     self, Channel, ChannelId, ChannelItemInsertedData, ContentHash, DataReferenceInsertedData,
@@ -76,7 +76,7 @@ impl PythonCli {
             .current_dir(&self.cwd)
             .args(vec![
                 "-m".into(),
-                ZYGO_PKG_INTERNAL_CLI_MODULE.into(),
+                ZYGO_PKG_CLI_MODULE.into(),
                 "run".into(),
                 self.target.clone(),
                 "--args".into(),
@@ -97,7 +97,7 @@ impl PythonCli {
         let mut command = Command::new(self.python.clone());
         command.current_dir(&self.cwd).args(vec![
             "-m".into(),
-            ZYGO_PKG_INTERNAL_CLI_MODULE.into(),
+            ZYGO_PKG_CLI_MODULE.into(),
             "metadata".into(),
             self.target.clone(),
         ]);

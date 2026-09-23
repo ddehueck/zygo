@@ -9,13 +9,19 @@ import time
 from typing import TYPE_CHECKING, Protocol, TextIO
 import urllib.error
 import urllib.request
+from uuid import uuid4
 
-from zygo._internal.ipc.v0.types import STDOUT_IPC_PREFIX, serialize_ipc_message
+from zygo.cli.v0.types import (
+    STDOUT_IPC_PREFIX,
+    HttpIPCMessage,
+    serialize_http_ipc_message,
+    serialize_ipc_message,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from zygo._internal.ipc.v0.types import IpcMessage
+    from zygo.cli.v0.types import IpcMessage
 
 
 class IpcTransport(Protocol):
@@ -30,7 +36,7 @@ class StdioTransport:
     interpreter shutdown does not report a second flush error.
     """
 
-    def emit(self, message: IpcMessage) -> None:
+    def emit(self, message: IpcMessage) -> None:  # noqa: PLR6301
         serialized = f"{STDOUT_IPC_PREFIX}{serialize_ipc_message(message)}"
         stdout: TextIO = sys.stdout
         try:
@@ -44,12 +50,15 @@ class StdioTransport:
 class HttpTransport:
     """POST each IPC message as JSON to a configured endpoint with linear retries."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         *,
         url: str,
         max_retries: int,
         retry_interval: float,
+        timeout: float,
+        workflow_run_id: str,
+        job_run_id: str,
         headers: Mapping[str, str] | None = None,
     ) -> None:
         if not url.startswith(("http://", "https://")):
@@ -59,13 +68,23 @@ class HttpTransport:
         self._url = url
         self._max_retries = max_retries
         self._retry_interval = retry_interval
+        self._timeout = timeout
+        self._workflow_run_id = workflow_run_id
+        self._job_run_id = job_run_id
         self._headers = {
             "Content-Type": "application/json",
             **(dict(headers) if headers is not None else {}),
         }
 
     def emit(self, message: IpcMessage) -> None:
-        body = serialize_ipc_message(message).encode("utf-8")
+        body = serialize_http_ipc_message(
+            HttpIPCMessage(
+                id=str(uuid4()),
+                workflow_run_id=self._workflow_run_id,
+                job_run_id=self._job_run_id,
+                message=message,
+            )
+        ).encode("utf-8")
         last_error: Exception | None = None
 
         for attempt in range(self._max_retries + 1):
@@ -88,7 +107,7 @@ class HttpTransport:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request) as response:  # noqa: S310
+            with urllib.request.urlopen(request, timeout=self._timeout) as response:  # noqa: S310
                 if response.status // 100 == 2:  # noqa: PLR2004
                     return None
                 return RuntimeError(
@@ -96,5 +115,5 @@ class HttpTransport:
                 )
         except urllib.error.HTTPError as error:
             return error
-        except urllib.error.URLError as error:
+        except (urllib.error.URLError, TimeoutError) as error:
             return error

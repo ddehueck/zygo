@@ -9,11 +9,11 @@ use crate::api;
 //
 // Direct Python:
 //   exec = "python"
-//   args = ["-m", "zygo._internal.ipc.v0"]
+//   args = ["-m", "zygo.cli.v0"]
 //
 // Through uv:
 //   exec = "uv"
-//   args = ["run", "python", "-m", "zygo._internal.ipc.v0"]
+//   args = ["run", "python", "-m", "zygo.cli.v0"]
 //
 // Through Docker:
 //   exec = "docker"
@@ -22,12 +22,12 @@ use crate::api;
 //       "--volume", "/host/myapp:/app",
 //       "--workdir", "/app",
 //       "my-zygo-image",
-//       "python", "-m", "zygo._internal.ipc.v0",
+//       "python", "-m", "zygo.cli.v0",
 //   ]
 //
 // For example, invoking `run` through Docker produces:
 //   docker run --rm -i ... my-zygo-image \
-//       python -m zygo._internal.ipc.v0 run ...
+//       python -m zygo.cli.v0 run ...
 //
 // Keeping the executable and arguments separate avoids shell parsing and quoting
 // issues while supporting other wrappers such as Podman or Nix.

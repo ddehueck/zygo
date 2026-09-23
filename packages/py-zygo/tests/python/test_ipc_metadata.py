@@ -5,9 +5,9 @@ from typing import Annotated
 import pytest
 
 from zygo import Input, Output, Publisher, Reference, Workflow
-from zygo._internal.ipc.v0 import metadata as metadata_module
-from zygo._internal.ipc.v0.metadata import build_workflow_metadata
-from zygo._internal.ipc.v0.types import STDOUT_IPC_PREFIX
+from zygo.cli.v0 import metadata as metadata_module
+from zygo.cli.v0.metadata import build_workflow_metadata
+from zygo.cli.v0.types import STDOUT_IPC_PREFIX
 
 
 def _workflow() -> Workflow:

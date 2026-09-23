@@ -1,0 +1,135 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+
+  "title": "Zygo provider protocol v0 payload",
+  "description": "JSON payloads exchanged with the zygo.cli.v0 Python CLI. Stdout emits IpcMessage with a ZYGO_IPC= line prefix; HTTP sends HttpIPCMessage.",
+  "oneOf": [
+    { "$ref": "#/definitions/WorkflowMetadata" },
+    { "$ref": "#/definitions/JobRunArgs" },
+    { "$ref": "#/definitions/HttpConfig" },
+    { "$ref": "#/definitions/IpcMessage" },
+    { "$ref": "#/definitions/HttpIPCMessage" }
+  ],
+  "definitions": {
+    "ChannelMetadata": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "accepted_file_extensions": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["id", "accepted_file_extensions"],
+      "additionalProperties": false
+    },
+    "JobMetadata": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "content_hash": { "type": "string" },
+        "input_channel_id": { "type": "string" },
+        "output_channel_id": { "type": "string" }
+      },
+      "required": ["id", "content_hash", "input_channel_id", "output_channel_id"],
+      "additionalProperties": false
+    },
+    "WorkflowMetadata": {
+      "description": "JSON payload returned by the metadata subcommand on stdout.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "content_hash": { "type": "string" },
+        "input_channel_id": { "type": "string" },
+        "output_channel_id": { "type": "string" },
+        "jobs": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/JobMetadata" }
+        },
+        "channels": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/ChannelMetadata" }
+        }
+      },
+      "required": ["id", "content_hash", "input_channel_id", "output_channel_id", "jobs", "channels"],
+      "additionalProperties": false
+    },
+    "JobRunArgs": {
+      "description": "JSON supplied to the run subcommand via --args.",
+      "type": "object",
+      "properties": {
+        "job_id": { "type": "string" },
+        "data_reference_uri": { "type": "string" },
+        "workflow_run_id": { "type": "string" },
+        "job_run_id": { "type": "string" }
+      },
+      "required": ["job_id", "data_reference_uri", "workflow_run_id", "job_run_id"],
+      "additionalProperties": false
+    },
+    "HttpConfig": {
+      "description": "JSON supplied via --http-config to send job publications over HTTP. Optional settings use CLI defaults.",
+      "type": "object",
+      "properties": {
+        "url": { "type": "string", "pattern": "^https?://", "description": "Full POST URL." },
+        "headers": { "type": "object", "additionalProperties": { "type": "string" }, "default": {} },
+        "timeout": { "type": "number", "exclusiveMinimum": 0, "default": 30.0 },
+        "max_retries": { "type": "integer", "minimum": 0, "default": 3 },
+        "retry_interval": { "type": "number", "exclusiveMinimum": 0, "default": 5.0 }
+      },
+      "required": ["url"],
+      "additionalProperties": false
+    },
+    "HttpIPCMessage": {
+      "description": "One HTTP publication. The id is generated once per publication and reused unchanged on retries.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Stable idempotency key for this publication." },
+        "workflow_run_id": { "type": "string" },
+        "job_run_id": { "type": "string" },
+        "message": { "$ref": "#/definitions/IpcMessage" }
+      },
+      "required": ["id", "workflow_run_id", "job_run_id", "message"],
+      "additionalProperties": false
+    },
+    "IpcMessage": {
+      "description": "One job publication, emitted as a prefixed stdout line or nested inside an HTTP message.",
+      "oneOf": [
+        { "$ref": "#/definitions/DataReferenceCreated" },
+        { "$ref": "#/definitions/ChannelItemInserted" },
+        { "$ref": "#/definitions/TagInserted" }
+      ]
+    },
+    "DataReferenceCreated": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "data_reference_created" },
+        "data_reference": { "type": "string" }
+      },
+      "required": ["type", "data_reference"],
+      "additionalProperties": false
+    },
+    "ChannelItemInserted": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "channel_item_inserted" },
+        "channel_id": { "type": "string" },
+        "data_reference": { "type": "string" }
+      },
+      "required": ["type", "channel_id", "data_reference"],
+      "additionalProperties": false
+    },
+    "TagInserted": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "tag_inserted" },
+        "value": { "type": "string" },
+        "data_reference": {
+          "description": "Optional. The Python emitter serializes an absent reference as null.",
+          "type": ["string", "null"]
+        }
+      },
+      "required": ["type", "value"],
+      "additionalProperties": false
+    }
+  }
+}

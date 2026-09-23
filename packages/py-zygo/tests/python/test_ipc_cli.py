@@ -2,129 +2,237 @@
 
 from __future__ import annotations
 
+import argparse
+from contextlib import nullcontext
+from dataclasses import asdict
+import json
+from types import SimpleNamespace
+import urllib.error
+import urllib.request
+
 import pytest
 
-from zygo._internal.ipc.v0.__main__ import (
-    IpcArguments,
-    _build_transport,
-    _parse_http_headers,
-    build_parser,
+from zygo.cli.v0.__main__ import _build_transport, build_parser
+from zygo.cli.v0.arguments import parse_http_config, parse_job_args
+from zygo.cli.v0.transport import HttpTransport, StdioTransport
+from zygo.cli.v0.types import (
+    ChannelItemInserted,
+    DataReferenceCreated,
+    JobRunArgs,
+    TagInserted,
+    serialize_ipc_message,
 )
-from zygo._internal.ipc.v0.transport import HttpTransport, StdioTransport
 
 
-def test_parse_http_headers_empty() -> None:
-    assert _parse_http_headers([]) == {}
-
-
-def test_parse_http_headers_single_and_repeatable() -> None:
-    assert _parse_http_headers(["Authorization: Bearer tok"]) == {
-        "Authorization": "Bearer tok",
-    }
-    assert _parse_http_headers(
-        ["Authorization: Bearer tok", "X-Custom: a:b:c"]
-    ) == {
-        "Authorization": "Bearer tok",
-        "X-Custom": "a:b:c",
+def test_generated_protocol_models_keep_wire_format() -> None:
+    args = JobRunArgs("job", "file:///input", "workflow-run", "job-run")
+    assert asdict(args) == {
+        "job_id": "job",
+        "data_reference_uri": "file:///input",
+        "workflow_run_id": "workflow-run",
+        "job_run_id": "job-run",
     }
 
+    messages = [
+        (
+            DataReferenceCreated("data_reference_created", "file:///output"),
+            {"type": "data_reference_created", "data_reference": "file:///output"},
+        ),
+        (
+            ChannelItemInserted("channel_item_inserted", "out", "file:///output"),
+            {
+                "type": "channel_item_inserted",
+                "channel_id": "out",
+                "data_reference": "file:///output",
+            },
+        ),
+        (
+            TagInserted("tag_inserted", "ready"),
+            {"type": "tag_inserted", "value": "ready", "data_reference": None},
+        ),
+    ]
+    for message, expected in messages:
+        assert json.loads(serialize_ipc_message(message)) == expected
 
-def test_parse_http_headers_strips_whitespace() -> None:
-    assert _parse_http_headers(["  X-Foo  :  bar  "]) == {"X-Foo": "bar"}
 
-
-def test_parse_http_headers_rejects_invalid() -> None:
-    with pytest.raises(ValueError, match="expected NAME:VALUE"):
-        _parse_http_headers(["nocolon"])
-    with pytest.raises(ValueError, match="header name must not be empty"):
-        _parse_http_headers([": value"])
+_JOB_ARGS = '{"job_id":"job","data_reference_uri":"file:///input","workflow_run_id":"wr-1","job_run_id":"jr-1"}'
 
 
 def test_build_transport_defaults_to_stdio() -> None:
-    assert isinstance(_build_transport(IpcArguments()), StdioTransport)
+    assert isinstance(_build_transport(None, parse_job_args(_JOB_ARGS)), StdioTransport)
 
 
-def test_build_transport_http_requires_host() -> None:
-    args = IpcArguments()
-    args.use_http = True
-    with pytest.raises(ValueError, match="--http-host is required"):
-        _build_transport(args)
+def test_build_transport_http_defaults() -> None:
+    config = parse_http_config('{"url":"https://example.com/events"}')
+    transport = _build_transport(config, parse_job_args(_JOB_ARGS))
+    assert isinstance(transport, HttpTransport)
+    assert transport._url == "https://example.com/events"
+    assert transport._max_retries == 3
+    assert transport._retry_interval == 5.0
+    assert transport._timeout == 30.0
+    assert transport._headers == {"Content-Type": "application/json"}
 
 
 def test_build_transport_http_success() -> None:
-    args = IpcArguments()
-    args.use_http = True
-    args.http_host = "https://example.com/api/events"
-    args.http_max_retries = 2
-    args.http_retry_interval = 0.5
-    args.http_header = ["Authorization: Bearer secret"]
-
-    transport = _build_transport(args)
-
+    config = parse_http_config(
+        json.dumps({
+            "url": "https://example.com/api/events",
+            "max_retries": 2,
+            "retry_interval": 0.5,
+            "timeout": 4,
+            "headers": {" Authorization ": " Bearer secret "},
+        })
+    )
+    transport = _build_transport(config, parse_job_args(_JOB_ARGS))
     assert isinstance(transport, HttpTransport)
     assert transport._url == "https://example.com/api/events"
     assert transport._max_retries == 2
     assert transport._retry_interval == 0.5
+    assert transport._timeout == 4.0
+    assert transport._workflow_run_id == "wr-1"
+    assert transport._job_run_id == "jr-1"
     assert transport._headers["Authorization"] == "Bearer secret"
     assert transport._headers["Content-Type"] == "application/json"
 
 
-def test_build_transport_rejects_negative_retry_settings() -> None:
-    args = IpcArguments()
-    args.use_http = True
-    args.http_host = "https://example.com/e"
+@pytest.mark.parametrize(
+    ("raw", "error"),
+    [
+        ("{", "valid JSON"),
+        ("[]", "JSON object"),
+        ("{}", "url"),
+        ('{"url":"ftp://example.com"}', "url"),
+        ('{"url":"https://example.com","extra":1}', "unknown fields"),
+        ('{"url":"https://example.com","headers":[]}', "headers"),
+        ('{"url":"https://example.com","headers":{"  ":"value"}}', "headers"),
+        ('{"url":"https://example.com","headers":{"X-Test":1}}', "headers"),
+        ('{"url":"https://example.com","timeout":0}', "timeout"),
+        ('{"url":"https://example.com","timeout":null}', "timeout"),
+        ('{"url":"https://example.com","timeout":true}', "timeout"),
+        ('{"url":"https://example.com","max_retries":-1}', "max_retries"),
+        ('{"url":"https://example.com","max_retries":1.5}', "max_retries"),
+        ('{"url":"https://example.com","max_retries":true}', "max_retries"),
+        ('{"url":"https://example.com","retry_interval":-1}', "retry_interval"),
+        ('{"url":"https://example.com","retry_interval":0}', "retry_interval"),
+        ('{"url":"https://example.com","retry_interval":null}', "retry_interval"),
+        ('{"url":"https://example.com","retry_interval":true}', "retry_interval"),
+    ],
+)
+def test_parse_http_config_rejects_invalid(raw: str, error: str) -> None:
+    with pytest.raises(argparse.ArgumentTypeError, match=error):
+        parse_http_config(raw)
 
-    args.http_max_retries = -1
-    with pytest.raises(ValueError, match="--http-max-retries"):
-        _build_transport(args)
 
-    args.http_max_retries = 0
-    args.http_retry_interval = -0.1
-    with pytest.raises(ValueError, match="--http-retry-interval"):
-        _build_transport(args)
+@pytest.mark.parametrize("field", ["timeout", "retry_interval"])
+def test_parse_http_config_rejects_nonfinite(field: str) -> None:
+    for value in (float("inf"), float("nan")):
+        with pytest.raises(argparse.ArgumentTypeError, match=field):
+            parse_http_config(json.dumps({"url": "https://example.com", field: value}))
+
+
+@pytest.mark.parametrize(
+    ("raw", "error"),
+    [
+        ("{", "valid JSON"),
+        ("[]", "JSON object"),
+        ("{}", "job_id"),
+        ('{"job_id":1}', "job_id"),
+        ('{"job_id":"job","unexpected":1}', "unknown fields"),
+    ],
+)
+def test_parse_job_args_rejects_invalid(raw: str, error: str) -> None:
+    with pytest.raises(argparse.ArgumentTypeError, match=error):
+        parse_job_args(raw)
+
+
+@pytest.mark.parametrize(
+    ("option", "raw", "error"),
+    [
+        ("--args", "{", "--args must be valid JSON"),
+        ("--args", "{}", "--args.job_id"),
+        ("--http-config", "{", "--http-config must be valid JSON"),
+        ("--http-config", "{}", "--http-config.url"),
+    ],
+)
+def test_parser_reports_invalid_json_arguments(
+    option: str, raw: str, error: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    argv = ["run", "pkg.mod:workflow", "--args", _JOB_ARGS]
+    if option == "--args":
+        argv[-1] = raw
+    else:
+        argv.extend([option, raw])
+    with pytest.raises(SystemExit) as caught:
+        build_parser().parse_args(argv)
+    exit_error = caught.value
+    assert isinstance(exit_error, SystemExit)
+    assert exit_error.code == 2
+    assert error in capsys.readouterr().err
 
 
 def test_parser_run_stdio_defaults() -> None:
     args = build_parser().parse_args(
-        ["run", "pkg.mod:workflow", "--args", "{}"],
-        namespace=IpcArguments(),
+        ["run", "pkg.mod:workflow", "--args", _JOB_ARGS],
     )
     assert args.command == "run"
     assert args.target == "pkg.mod:workflow"
-    assert args.args == "{}"
-    assert args.use_http is False
-    assert args.http_host is None
-    assert args.http_max_retries == 3
-    assert args.http_retry_interval == 1.0
-    assert args.http_header == []
+    assert args.args == parse_job_args(_JOB_ARGS)
+    assert args.http_config is None
 
 
-def test_parser_run_http_flags() -> None:
+def test_parser_run_http_config() -> None:
+    raw = '{"url":"http://myservice.com/api/events","timeout":5.5}'
     args = build_parser().parse_args(
-        [
-            "run",
-            "pkg.mod:workflow",
-            "--args",
-            "{}",
-            "--use-http",
-            "--http-host",
-            "http://myservice.com/api/events",
-            "--http-max-retries",
-            "5",
-            "--http-retry-interval",
-            "2.5",
-            "--http-header",
-            "Authorization: Bearer tok",
-            "--http-header",
-            "X-Request-Id: 1",
-        ],
-        namespace=IpcArguments(),
+        ["run", "pkg.mod:workflow", "--args", _JOB_ARGS, "--http-config", raw],
     )
-    assert args.use_http is True
-    assert args.http_host == "http://myservice.com/api/events"
-    assert args.http_max_retries == 5
-    assert args.http_retry_interval == 2.5
-    assert args.http_header == [
-        "Authorization: Bearer tok",
-        "X-Request-Id: 1",
-    ]
+    assert args.http_config == parse_http_config(raw)
+
+
+@pytest.mark.parametrize(
+    "failure", [urllib.error.URLError("response lost"), TimeoutError("timed out")]
+)
+def test_http_transport_retries_same_envelope_and_uses_timeout(
+    monkeypatch, failure: Exception
+) -> None:
+    bodies: list[bytes] = []
+    timeouts: list[float] = []
+
+    def fake_urlopen(request: urllib.request.Request, *, timeout: float):
+        assert request.data is not None
+        bodies.append(request.data)
+        timeouts.append(timeout)
+        assert request.get_method() == "POST"
+        assert request.get_header("Content-type") == "application/json"
+        if len(bodies) == 1:
+            raise failure
+        return nullcontext(SimpleNamespace(status=200))
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr("zygo.cli.v0.transport.time.sleep", lambda _: None)
+    transport = HttpTransport(
+        url="https://example.com/events",
+        max_retries=1,
+        retry_interval=1.0,
+        timeout=2.5,
+        workflow_run_id="wr-1",
+        job_run_id="jr-1",
+    )
+    transport.emit(ChannelItemInserted("channel_item_inserted", "out", "file:///one"))
+    assert len(bodies) == 2
+    assert bodies[0] == bodies[1]
+    assert timeouts == [2.5, 2.5]
+    first = json.loads(bodies[0])
+    assert first == {
+        "id": first["id"],
+        "workflow_run_id": "wr-1",
+        "job_run_id": "jr-1",
+        "message": {
+            "type": "channel_item_inserted",
+            "channel_id": "out",
+            "data_reference": "file:///one",
+        },
+    }
+    assert isinstance(first["id"], str) and first["id"]
+
+    transport.emit(ChannelItemInserted("channel_item_inserted", "out", "file:///one"))
+    assert json.loads(bodies[2])["id"] != first["id"]

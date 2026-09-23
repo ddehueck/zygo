@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, BinaryIO, Literal, TextIO, cast, overload, ove
 import fsspec  # type: ignore
 
 from zygo._internal.fsspec import FsspecUri
-from zygo._internal.ipc.v0.types import DataReferenceCreated
+from zygo.cli.v0.types import DataReferenceCreated
 from zygo.store import Reference, StoreProtocol
 from zygo.store.protocol import TmpFileProtocol
 
@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 
     from fsspec.spec import AbstractFileSystem  # type: ignore
 
-    from zygo._internal.ipc.v0.transport import IpcTransport
+    from zygo.cli.v0.transport import IpcTransport
     from zygo.store._internal.types import PartitionKey
     from zygo.store.protocol import StoreContextManager
     from zygo.store.types import Scope, StoreOptions
@@ -148,9 +148,7 @@ class StoreImpl(StoreProtocol):
 
         # Send an IPC message to the parent process to notify it of the new data reference.
         self.ipc_transport.emit(
-            DataReferenceCreated(
-                data_reference=str(uri)
-            )
+            DataReferenceCreated(type="data_reference_created", data_reference=str(uri))
         )
 
         return Reference(
@@ -296,9 +294,7 @@ def ingest(
 
     # Send an IPC message to the parent process to notify it of the new data reference.
     ipc_transport.emit(
-        DataReferenceCreated(
-            data_reference=str(uri)
-        )
+        DataReferenceCreated(type="data_reference_created", data_reference=str(uri))
     )
 
     return Reference(

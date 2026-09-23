@@ -3,10 +3,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, cast
 
 from zygo._internal.fsspec import FsspecUri
-from zygo._internal.ipc.importer import load_workflow
-from zygo._internal.ipc.v0.types import ChannelItemInserted
 from zygo._internal.meta.injection import build_injected_job_fn
 from zygo._internal.meta.job_context import JobContextImpl
+from zygo.cli.importer import load_workflow
+from zygo.cli.v0.types import ChannelItemInserted
 from zygo.store import Reference, StoreOptions
 from zygo.store._internal.impl import StoreImpl
 from zygo.types import JobId, JobRunContext, JobRunId, WorkflowRunId
@@ -14,8 +14,8 @@ from zygo.types import JobId, JobRunContext, JobRunId, WorkflowRunId
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from zygo._internal.ipc.v0.transport import IpcTransport
-    from zygo._internal.ipc.v0.types import JobRunArgs
+    from zygo.cli.v0.transport import IpcTransport
+    from zygo.cli.v0.types import JobRunArgs
 
 
 def run(
@@ -95,6 +95,7 @@ def run(
         for reference in data_references:
             ipc_transport.emit(
                 ChannelItemInserted(
+                    type="channel_item_inserted",
                     channel_id=job_entry.output_channel.id,
                     data_reference=str(reference.uri),
                 )
