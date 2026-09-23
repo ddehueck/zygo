@@ -7,7 +7,7 @@ license.workspace = true
 
 [dependencies]
 local = { path = "../local" }
-zygo-core = { path = "../core" }
+
 anyhow = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

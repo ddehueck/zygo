@@ -1,6 +1,6 @@
 # Local Zygo Architecture
 
-The local zygo crate exists to build local-first applications that run on a user's machine. We currently support two: The Desktop App and CLI.
+The local zygo crate exists to support local-first applications that execute zygo workflows.
 
 ## Multiprocess DB access
 

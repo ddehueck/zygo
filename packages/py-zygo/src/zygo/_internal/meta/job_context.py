@@ -1,23 +1,27 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, override
 
-from typing import override
-
-from zygo._internal.ipc.v0.types import TagInserted, write_stdout_ipc_message
+from zygo.cli.v0.types import TagInserted
 from zygo.context import JobContext, TagsProtocol
-from zygo.store._internal.impl import StoreImpl
+
+if TYPE_CHECKING:
+    from zygo.store._internal.impl import StoreImpl
+    from zygo.cli.v0.transport import IpcTransport
 
 
 class JobContextImpl(JobContext):
-    def __init__(self, *, store: StoreImpl) -> None:
+    def __init__(self, *, store: StoreImpl, ipc_transport: IpcTransport) -> None:
         super().__init__()
         self.store = store
-        self.tags = TagsImpl()
+        self.tags = TagsImpl(ipc_transport=ipc_transport)
 
 
 class TagsImpl(TagsProtocol):
+    def __init__(self, *, ipc_transport: IpcTransport) -> None:
+        self.ipc_transport = ipc_transport
+
     @override
     def add(self, value: str) -> None:
         cleaned_value = value.strip()
-
-        write_stdout_ipc_message(TagInserted(value=cleaned_value))
+        self.ipc_transport.emit(TagInserted(type="tag_inserted", value=cleaned_value))

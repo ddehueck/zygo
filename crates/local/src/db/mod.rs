@@ -12,7 +12,6 @@ pub use db_models::{
 pub use error::{Error as DbError, Result as DbResult};
 
 pub use repos::{
-    CdcRepository, Cursor, CursorPaginator, DataReferenceRepository, EventStreamRepository,
-    JobRunRepository, LogRow, LogsRepository, Page, Repos, TagsRepository, WorkflowRepository,
-    WorkflowRunRepository,
+    CdcRepository, Cursor, CursorPaginator, DataReferenceRepository, JobRunRepository, LogRow,
+    LogsRepository, Page, Repos, TagsRepository, WorkflowRepository, WorkflowRunRepository,
 };

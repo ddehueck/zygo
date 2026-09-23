@@ -12,6 +12,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "basedpyright>=1.34.0",
+    "datamodel-code-generator>=0.82.0,<0.83.0",
     "pytest>=9.0.2",
     "python-dotenv>=1.2.1",
     "ruff>=0.14.4",
@@ -88,6 +89,7 @@ max-nested-blocks = 3  # Maximum nested block depth (PLR1702)
 
 # Per-file ignores
 [tool.ruff.lint.per-file-ignores]
+"src/zygo/cli/v0/generated.py" = ["ERA001"]
 "__init__.py" = [
     "F401",    # Allow unused imports in __init__.py
 ]

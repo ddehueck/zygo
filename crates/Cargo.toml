@@ -1,8 +1,6 @@
 [workspace]
 members = [
-    "core",
     "cli",
-    "testing",
     "local",
 ]
 resolver = "2"

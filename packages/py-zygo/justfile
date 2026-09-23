@@ -22,6 +22,16 @@ init:
     source .venv/bin/activate
     uv pip install -e .
 
+# ---- Protocol generation ----------------------------------------------------
+
+[group('build')]
+generate-protocol:
+    uv run datamodel-codegen --input ../../protocol/v0/schema.json --input-file-type jsonschema --output-model-type dataclasses.dataclass --target-python-version 3.12 --disable-timestamp --no-allow-remote-refs --formatters builtin --use-double-quotes --output src/zygo/cli/v0/generated.py
+
+[group('ci')]
+check-protocol:
+    uv run datamodel-codegen --input ../../protocol/v0/schema.json --input-file-type jsonschema --output-model-type dataclasses.dataclass --target-python-version 3.12 --disable-timestamp --no-allow-remote-refs --formatters builtin --use-double-quotes --output src/zygo/cli/v0/generated.py --check
+
 # ---- Formatting & Linting ---------------------------------------------------
 
 # Format code and sort imports with ruff
@@ -61,6 +71,8 @@ fix: fmt lint-fix
 check:
     #!/usr/bin/env bash
     exit_code=0
+    echo "Checking generated protocol models..."
+    just check-protocol || exit_code=1
     echo "Running fmt-check..."
     just fmt-check || exit_code=1
     echo "Running lint..."

@@ -1,18 +1,20 @@
 use std::io;
 use std::path::PathBuf;
+use std::time::SystemTime;
 
-use crate::{EventStreamRepository, LocalEventStream, LocalRuntime, RunOptions, ZygoLocalConfig};
+use crate::models::{
+    ChannelItemInsertedData, DataReferenceUri, Entrypoint, Event, EventId, EventKind, JobId,
+    Source, WorkflowRunId, WorkflowSchema,
+};
+use crate::{ActorStateRx, RunContext, RunHandle};
+use crate::{LocalRuntime, RunOptions, ZygoLocalConfig};
 use anyhow::{Result, anyhow};
-use zygo_core::ActorStateRx;
-use zygo_core::models::{DataReferenceUri, Entrypoint, JobId, WorkflowRunId, WorkflowSchema};
-use zygo_core::{Dependencies, ZygoRun};
 
 use crate::db::{
     CdcRepository, DataReferenceRepository, Db, JobRunRepository, LogsRepository, Repos,
     TagsRepository, WorkflowRepository, WorkflowRunModel, WorkflowRunRepository,
 };
 use crate::paths;
-use crate::stream_processor::LocalStreamProcessor;
 
 #[derive(Clone)]
 pub struct ZygoLocalService {
@@ -33,7 +35,7 @@ impl ZygoLocalService {
         let database = Db::open(&path, config.database_busy_timeout, true).await?;
         let no_cdc_database = Db::open(&path, config.database_busy_timeout, false).await?;
 
-        // Everything that changes the core models should use a connection where CDC events are generated.
+        // Application read-model writes generate CDC changes for desktop sync.
         let tags = TagsRepository::new(database.clone());
         let data_references = DataReferenceRepository::new(database.clone());
         let workflow_runs = WorkflowRunRepository::new(database.clone());
@@ -43,13 +45,11 @@ impl ZygoLocalService {
         // These repos should not result in any CDC events being generated,
         // so we open a separate database connection for them.
         let logs = LogsRepository::new(no_cdc_database.clone());
-        let events = EventStreamRepository::new(no_cdc_database.clone());
         let cdc = CdcRepository::new(no_cdc_database);
 
         Ok(Self {
             repos: Repos {
                 cdc,
-                events,
                 tags,
                 data_references,
                 workflow_runs,
@@ -152,10 +152,8 @@ pub struct ZygoLocalRun {
     pub id: WorkflowRunId,
     pub db_id: i64,
     pub workflow_id: i64,
-    run: ZygoRun,
-    stream: LocalEventStream,
-    runtime: LocalRuntime<LocalEventStream>,
-    repos: Repos,
+    actor: RunHandle,
+    runtime: LocalRuntime,
 }
 
 impl ZygoLocalRun {
@@ -194,47 +192,57 @@ impl ZygoLocalRun {
             )
             .await?;
 
-        let stream = LocalEventStream::new(repos.events.clone(), workflow_run_id.clone());
+        let (events_tx, events_rx) = tokio::sync::mpsc::unbounded_channel();
         let Entrypoint::Python(python_cli) = schema.entrypoint.clone();
 
         let runtime = LocalRuntime::new(
             python_cli,
             workflow_run_id.clone(),
-            stream.clone(),
+            events_tx.clone(),
             repos.logs.clone(),
             options.num_workers,
         );
 
-        let run = ZygoRun::start(
-            &workflow_run_id,
-            inputs,
+        for input in inputs {
+            events_tx
+                .send(Event {
+                    id: EventId::new(),
+                    is_replay: false,
+                    timestamp: SystemTime::now(),
+                    kind: EventKind::ChannelItemInserted(ChannelItemInsertedData {
+                        channel_id: schema.input_channel_id.clone(),
+                        item: input,
+                    }),
+                    source: Source::Input,
+                    run_id: workflow_run_id.clone(),
+                })
+                .map_err(|_| anyhow!("workflow actor stopped before accepting inputs"))?;
+        }
+
+        let actor = RunHandle::spawn(RunContext {
+            events: events_rx,
+            runtime: runtime.clone(),
+            repos,
+            run_id: workflow_run_id.clone(),
             schema,
-            Dependencies::new(stream.clone(), runtime.clone()),
-        )
-        .await?;
+        });
 
         Ok(Self {
             id: workflow_run_id,
             db_id: db_run.id,
             workflow_id,
-            run,
-            stream,
+            actor,
             runtime,
-            repos,
         })
     }
 
     pub async fn cancel(&self) -> Result<()> {
         // todo: add db cleanup side effects
-        self.run.cancel().await?;
+        self.actor.cancel().await;
         self.runtime.cancel().await
     }
 
-    pub fn stream_processor(&self) -> LocalStreamProcessor {
-        LocalStreamProcessor::new(self.repos.clone(), self.id.clone(), self.stream.clone())
-    }
-
     pub fn subscribe(&self) -> Result<ActorStateRx> {
-        self.run.subscribe()
+        Ok(self.actor.state_rx.clone())
     }
 }

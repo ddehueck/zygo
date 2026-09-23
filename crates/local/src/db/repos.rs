@@ -1,6 +1,6 @@
 mod cdc;
 mod data_references;
-mod event_stream;
+
 mod job_runs;
 
 mod logs;
@@ -14,7 +14,6 @@ mod workflows;
 pub use self::{
     cdc::CdcRepository,
     data_references::DataReferenceRepository,
-    event_stream::EventStreamRepository,
     job_runs::JobRunRepository,
     logs::{LogRow, LogsRepository},
     tags::TagsRepository,
@@ -28,7 +27,6 @@ pub use self::{
 #[derive(Clone)]
 pub struct Repos {
     pub cdc: CdcRepository,
-    pub events: EventStreamRepository,
 
     pub tags: TagsRepository,
     pub data_references: DataReferenceRepository,

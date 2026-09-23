@@ -9,7 +9,7 @@ use crate::db::{JobRunModel, WorkflowRunJobCounts};
 
 const SELECT_COLUMNS: &str = "
     id, public_id, workflow_run_id, input_id, job_id,
-    status, duration_ms, retry_count, created_at
+    status, duration_ms, error_message, retry_count, created_at
 ";
 
 #[derive(Clone)]
@@ -71,6 +71,7 @@ impl JobRunRepository {
                job_id = excluded.job_id,
                status = excluded.status,
                duration_ms = excluded.duration_ms,
+               error_message = NULL,
                retry_count = excluded.retry_count",
             params![
                 run.public_id.as_str(),
@@ -105,7 +106,8 @@ impl JobRunRepository {
                input_id = excluded.input_id,
                job_id = excluded.job_id,
                status = excluded.status,
-               duration_ms = NULL",
+               duration_ms = NULL,
+               error_message = NULL",
             params![job_run_id, workflow_run_id, job_id, input_id],
         )
         .await?;
@@ -120,12 +122,13 @@ impl JobRunRepository {
         job_id: &str,
         status: &str,
         duration_ms: Option<i64>,
+        error_message: Option<&str>,
     ) -> Result<()> {
         let mut connection = self.database.connection.lock().await;
         let tx = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .await?;
-        tx.execute("UPDATE job_runs SET job_id = ?3, duration_ms = COALESCE(?5, job_runs.duration_ms), status = ?4 WHERE public_id = ?1 AND workflow_run_id = (SELECT id FROM workflow_runs WHERE public_id = ?2)", params![job_run_id, workflow_run_id, job_id, status, duration_ms]).await?;
+        tx.execute("UPDATE job_runs SET job_id = ?3, duration_ms = COALESCE(?5, job_runs.duration_ms), status = ?4, error_message = ?6 WHERE public_id = ?1 AND workflow_run_id = (SELECT id FROM workflow_runs WHERE public_id = ?2)", params![job_run_id, workflow_run_id, job_id, status, duration_ms, error_message]).await?;
         tx.commit().await?;
         Ok(())
     }

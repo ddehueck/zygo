@@ -197,6 +197,7 @@ pub struct JobRunModel {
     pub job_id: String,
     pub status: String,
     pub duration_ms: Option<i64>,
+    pub error_message: Option<String>,
     pub retry_count: i64,
     pub created_at: String,
 }
@@ -221,6 +222,7 @@ struct JobRunSqlRow {
     job_id: String,
     status: String,
     duration_ms: Option<i64>,
+    error_message: Option<String>,
     retry_count: i64,
     created_at: String,
 }
@@ -235,6 +237,7 @@ impl JobRunSqlRow {
             job_id: row.get(rows.column_index("job_id")?)?,
             status: row.get(rows.column_index("status")?)?,
             duration_ms: row.get(rows.column_index("duration_ms")?)?,
+            error_message: row.get(rows.column_index("error_message")?)?,
             retry_count: row.get(rows.column_index("retry_count")?)?,
             created_at: row.get(rows.column_index("created_at")?)?,
         })
@@ -251,6 +254,7 @@ impl From<JobRunSqlRow> for JobRunModel {
             job_id: row.job_id,
             status: row.status,
             duration_ms: row.duration_ms,
+            error_message: row.error_message,
             retry_count: row.retry_count,
             created_at: row.created_at,
         }

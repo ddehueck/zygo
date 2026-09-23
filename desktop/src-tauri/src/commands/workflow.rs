@@ -1,16 +1,13 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use local::models::{DataReferenceUri, FileExtension, JobId, WorkflowSchema};
 use local::{RunOptions, ZygoLocalRun, ZygoLocalService};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use tauri::State;
-use zygo_core::models::{DataReferenceUri, FileExtension, JobId, WorkflowSchema};
-use zygo_core::RunCursor;
 
 use crate::error::{CommandError, CommandResult};
-
-const STREAM_RECORD_BATCH_SIZE: usize = 64;
 
 fn default_num_workers() -> usize {
     1
@@ -95,7 +92,7 @@ pub async fn start_workflow_run(
     // of active workflow runs and be able to issue commands to them
     tauri::async_runtime::spawn(async move {
         if let Err(error) = process_run_until_complete(run).await {
-            eprintln!("workflow run stream processor failed: {error}");
+            eprintln!("workflow run monitor failed: {error}");
         }
     });
 
@@ -123,38 +120,15 @@ fn resolve_run_schema(
 
 async fn process_run_until_complete(run: ZygoLocalRun) -> anyhow::Result<()> {
     let mut snapshot_rx = run.subscribe()?;
-    let mut stream_processor = run.stream_processor();
-    let mut cursor = RunCursor::default();
-    let mut pending_records = false;
-    snapshot_rx.mark_changed();
 
     loop {
-        let snapshot = if pending_records {
-            snapshot_rx.borrow().clone()
-        } else {
-            if snapshot_rx.changed().await.is_err() {
-                anyhow::bail!("workflow actor stopped before reaching a terminal state");
-            }
-            snapshot_rx.borrow_and_update().clone()
-        };
-
-        let mut reached_end = false;
-        for _ in 0..STREAM_RECORD_BATCH_SIZE {
-            let read = stream_processor.process_next(cursor.clone()).await?;
-            cursor = read.next_cursor;
-
-            if read.record.is_none() {
-                reached_end = true;
-                break;
-            }
-        }
-        pending_records = !reached_end;
-
-        if reached_end && snapshot.status.is_terminal() {
+        if snapshot_rx.borrow_and_update().status.is_terminal() {
             return Ok(());
         }
 
-        tokio::task::yield_now().await;
+        if snapshot_rx.changed().await.is_err() {
+            anyhow::bail!("workflow actor stopped before reaching a terminal state");
+        }
     }
 }
 
@@ -206,7 +180,10 @@ fn input_data_references(
 
     files
         .into_iter()
-        .map(|file| DataReferenceUri::try_from(format!("file://{}", file.display())))
+        .map(|file| {
+            DataReferenceUri::try_from(format!("file://{}", file.display()))
+                .map_err(anyhow::Error::from)
+        })
         .collect()
 }
 

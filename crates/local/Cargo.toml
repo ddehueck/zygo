@@ -18,9 +18,18 @@ process-wrap = { version = "10", default-features = false, features = [
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["time"] }
+tokio = { workspace = true, features = ["time", "fs", "process", "io-util"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+async-trait = "0.1"
+uuid = { workspace = true }
+dotenvy = "0.15.7"
+os_pipe = "1.2.3"
+reqwest = { version = "0.12", features = ["json"] }
+num_cpus = "1.0"
+hex = "0.4"
+blake3 = "1.8.2"
+nutype = { version = "0.8.0", features = ["serde"] }
 turso = "=0.7.2"
-zygo-core = { path = "../core" }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

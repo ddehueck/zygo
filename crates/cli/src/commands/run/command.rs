@@ -13,6 +13,8 @@ use crossterm::execute;
 use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
+use local::api::v0::PythonCli;
+use local::models::{DataReferenceUri, FileExtension, JobRunId, WorkflowRunStatus};
 use local::{
     DEFAULT_DATABASE_BUSY_TIMEOUT, DbResult, LogRow, LogWatcher, LogsRepository, RunOptions,
     ZygoLocalConfig, ZygoLocalService,
@@ -20,18 +22,12 @@ use local::{
 use ratatui::backend::CrosstermBackend;
 use ratatui::widgets::TableState;
 use ratatui::{Terminal, TerminalOptions, Viewport};
-use zygo_core::api::v0::PythonCli;
-use zygo_core::models::{
-    DataReferenceUri, Event, EventKind, FileExtension, JobRunId, WorkflowRunStatus,
-};
-use zygo_core::{EngineState, RunCursor};
 
 use crate::tui::{JobLogView, WorkflowRunView, job_run_at_position};
 
 use super::{JobRunSummary, WorkflowRunSummary};
 
 const INPUT_POLL_INTERVAL: Duration = Duration::from_millis(50);
-const STREAM_RECORD_BATCH_SIZE: usize = 64;
 
 struct TerminalInput {
     alternate_screen: bool,
@@ -137,20 +133,8 @@ impl LogViewState {
     }
 }
 
-struct StreamUpdate {
-    snapshot: EngineState,
-    events: Vec<Event>,
-}
-
-enum StreamMessage {
-    Update(StreamUpdate),
-    Error(anyhow::Error),
-}
-
 enum LoopEvent {
-    StreamUpdate(StreamUpdate),
-    StreamError(anyhow::Error),
-    Redraw,
+    Refresh,
     Input(Option<TerminalEvent>),
     LogBatch(DbResult<Vec<LogRow>>),
 }
@@ -232,74 +216,7 @@ pub async fn run_workflow(
         },
     )?;
 
-    // Keep stream projection and database work off the UI task. Updates are
-    // delivered in bounded batches so a large backlog cannot starve input or
-    // redraws.
-    let mut snapshot_rx = run.subscribe()?;
-    let mut stream_processor = run.stream_processor();
-
-    let (stream_updates_tx, mut stream_updates_rx) = tokio::sync::mpsc::channel(1);
-    let stream_task = tokio::spawn(async move {
-        let mut cursor = RunCursor::default();
-        let mut pending_records = false;
-        snapshot_rx.mark_changed();
-
-        loop {
-            let snapshot = if pending_records {
-                snapshot_rx.borrow().clone()
-            } else {
-                if snapshot_rx.changed().await.is_err() {
-                    let _ = stream_updates_tx
-                        .send(StreamMessage::Error(anyhow::anyhow!(
-                            "workflow actor stopped before reaching a terminal state"
-                        )))
-                        .await;
-                    return;
-                }
-                snapshot_rx.borrow_and_update().clone()
-            };
-
-            let mut events = Vec::with_capacity(STREAM_RECORD_BATCH_SIZE);
-            let mut reached_end = false;
-            for _ in 0..STREAM_RECORD_BATCH_SIZE {
-                let read = match stream_processor.process_next(cursor.clone()).await {
-                    Ok(read) => read,
-                    Err(error) => {
-                        let _ = stream_updates_tx.send(StreamMessage::Error(error)).await;
-                        return;
-                    }
-                };
-                cursor = read.next_cursor;
-
-                let Some(record) = read.record else {
-                    reached_end = true;
-                    break;
-                };
-
-                events.push(record);
-            }
-            pending_records = !reached_end;
-            let is_complete = reached_end && snapshot.status.is_terminal();
-
-            if stream_updates_tx
-                .send(StreamMessage::Update(StreamUpdate { snapshot, events }))
-                .await
-                .is_err()
-            {
-                return;
-            }
-
-            if is_complete {
-                // Keep the sender alive while the terminal summary remains open. Otherwise the UI
-                // would interpret normal stream closure as an actor failure before q/Ctrl-C.
-                stream_updates_tx.closed().await;
-                return;
-            }
-
-            tokio::task::yield_now().await;
-        }
-    });
-
+    let snapshot_rx = run.subscribe()?;
     let mut summary = WorkflowRunSummary::new(metadata.id.clone());
     let mut summary_refresh = tokio::time::interval(Duration::from_secs(1));
     let mut input_poll = tokio::time::interval(INPUT_POLL_INTERVAL);
@@ -313,16 +230,7 @@ pub async fn run_workflow(
 
     loop {
         let loop_event = tokio::select! {
-            message = stream_updates_rx.recv() => {
-                match message {
-                    Some(StreamMessage::Update(update)) => LoopEvent::StreamUpdate(update),
-                    Some(StreamMessage::Error(error)) => LoopEvent::StreamError(error),
-                    None => LoopEvent::StreamError(anyhow::anyhow!(
-                        "workflow stream processor stopped unexpectedly"
-                    )),
-                }
-            }
-            _ = summary_refresh.tick() => LoopEvent::Redraw,
+            _ = summary_refresh.tick() => LoopEvent::Refresh,
             _ = input_poll.tick() => {
                 let input = if event::poll(Duration::ZERO)? {
                     Some(event::read()?)
@@ -345,27 +253,60 @@ pub async fn run_workflow(
         let mut should_redraw = true;
 
         match loop_event {
-            LoopEvent::StreamUpdate(update) => {
-                let failure = update.events.iter().find_map(|event| match &event.kind {
-                    EventKind::JobFailed(data) => Some(format!(
-                        "job {} ({}): {}",
-                        data.job_id, data.job_run_id, data.error
-                    )),
-                    _ => None,
-                });
-
-                for event in update.events {
-                    summary.update_by_event(event);
-                }
-
-                summary.update_by_snapshot(&update.snapshot);
-                has_snapshot = true;
-
-                if update.snapshot.status == WorkflowRunStatus::Failed {
-                    stream_task.abort();
+            LoopEvent::Refresh => {
+                if snapshot_rx.has_changed().is_err() && !snapshot_rx.borrow().status.is_terminal()
+                {
+                    let _ = run.cancel().await;
                     return Err(anyhow::anyhow!(
-                        "workflow `{target}` failed: {}",
-                        failure.unwrap_or_else(|| "no failure details available".to_owned())
+                        "workflow actor stopped before reaching a terminal state"
+                    ));
+                }
+                let refreshed = async {
+                    let workflow_run = service
+                        .repos
+                        .workflow_runs
+                        .get_by_workflow_run_id(run.id.as_ref())
+                        .await?
+                        .ok_or_else(|| anyhow::anyhow!("workflow run {} not found", run.id))?;
+                    let job_runs = service
+                        .repos
+                        .job_runs
+                        .list_by_workflow_run_id(run.id.as_ref())
+                        .await?;
+                    anyhow::Ok(WorkflowRunSummary::from_models(
+                        metadata.id.clone(),
+                        workflow_run,
+                        job_runs,
+                    ))
+                }
+                .await;
+                summary = match refreshed {
+                    Ok(summary) => summary,
+                    Err(error) => {
+                        let _ = run.cancel().await;
+                        return Err(error);
+                    }
+                };
+                has_snapshot = true;
+                if summary.workflow_status == WorkflowRunStatus::Failed.to_string() {
+                    let failure_detail = summary
+                        .job_runs
+                        .iter()
+                        .find(|job_run| job_run.status == "failed")
+                        .map(|job_run| {
+                            format!(
+                                "job {} ({}): {}",
+                                job_run.job_id,
+                                job_run.public_id,
+                                job_run
+                                    .error_message
+                                    .as_deref()
+                                    .unwrap_or("no failure details available")
+                            )
+                        })
+                        .unwrap_or_else(|| "no failure details available".to_owned());
+                    return Err(anyhow::anyhow!(
+                        "workflow `{target}` failed: {failure_detail}"
                     ));
                 }
 
@@ -420,17 +361,11 @@ pub async fn run_workflow(
                     log.apply_batch(batch);
                 }
             }
-            LoopEvent::StreamError(error) => {
-                stream_task.abort();
-                run.cancel().await?;
-                return Err(error);
-            }
-            LoopEvent::Redraw | LoopEvent::Input(Some(_)) => {}
+            LoopEvent::Input(Some(_)) => {}
             LoopEvent::Input(None) => should_redraw = false,
         }
 
         if should_cancel {
-            stream_task.abort();
             run.cancel().await?;
             break;
         }
@@ -482,7 +417,6 @@ pub async fn run_workflow(
         }
     }
 
-    stream_task.abort();
     drop(terminal);
 
     Ok(())
