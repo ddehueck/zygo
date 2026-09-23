@@ -48,7 +48,7 @@ class StdioTransport:
 
 
 class HttpTransport:
-    """POST each IPC message as JSON to a configured endpoint with linear retries."""
+    """POST each IPC message as JSON to a configured endpoint with fixed retry delays."""
 
     def __init__(  # noqa: PLR0913
         self,
@@ -92,8 +92,7 @@ class HttpTransport:
             if last_error is None:
                 return
             if attempt < self._max_retries:
-                # Linear backoff: interval, 2*interval, 3*interval, ...
-                time.sleep(self._retry_interval * (attempt + 1))
+                time.sleep(self._retry_interval)
 
         raise RuntimeError(
             f"HTTP IPC emit failed after {self._max_retries + 1} attempt(s)"

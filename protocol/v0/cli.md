@@ -69,13 +69,22 @@ NB: Setting `PYTHONUNBUFFERED=1` can help ordinary workflow output appear prompt
 
 #### HTTP messages
 
-With `--http-config JSON`, the CLI sends **each** publication as a separate UTF-8 JSON `POST` to the configured `url`, with `Content-Type: application/json`. The body is `HttpIPCMessage` in [`schema.json`](schema.json), wrapping the stdout `IpcMessage` without its prefix:
+With `--http-config JSON`, the CLI sends **each** publication as a separate UTF-8 JSON `POST` to the configured `url`, with `Content-Type: application/json`. 
+
+The body is `HttpIPCMessage` in [`schema.json`](schema.json), wrapping the stdout `IpcMessage` without its prefix:
 
 ```json
-{"id":"<unique-message-id>","workflow_run_id":"wr-1","job_run_id":"jr-1","message":{"type":"channel_item_inserted","channel_id":"output","data_reference":"file:///result.txt"}}
+{
+  "id": "unique-message-id",
+  "workflow_run_id": "wr-1",
+  "job_run_id": "jr-1",
+  "message": {
+    "type": "channel_item_inserted",
+    "channel_id": "output",
+    "data_reference": "file:///result.txt"
+  }
+}
 ```
-
-The run IDs come from `--args` and correlate the publication with its workflow and job run. The CLI generates a unique `id` for each publication and sends the **same ID and body** on every retry of that publication. Receivers can deduplicate by `id` (and should retain that key for as long as duplicate delivery is possible); identical message contents from distinct publications have distinct IDs. The orchestrator supplies the receiver URL; this version does not prescribe an endpoint path or response body.
 
 `--http-config` takes one JSON object matching `HttpConfig` in [`schema.json`](schema.json), as **one command-line argument**. Omit it for stdout delivery:
 
@@ -88,18 +97,13 @@ python -m zygo.cli.v0 run myproject.main:workflow \
 | Field | Meaning |
 | --- | --- |
 | `url` | Required full POST URL, beginning with `http://` or `https://`. |
-| `headers` | Optional object mapping nonempty header names to string values; default `{}`. Names and values are trimmed. |
-| `timeout` | Positive, finite number of seconds to wait for each HTTP response; default `30.0`. Each retry gets its own timeout. |
-| `max_retries` | Nonnegative integer count of retries **after** the first failed attempt; default `3`. |
-| `retry_interval` | Positive, finite base delay in seconds; default `5.0`. Retry delays are `retry_interval`, `2 × retry_interval`, `3 × retry_interval`, and so on. |
+| `headers` | Optional object mapping nonempty header names to string values. Defaults to `{}`. Names and values are trimmed. |
+| `timeout` | Positive, finite number of seconds to wait for each HTTP response. Defaults to `30.0`. Each retry gets its own timeout. |
+| `max_retries` | Nonnegative integer count of retries **after** the first failed attempt. Defaults to `3`. |
+| `retry_interval` | Positive, finite base delay in seconds. Defaults to `5.0`. Retries are fixed i.e. `retry_interval` seconds between attempts. |
 
-Unknown fields and invalid values are rejected before the job starts. Like any command-line argument, `headers` may be visible in process listings; do not assume putting secrets in JSON hides them.
+Unknown fields and invalid values are rejected before the job starts. Like any command-line argument, `headers` may be visible in process listings. Do not assume putting secrets in JSON hides them.
 
 Any 2xx response is treated as success. An HTTP error or network failure is retried until attempts are exhausted, after which the job will be failed. 
 
-**Idempotency**: A request may have been received even if the client observes a failure (including a timeout). Receivers should use `HttpIPCMessage.id` to handle repeat deliveries without applying the same publication twice; delivery is not exactly-once. 
-
-
-## Versioning boundary
-
-The module path `zygo.cli.v0` selects this CLI version. `schema.json` defines payloads, not engine-internal event records or an HTTP service implementation. Changes to command syntax, framing or payload compatibility require a separately versioned interface.
+**Idempotency**: A request may have been received even if the client observes a failure (including a timeout). Receivers should use `HttpIPCMessage.id` to handle repeat deliveries without applying the same publication twice. Delivery is not exactly-once.

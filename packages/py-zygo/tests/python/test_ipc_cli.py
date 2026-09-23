@@ -196,6 +196,7 @@ def test_http_transport_retries_same_envelope_and_uses_timeout(
 ) -> None:
     bodies: list[bytes] = []
     timeouts: list[float] = []
+    sleeps: list[float] = []
 
     def fake_urlopen(request: urllib.request.Request, *, timeout: float):
         assert request.data is not None
@@ -203,24 +204,25 @@ def test_http_transport_retries_same_envelope_and_uses_timeout(
         timeouts.append(timeout)
         assert request.get_method() == "POST"
         assert request.get_header("Content-type") == "application/json"
-        if len(bodies) == 1:
+        if len(bodies) <= 2:
             raise failure
         return nullcontext(SimpleNamespace(status=200))
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-    monkeypatch.setattr("zygo.cli.v0.transport.time.sleep", lambda _: None)
+    monkeypatch.setattr("zygo.cli.v0.transport.time.sleep", sleeps.append)
     transport = HttpTransport(
         url="https://example.com/events",
-        max_retries=1,
+        max_retries=2,
         retry_interval=1.0,
         timeout=2.5,
         workflow_run_id="wr-1",
         job_run_id="jr-1",
     )
     transport.emit(ChannelItemInserted("channel_item_inserted", "out", "file:///one"))
-    assert len(bodies) == 2
-    assert bodies[0] == bodies[1]
-    assert timeouts == [2.5, 2.5]
+    assert len(bodies) == 3
+    assert bodies[0] == bodies[1] == bodies[2]
+    assert timeouts == [2.5, 2.5, 2.5]
+    assert sleeps == [1.0, 1.0]
     first = json.loads(bodies[0])
     assert first == {
         "id": first["id"],
@@ -235,4 +237,4 @@ def test_http_transport_retries_same_envelope_and_uses_timeout(
     assert isinstance(first["id"], str) and first["id"]
 
     transport.emit(ChannelItemInserted("channel_item_inserted", "out", "file:///one"))
-    assert json.loads(bodies[2])["id"] != first["id"]
+    assert json.loads(bodies[3])["id"] != first["id"]
