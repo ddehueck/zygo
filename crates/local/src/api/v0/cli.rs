@@ -3,7 +3,8 @@ use tokio::process::Command;
 
 use crate::api::error::{self, Result};
 use crate::api::v0::interface::{
-    RunCommandArgs, STDOUT_IPC_PREFIX, StdoutIPCMessage, WorkflowMetadata, ZYGO_PKG_CLI_MODULE,
+    RunCommandArgs, STDOUT_IPC_PREFIX, StdoutIPCMessage, StoreConfig, WorkflowMetadata,
+    ZYGO_PKG_CLI_MODULE,
 };
 use crate::models::{
     self, Channel, ChannelId, ChannelItemInsertedData, ContentHash, DataReferenceInsertedData,
@@ -66,7 +67,11 @@ impl PythonCli {
         })
     }
 
-    pub fn build_run_job_command(&self, args: RunCommandArgs) -> Command {
+    pub fn build_run_job_command(
+        &self,
+        args: RunCommandArgs,
+        store_config: Option<StoreConfig>,
+    ) -> Command {
         let mut command = Command::new(self.python.clone());
         command
             // Keep logs and stdout IPC flowing through the shared pipe promptly.
@@ -81,6 +86,12 @@ impl PythonCli {
                 "--args".into(),
                 serde_json::to_string(&args).expect("failed to serialze RunCommandArgs"),
             ]);
+        if let Some(store_config) = store_config {
+            command.args([
+                "--store-config",
+                &serde_json::to_string(&store_config).expect("failed to serialize StoreConfig"),
+            ]);
+        }
         command
     }
 

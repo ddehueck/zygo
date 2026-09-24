@@ -12,6 +12,7 @@ from zygo.cli.v0.generated import (
     IpcMessage,
     JobMetadata,
     JobRunArgs,
+    StoreConfig,
     TagInserted,
     WorkflowMetadata,
 )
@@ -26,6 +27,7 @@ __all__ = [
     "IpcMessage",
     "JobMetadata",
     "JobRunArgs",
+    "StoreConfig",
     "TagInserted",
     "WorkflowMetadata",
     "serialize_http_ipc_message",

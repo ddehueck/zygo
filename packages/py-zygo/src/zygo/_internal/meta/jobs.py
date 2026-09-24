@@ -105,8 +105,7 @@ def _is_valid_return_annotation(
 
     union_members = cast("tuple[object, ...]", get_args(annotation))
     return any(member is not NoneType for member in union_members) and all(
-        member is NoneType
-        or _is_output_annotation(member, output_type=output_type)
+        member is NoneType or _is_output_annotation(member, output_type=output_type)
         for member in union_members
     )
 

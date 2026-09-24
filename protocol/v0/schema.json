@@ -6,6 +6,7 @@
   "oneOf": [
     { "$ref": "#/definitions/WorkflowMetadata" },
     { "$ref": "#/definitions/JobRunArgs" },
+    { "$ref": "#/definitions/StoreConfig" },
     { "$ref": "#/definitions/HttpConfig" },
     { "$ref": "#/definitions/IpcMessage" },
     { "$ref": "#/definitions/HttpIPCMessage" }
@@ -64,6 +65,16 @@
         "job_run_id": { "type": "string" }
       },
       "required": ["job_id", "data_reference_uri", "workflow_run_id", "job_run_id"],
+      "additionalProperties": false
+    },
+    "StoreConfig": {
+      "description": "JSON supplied via --store-config to configure the fsspec store for a job.",
+      "type": "object",
+      "properties": {
+        "root_uri": { "type": "string", "description": "fsspec URI for the store root. Overrides tool.zygo.local.data_dir." },
+        "kwargs": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Optional keyword arguments passed to fsspec.filesystem.", "default": {} }
+      },
+      "required": ["root_uri"],
       "additionalProperties": false
     },
     "HttpConfig": {

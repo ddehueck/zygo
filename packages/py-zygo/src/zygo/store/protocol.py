@@ -8,13 +8,14 @@ if TYPE_CHECKING:
     from pathlib import Path
     from types import TracebackType
 
-    from zygo.store.types import Reference, Scope
+    from zygo.store.fsspec import FsspecUri as DataUri
+    from zygo.store.types import Scope
 
 
 class StoreContextManager[T](Protocol):
     @property
-    def reference(self) -> Reference:
-        """The stored object reference, available after successful context exit."""
+    def uri(self) -> DataUri:
+        """The stored object URI, available after successful context exit."""
         ...
 
     def __enter__(self) -> T: ...
@@ -30,8 +31,8 @@ class StoreContextManager[T](Protocol):
 
 class StoreProtocol(Protocol):
     """
-    A key-value store with workflow/task-based isolation.
-    Built on top of fsspec to provide storage backends (local filesystem, S3, GCS, etc.)
+    A key-value store with workflow/job-based isolation.
+    Built on top of fsspec to support many different backends that can be used (local filesystem, S3, GCS, etc.)
     """
 
     def put(
@@ -41,7 +42,7 @@ class StoreProtocol(Protocol):
         *,
         scope: Scope = "job",
         content_type: str | None = None,
-    ) -> Reference:
+    ) -> DataUri:
         """
         Store data under the given key.
 
@@ -52,7 +53,7 @@ class StoreProtocol(Protocol):
             content_type: Optional MIME type hint.
 
         Returns:
-            A DataRef with metadata about the stored object.
+            The URI of the stored object.
         """
         ...
 
@@ -60,16 +61,16 @@ class StoreProtocol(Protocol):
     def get(self, key: str, *, scope: Scope = "job") -> bytes: ...
 
     @overload
-    def get(self, key: Reference) -> bytes: ...
+    def get(self, key: DataUri) -> bytes: ...
 
-    def get(self, key: str | Reference, *, scope: Scope = "job") -> bytes:
+    def get(self, key: str | DataUri, *, scope: Scope = "job") -> bytes:
         """
-        Retrieve data by key or by Reference.
+        Retrieve data by key or by DataUri.
 
         Args:
-            key: Logical name for the data, or a Reference obtained from put/ingest.
+            key: Logical name for the data, or a DataUri obtained from put/ingest.
             scope: Isolation level to look in (default: "job"). Ignored when
-                a Reference is passed.
+                a DataUri is passed.
 
         Returns:
             The stored bytes.
@@ -108,7 +109,7 @@ class StoreProtocol(Protocol):
     @overload
     def open(
         self,
-        ref: str | Reference,
+        ref: str | DataUri,
         mode: Literal["r", "w", "a", "x", "rt", "wt", "at", "xt"] = ...,
         *,
         scope: Scope = ...,
@@ -117,7 +118,7 @@ class StoreProtocol(Protocol):
     @overload
     def open(
         self,
-        ref: str | Reference,
+        ref: str | DataUri,
         mode: Literal["rb", "wb", "ab", "xb"],
         *,
         scope: Scope = ...,
@@ -126,7 +127,7 @@ class StoreProtocol(Protocol):
     @overload
     def open(
         self,
-        ref: str | Reference,
+        ref: str | DataUri,
         mode: str,
         *,
         scope: Scope = ...,
@@ -134,7 +135,7 @@ class StoreProtocol(Protocol):
 
     def open(
         self,
-        ref: str | Reference,
+        ref: str | DataUri,
         mode: str = "r",
         *,
         scope: Scope = "job",
@@ -145,14 +146,14 @@ class StoreProtocol(Protocol):
         Supports both text and binary modes, just like the built-in ``open()``.
 
         Args:
-            ref: A Reference obtained from put/ingest, or a logical key string.
+            ref: A uri obtained from put/ingest, or a key string.
             mode: File mode string (e.g. ``"r"``, ``"w"``, ``"rb"``, ``"wb"``).
-            scope: Isolation level (default: "job"). Ignored when a Reference
+            scope: Isolation level (default: "job"). Ignored when a DataUri
                 is passed.
 
         Returns:
             A context manager that yields a file-like object and exposes its
-            reference after a successful context exit.
+            URI after a successful context exit.
 
         Example::
 
@@ -163,12 +164,12 @@ class StoreProtocol(Protocol):
             with output as f:
                 f.writelines(lines)
 
-            reference = output.reference
+            uri = output.uri
         """
         ...
 
     def open_file(
-        self, key: str, mode: Literal["r", "w"], *, scope: Scope = "job"
+        self, key: str | DataUri, mode: Literal["r", "w"], *, scope: Scope = "job"
     ) -> StoreContextManager[TmpFileProtocol]:
         """Return a temporary file.
 
@@ -194,6 +195,6 @@ class TmpFileProtocol(Protocol):
         ...
 
     @property
-    def reference(self) -> Reference:
-        """The stored object reference, available after successful context exit."""
+    def uri(self) -> DataUri:
+        """The stored object uri, available after successful context exit."""
         ...

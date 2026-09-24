@@ -47,6 +47,13 @@ pub struct RunCommandArgs {
     pub job_run_id: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StoreConfig {
+    pub root_uri: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kwargs: Option<std::collections::HashMap<String, String>>,
+}
+
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum StdoutIPCMessage {

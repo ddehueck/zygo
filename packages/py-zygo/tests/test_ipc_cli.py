@@ -3,17 +3,24 @@
 from __future__ import annotations
 
 import argparse
-from contextlib import nullcontext
 from dataclasses import asdict
 import json
-from types import SimpleNamespace
+from typing import TYPE_CHECKING, Self, cast
 import urllib.error
 import urllib.request
 
 import pytest
 
-from zygo.cli.v0.__main__ import _build_transport, build_parser
-from zygo.cli.v0.arguments import parse_http_config, parse_job_args
+if TYPE_CHECKING:
+    from http.client import HTTPResponse
+    from types import TracebackType
+
+    from zygo.cli.v0.transport import IpcTransport
+    from zygo.cli.v0.types import StoreConfig
+
+import zygo.cli.v0.__main__ as cli_module
+from zygo.cli.v0.__main__ import IpcArguments, build_parser
+from zygo.cli.v0.arguments import parse_http_config, parse_job_args, parse_store_config
 from zygo.cli.v0.transport import HttpTransport, StdioTransport
 from zygo.cli.v0.types import (
     ChannelItemInserted,
@@ -22,6 +29,21 @@ from zygo.cli.v0.types import (
     TagInserted,
     serialize_ipc_message,
 )
+
+
+class _SuccessfulResponse:
+    status = 200
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        return None
 
 
 def test_generated_protocol_models_keep_wire_format() -> None:
@@ -58,41 +80,130 @@ def test_generated_protocol_models_keep_wire_format() -> None:
 _JOB_ARGS = '{"job_id":"job","data_reference_uri":"file:///input","workflow_run_id":"wr-1","job_run_id":"jr-1"}'
 
 
-def test_build_transport_defaults_to_stdio() -> None:
-    assert isinstance(_build_transport(None, parse_job_args(_JOB_ARGS)), StdioTransport)
+def test_parse_store_config() -> None:
+    raw = '{"root_uri":"file:///custom-results","kwargs":{"auto_mkdir":"true"}}'
+    config = parse_store_config(raw)
+
+    assert config.root_uri == "file:///custom-results"
+    assert config.kwargs == {"auto_mkdir": "true"}
+
+    assert parse_store_config('{"root_uri":"memory://results"}').kwargs == {}
 
 
-def test_build_transport_http_defaults() -> None:
-    config = parse_http_config('{"url":"https://example.com/events"}')
-    transport = _build_transport(config, parse_job_args(_JOB_ARGS))
-    assert isinstance(transport, HttpTransport)
-    assert transport._url == "https://example.com/events"
-    assert transport._max_retries == 3
-    assert transport._retry_interval == 5.0
-    assert transport._timeout == 30.0
-    assert transport._headers == {"Content-Type": "application/json"}
+@pytest.mark.parametrize(
+    ("raw", "error"),
+    [
+        ("{", "valid JSON"),
+        ("[]", "JSON object"),
+        ("{}", "root_uri"),
+        ('{"root_uri":"not-a-uri"}', "root_uri"),
+        ('{"root_uri":"file:///tmp","extra":1}', "unknown fields"),
+        ('{"root_uri":"file:///tmp","kwargs":[]}', "kwargs"),
+        ('{"root_uri":"file:///tmp","kwargs":{"token":1}}', "kwargs"),
+        ('{"root_uri":"file:///tmp","kwargs":null}', "kwargs"),
+    ],
+)
+def test_parse_store_config_rejects_invalid(raw: str, error: str) -> None:
+    with pytest.raises(argparse.ArgumentTypeError, match=error):
+        parse_store_config(raw)
 
 
-def test_build_transport_http_success() -> None:
-    config = parse_http_config(
-        json.dumps({
-            "url": "https://example.com/api/events",
-            "max_retries": 2,
-            "retry_interval": 0.5,
-            "timeout": 4,
-            "headers": {" Authorization ": " Bearer secret "},
-        })
+def _transport_from_cli(
+    monkeypatch: pytest.MonkeyPatch, argv: list[str]
+) -> IpcTransport:
+    transports: list[IpcTransport] = []
+
+    def capture_run(
+        *,
+        target: str,
+        args: JobRunArgs,
+        store_config: StoreConfig | None,
+        ipc_transport: IpcTransport,
+    ) -> None:
+        del target, args, store_config
+        transports.append(ipc_transport)
+
+    monkeypatch.setattr(cli_module, "run", capture_run)
+    assert cli_module.main(argv) == 0
+    assert len(transports) == 1
+    return transports[0]
+
+
+def test_build_transport_defaults_to_stdio(monkeypatch: pytest.MonkeyPatch) -> None:
+    transport = _transport_from_cli(
+        monkeypatch, ["run", "pkg.mod:workflow", "--args", _JOB_ARGS]
     )
-    transport = _build_transport(config, parse_job_args(_JOB_ARGS))
+    assert isinstance(transport, StdioTransport)
+
+
+def test_build_transport_http_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    requests: list[urllib.request.Request] = []
+    timeouts: list[float] = []
+
+    def fake_urlopen(
+        request: urllib.request.Request, *, timeout: float
+    ) -> HTTPResponse:
+        requests.append(request)
+        timeouts.append(timeout)
+        return cast("HTTPResponse", _SuccessfulResponse())
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    transport = _transport_from_cli(
+        monkeypatch,
+        [
+            "run",
+            "pkg.mod:workflow",
+            "--args",
+            _JOB_ARGS,
+            "--http-config",
+            '{"url":"https://example.com/events"}',
+        ],
+    )
     assert isinstance(transport, HttpTransport)
-    assert transport._url == "https://example.com/api/events"
-    assert transport._max_retries == 2
-    assert transport._retry_interval == 0.5
-    assert transport._timeout == 4.0
-    assert transport._workflow_run_id == "wr-1"
-    assert transport._job_run_id == "jr-1"
-    assert transport._headers["Authorization"] == "Bearer secret"
-    assert transport._headers["Content-Type"] == "application/json"
+    transport.emit(ChannelItemInserted("channel_item_inserted", "out", "file:///one"))
+    assert requests[0].full_url == "https://example.com/events"
+    assert requests[0].get_header("Content-type") == "application/json"
+    assert timeouts == [30.0]
+
+
+def test_build_transport_http_configures_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requests: list[urllib.request.Request] = []
+    timeouts: list[float] = []
+
+    def fake_urlopen(
+        request: urllib.request.Request, *, timeout: float
+    ) -> HTTPResponse:
+        requests.append(request)
+        timeouts.append(timeout)
+        return cast("HTTPResponse", _SuccessfulResponse())
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    raw_config = json.dumps({
+        "url": "https://example.com/api/events",
+        "max_retries": 2,
+        "retry_interval": 0.5,
+        "timeout": 4,
+        "headers": {" Authorization ": " Bearer secret "},
+    })
+    transport = _transport_from_cli(
+        monkeypatch,
+        [
+            "run",
+            "pkg.mod:workflow",
+            "--args",
+            _JOB_ARGS,
+            "--http-config",
+            raw_config,
+        ],
+    )
+    assert isinstance(transport, HttpTransport)
+    transport.emit(ChannelItemInserted("channel_item_inserted", "out", "file:///one"))
+    assert requests[0].full_url == "https://example.com/api/events"
+    assert requests[0].get_header("Authorization") == "Bearer secret"
+    assert requests[0].get_header("Content-type") == "application/json"
+    assert timeouts == [4.0]
 
 
 @pytest.mark.parametrize(
@@ -138,6 +249,7 @@ def test_parse_http_config_rejects_nonfinite(field: str) -> None:
         ("{}", "job_id"),
         ('{"job_id":1}', "job_id"),
         ('{"job_id":"job","unexpected":1}', "unknown fields"),
+        ('{"job_id":"job","store_root_uri":"file:///tmp"}', "unknown fields"),
     ],
 )
 def test_parse_job_args_rejects_invalid(raw: str, error: str) -> None:
@@ -150,6 +262,8 @@ def test_parse_job_args_rejects_invalid(raw: str, error: str) -> None:
     [
         ("--args", "{", "--args must be valid JSON"),
         ("--args", "{}", "--args.job_id"),
+        ("--store-config", "{", "--store-config must be valid JSON"),
+        ("--store-config", "{}", "--store-config.root_uri"),
         ("--http-config", "{", "--http-config must be valid JSON"),
         ("--http-config", "{}", "--http-config.url"),
     ],
@@ -173,17 +287,29 @@ def test_parser_reports_invalid_json_arguments(
 def test_parser_run_stdio_defaults() -> None:
     args = build_parser().parse_args(
         ["run", "pkg.mod:workflow", "--args", _JOB_ARGS],
+        namespace=IpcArguments(),
     )
     assert args.command == "run"
     assert args.target == "pkg.mod:workflow"
     assert args.args == parse_job_args(_JOB_ARGS)
     assert args.http_config is None
+    assert args.store_config is None
+
+
+def test_parser_run_store_config() -> None:
+    raw = '{"root_uri":"memory://results","kwargs":{"token":"secret"}}'
+    args = build_parser().parse_args(
+        ["run", "pkg.mod:workflow", "--args", _JOB_ARGS, "--store-config", raw],
+        namespace=IpcArguments(),
+    )
+    assert args.store_config == parse_store_config(raw)
 
 
 def test_parser_run_http_config() -> None:
     raw = '{"url":"http://myservice.com/api/events","timeout":5.5}'
     args = build_parser().parse_args(
         ["run", "pkg.mod:workflow", "--args", _JOB_ARGS, "--http-config", raw],
+        namespace=IpcArguments(),
     )
     assert args.http_config == parse_http_config(raw)
 
@@ -192,21 +318,21 @@ def test_parser_run_http_config() -> None:
     "failure", [urllib.error.URLError("response lost"), TimeoutError("timed out")]
 )
 def test_http_transport_retries_same_envelope_and_uses_timeout(
-    monkeypatch, failure: Exception
+    monkeypatch: pytest.MonkeyPatch, failure: Exception
 ) -> None:
     bodies: list[bytes] = []
     timeouts: list[float] = []
     sleeps: list[float] = []
 
     def fake_urlopen(request: urllib.request.Request, *, timeout: float):
-        assert request.data is not None
+        assert isinstance(request.data, bytes)
         bodies.append(request.data)
         timeouts.append(timeout)
         assert request.get_method() == "POST"
         assert request.get_header("Content-type") == "application/json"
         if len(bodies) <= 2:
             raise failure
-        return nullcontext(SimpleNamespace(status=200))
+        return cast("HTTPResponse", _SuccessfulResponse())
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
     monkeypatch.setattr("zygo.cli.v0.transport.time.sleep", sleeps.append)
@@ -223,7 +349,7 @@ def test_http_transport_retries_same_envelope_and_uses_timeout(
     assert bodies[0] == bodies[1] == bodies[2]
     assert timeouts == [2.5, 2.5, 2.5]
     assert sleeps == [1.0, 1.0]
-    first = json.loads(bodies[0])
+    first = cast("dict[str, object]", json.loads(bodies[0]))
     assert first == {
         "id": first["id"],
         "workflow_run_id": "wr-1",
@@ -237,4 +363,5 @@ def test_http_transport_retries_same_envelope_and_uses_timeout(
     assert isinstance(first["id"], str) and first["id"]
 
     transport.emit(ChannelItemInserted("channel_item_inserted", "out", "file:///one"))
-    assert json.loads(bodies[3])["id"] != first["id"]
+    subsequent = cast("dict[str, object]", json.loads(bodies[3]))
+    assert subsequent["id"] != first["id"]

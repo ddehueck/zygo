@@ -4,7 +4,7 @@ from collections.abc import Callable
 from types import FunctionType
 from typing import cast
 
-from zygo._internal.python.fn_hash import local_source_dependency_hash
+from zygo._internal.fn_hash import local_source_dependency_hash
 
 
 def test_basic_function_hash() -> None:

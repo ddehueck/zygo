@@ -10,7 +10,7 @@ Invoke the module with a Python interpreter in that environment:
 
 ```text
 python -m zygo.cli.v0 metadata TARGET
-python -m zygo.cli.v0 run TARGET --args JSON [RUN_OPTIONS]
+python -m zygo.cli.v0 run TARGET --args JSON [--store-config JSON] [RUN_OPTIONS]
 ```
 
 `TARGET` identifies a workflow by import path. `package.module:attribute` selects a `Workflow` instance. 
@@ -48,7 +48,17 @@ python -m zygo.cli.v0 run myproject.main:workflow \
   --args '{"job_id":"my_job","data_reference_uri":"file:///input.txt","workflow_run_id":"wr-1","job_run_id":"jr-1"}'
 ```
 
-`job_id` selects a job in the target workflow and `data_reference_uri` defines the input data for that job. The run IDs supply context to the Python job and store. The orchestrator is responsible for providing these IDs. 
+`job_id` selects a job in the target workflow and `data_reference_uri` defines the input data for that job. The run IDs supply context to the Python job and store. The orchestrator is responsible for providing these IDs.
+
+`--store-config JSON` is optional and takes one `StoreConfig` JSON object as one command-line argument, separate from the job args. `root_uri` sets the fsspec store root and `kwargs` optionally maps string keys to string values passed as keyword arguments to `fsspec.filesystem`:
+
+```sh
+python -m zygo.cli.v0 run myproject.main:workflow \
+  --args '{"job_id":"my_job","data_reference_uri":"file:///input.txt","workflow_run_id":"wr-1","job_run_id":"jr-1"}' \
+  --store-config '{"root_uri":"file:///tmp/my-results","kwargs":{}}'
+```
+
+When `--store-config` is omitted, the CLI looks for `pyproject.toml` from the imported workflow module's directory up to the working directory, inclusive. Without a configured store root, the store defaults to a `zygo` directory beside the module. Relative file URIs supplied as overrides are resolved against the working directory. Unknown fields and non-string `kwargs` values are rejected before the job starts. Like other command-line arguments, store credentials in `kwargs` may be visible in process listings.
 
 A successful invocation exits with status 0 while uncaught/transport errors result in a nonzero exit. The process exit status indicates job completion while emitted messages indicate what happened during execution.
 

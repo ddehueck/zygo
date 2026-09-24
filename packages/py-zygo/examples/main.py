@@ -13,7 +13,7 @@ workflow = Workflow(id="my_workflow", input=raw, output=output)
 
 @workflow.job(input=raw, output=squared)
 def square_values(input: int, *, ctx: JobContext) -> int:
-    tags, store = ctx.tags, ctx.store
+    tags = ctx.tags
 
     print(f"[reads_to_qc_reports] GOING TO SQUARE: {input}")  # ruff: ignore[print]
 

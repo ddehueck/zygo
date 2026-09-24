@@ -9,3 +9,11 @@ The Python `Store` reads and writes workflow payloads through `fsspec`. The
 local orchestrator separately persists run events and read models. The Python
 CLI publishes data references through the versioned protocol, which other
 orchestrators can implement as well.
+
+To choose where local job results are stored, add this to your workflow project's
+`pyproject.toml`:
+
+```toml
+[tool.zygo.local]
+data_dir = "data"
+```

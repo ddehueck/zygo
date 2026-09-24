@@ -65,6 +65,11 @@ def discover_workflow(module: ModuleType) -> Workflow:
 
 
 def load_workflow(target: str) -> Workflow:
+    workflow, _ = load_workflow_with_module(target)
+    return workflow
+
+
+def load_workflow_with_module(target: str) -> tuple[Workflow, ModuleType]:
     module_name, separator, attribute_path = target.partition(":")
 
     if not module_name:
@@ -73,7 +78,7 @@ def load_workflow(target: str) -> Workflow:
     module = import_module(module_name)
 
     if not separator:
-        return discover_workflow(module)
+        return discover_workflow(module), module
 
     if not attribute_path:
         raise RuntimeError(f"Expected {module_name}:<workflow-name>")
@@ -85,4 +90,4 @@ def load_workflow(target: str) -> Workflow:
             f"{target!r} resolved to {type(value).__name__}, not a zygo.Workflow"
         )
 
-    return value
+    return value, module
