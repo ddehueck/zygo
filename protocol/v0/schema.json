@@ -61,7 +61,8 @@
         "job_id": { "type": "string" },
         "data_reference_uri": { "type": "string" },
         "workflow_run_id": { "type": "string" },
-        "job_run_id": { "type": "string" }
+        "job_run_id": { "type": "string" },
+        "store_root_uri": { "type": "string", "description": "Optional fsspec URI for the job store root. Overrides tool.zygo.local.data_dir." }
       },
       "required": ["job_id", "data_reference_uri", "workflow_run_id", "job_run_id"],
       "additionalProperties": false

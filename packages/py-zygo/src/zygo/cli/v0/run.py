@@ -5,9 +5,10 @@ from typing import TYPE_CHECKING, cast
 from zygo._internal.fsspec import FsspecUri
 from zygo._internal.meta.injection import build_injected_job_fn
 from zygo._internal.meta.job_context import JobContextImpl
-from zygo.cli.importer import load_workflow
+from zygo.cli.importer import load_workflow_with_module
+from zygo.cli.v0.config import local_store_options
 from zygo.cli.v0.types import ChannelItemInserted
-from zygo.store import Reference, StoreOptions
+from zygo.store import Reference
 from zygo.store._internal.impl import StoreImpl
 from zygo.types import JobId, JobRunContext, JobRunId, WorkflowRunId
 
@@ -24,7 +25,7 @@ def run(
     args: JobRunArgs,
     ipc_transport: IpcTransport,
 ) -> None:
-    workflow = load_workflow(target)
+    workflow, module = load_workflow_with_module(target)
 
     run_context = JobRunContext(
         workflow_run_id=WorkflowRunId(args.workflow_run_id),
@@ -42,10 +43,7 @@ def run(
 
         store = StoreImpl(
             context=run_context,
-            options=StoreOptions(
-                # TODO: Where to pipe these options through - allow setting this as config
-                root_uri=FsspecUri(uri="file://./zygo_workflow_results")
-            ),
+            options=local_store_options(module, args.store_root_uri),
             ipc_transport=ipc_transport,
         )
 

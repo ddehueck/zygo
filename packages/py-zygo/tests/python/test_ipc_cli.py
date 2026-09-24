@@ -31,6 +31,7 @@ def test_generated_protocol_models_keep_wire_format() -> None:
         "data_reference_uri": "file:///input",
         "workflow_run_id": "workflow-run",
         "job_run_id": "job-run",
+        "store_root_uri": None,
     }
 
     messages = [
@@ -56,6 +57,24 @@ def test_generated_protocol_models_keep_wire_format() -> None:
 
 
 _JOB_ARGS = '{"job_id":"job","data_reference_uri":"file:///input","workflow_run_id":"wr-1","job_run_id":"jr-1"}'
+
+
+def test_parse_job_args_store_root_uri() -> None:
+    payload = {
+        "job_id": "job",
+        "data_reference_uri": "file:///input",
+        "workflow_run_id": "wr-1",
+        "job_run_id": "jr-1",
+        "store_root_uri": "file:///custom-results",
+    }
+
+    assert (
+        parse_job_args(json.dumps(payload)).store_root_uri == "file:///custom-results"
+    )
+    assert parse_job_args(_JOB_ARGS).store_root_uri is None
+
+    with pytest.raises(argparse.ArgumentTypeError, match="store_root_uri"):
+        parse_job_args(json.dumps({**payload, "store_root_uri": None}))
 
 
 def test_build_transport_defaults_to_stdio() -> None:

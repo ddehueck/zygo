@@ -37,6 +37,7 @@ class JobRunArgs:
     data_reference_uri: str
     workflow_run_id: str
     job_run_id: str
+    store_root_uri: str | None = None
 
 
 @dataclass

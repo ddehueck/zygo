@@ -39,6 +39,7 @@ impl Worker {
             data_reference_uri: args.input.to_string(),
             workflow_run_id: self.ctx.run_id.to_string(),
             job_run_id: args.job_run_id.to_string(),
+            store_root_uri: None,
         };
         let mut command = self.ctx.python_cli.build_run_job_command(command_args);
 

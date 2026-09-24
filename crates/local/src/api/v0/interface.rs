@@ -45,6 +45,8 @@ pub struct RunCommandArgs {
 
     pub workflow_run_id: String,
     pub job_run_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub store_root_uri: Option<String>,
 }
 
 #[derive(Deserialize)]

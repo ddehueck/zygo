@@ -4,6 +4,7 @@ import json
 import math
 from typing import cast
 
+from zygo._internal.fsspec import FsspecUri
 from zygo.cli.v0.types import JobRunArgs
 
 _DEFAULT_HTTP_TIMEOUT_SECONDS = 30.0
@@ -68,8 +69,28 @@ def _positive_number(value: object, field: str) -> float:
 
 
 def parse_job_args(raw: str) -> JobRunArgs:
-    fields = {"job_id", "data_reference_uri", "workflow_run_id", "job_run_id"}
+    fields = {
+        "job_id",
+        "data_reference_uri",
+        "workflow_run_id",
+        "job_run_id",
+        "store_root_uri",
+    }
     data = _parse_json_object(raw, "--args", fields)
+    store_root_uri: str | None = None
+    if "store_root_uri" in data:
+        value = data["store_root_uri"]
+        if not isinstance(value, str) or "://" not in value:
+            raise argparse.ArgumentTypeError(
+                "--args.store_root_uri must be a non-empty fsspec URI"
+            )
+        try:
+            FsspecUri(value)
+        except ValueError as error:
+            raise argparse.ArgumentTypeError(
+                f"--args.store_root_uri is invalid: {error}"
+            ) from error
+        store_root_uri = value
     return JobRunArgs(
         job_id=_parse_dict_value_as_string(data, "job_id", "--args"),
         data_reference_uri=_parse_dict_value_as_string(
@@ -77,6 +98,7 @@ def parse_job_args(raw: str) -> JobRunArgs:
         ),
         workflow_run_id=_parse_dict_value_as_string(data, "workflow_run_id", "--args"),
         job_run_id=_parse_dict_value_as_string(data, "job_run_id", "--args"),
+        store_root_uri=store_root_uri,
     )
 
 

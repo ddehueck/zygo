@@ -48,7 +48,12 @@ python -m zygo.cli.v0 run myproject.main:workflow \
   --args '{"job_id":"my_job","data_reference_uri":"file:///input.txt","workflow_run_id":"wr-1","job_run_id":"jr-1"}'
 ```
 
-`job_id` selects a job in the target workflow and `data_reference_uri` defines the input data for that job. The run IDs supply context to the Python job and store. The orchestrator is responsible for providing these IDs. 
+`job_id` selects a job in the target workflow and `data_reference_uri` defines the input data for that job. The run IDs supply context to the Python job and store. The orchestrator is responsible for providing these IDs.
+
+An optional `store_root_uri` in `--args` sets the fsspec URI used as the store root for this job, for example `"store_root_uri":"file:///tmp/my-results"`. 
+Without it, the CLI looks for `pyproject.toml` from the imported workflow module's directory up to the working directory, inclusive. 
+
+Without a store root set, the store defaults to a `zygo` directory beside the module. Relative file URIs supplied as overrides are resolved against the working directory.
 
 A successful invocation exits with status 0 while uncaught/transport errors result in a nonzero exit. The process exit status indicates job completion while emitted messages indicate what happened during execution.
 

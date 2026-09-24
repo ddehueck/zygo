@@ -19,8 +19,11 @@ dev = [
     "ty>=0.0.1-alpha.26",
 ]
 
+[tool.zygo.local]
+data_dir = "runs"
+
 [tool.setuptools]
-package-dir = {"" = "src"}
+package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
