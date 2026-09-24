@@ -6,8 +6,8 @@ from zygo.cli.v0.types import TagInserted
 from zygo.context import JobContext, TagsProtocol
 
 if TYPE_CHECKING:
-    from zygo.store._internal.impl import StoreImpl
     from zygo.cli.v0.transport import IpcTransport
+    from zygo.store._internal.impl import StoreImpl
 
 
 class JobContextImpl(JobContext):

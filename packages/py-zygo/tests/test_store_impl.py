@@ -49,9 +49,7 @@ def test_store_passes_kwargs_to_fsspec(
     filesystem = cast("Callable[..., AbstractFileSystem]", fsspec.filesystem)
     calls: list[tuple[str, dict[str, str]]] = []
 
-    def capture_filesystem(
-        protocol: str, **kwargs: str
-    ) -> AbstractFileSystem:
+    def capture_filesystem(protocol: str, **kwargs: str) -> AbstractFileSystem:
         calls.append((protocol, kwargs))
         return filesystem(protocol, **kwargs)
 

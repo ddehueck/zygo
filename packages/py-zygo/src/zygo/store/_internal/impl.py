@@ -29,8 +29,8 @@ from typing import (
 from zygo.cli.v0.types import DataReferenceCreated
 from zygo.store import StoreProtocol
 from zygo.store._internal.util import build_fs, normalize_key, partition
-from zygo.store.types import DataUri
 from zygo.store.protocol import TmpFileProtocol
+from zygo.store.types import DataUri
 
 if TYPE_CHECKING:
     from types import TracebackType
@@ -131,7 +131,9 @@ class StoreImpl(StoreProtocol):
     def get(self, key: str | DataUri, *, scope: Scope = "job") -> bytes:
         uri = key if isinstance(key, DataUri) else self._uri_for_key(key, scope)
 
-        assert uri.protocol == self._root.protocol, f"Protocol mismatch: expected {self._root.protocol}, got {uri.protocol}"
+        assert uri.protocol == self._root.protocol, (
+            f"Protocol mismatch: expected {self._root.protocol}, got {uri.protocol}"
+        )
 
         with self._fs.open(str(uri), "rb") as f:  # type: ignore
             return f.read()  # type: ignore
@@ -218,9 +220,7 @@ class _StoreOpenContext[T](AbstractContextManager[T]):
     @property
     def uri(self) -> DataUri:
         if self._uri is None:
-            raise RuntimeError(
-                "URI is only available after successful context exit"
-            )
+            raise RuntimeError("URI is only available after successful context exit")
         return self._uri
 
     @override
@@ -269,9 +269,7 @@ class _OpenFileContext(AbstractContextManager[TmpFileProtocol]):
     @property
     def uri(self) -> DataUri:
         if self._uri is None:
-            raise RuntimeError(
-                "URI is only available after successful context exit"
-            )
+            raise RuntimeError("URI is only available after successful context exit")
         return self._uri
 
     @override
@@ -282,9 +280,7 @@ class _OpenFileContext(AbstractContextManager[TmpFileProtocol]):
                 "Temporary file context cannot be entered more than once"
             )
 
-        initial_data = (
-            self._store.get(self._target_uri) if self._mode == "r" else None
-        )
+        initial_data = self._store.get(self._target_uri) if self._mode == "r" else None
         self._directory = tempfile.TemporaryDirectory()
 
         # NB: It's important for to preserve the initial data file's name/extension.

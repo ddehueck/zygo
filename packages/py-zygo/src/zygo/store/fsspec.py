@@ -21,7 +21,7 @@ class FsspecUri:
     def _parse(uri: str) -> str:
         """Validate an fsspec URI and normalize local paths to absolute URIs."""
         protocol, path = split_protocol(uri)
-        filesystem(protocol) # raise on invalid protocol
+        filesystem(protocol)  # raise on invalid protocol
 
         if not path and protocol not in {"memory"}:
             raise ValueError(f"Empty path for protocol: {protocol}")
@@ -83,4 +83,3 @@ class FsspecUri:
     @override
     def __str__(self) -> str:
         return self.uri
-

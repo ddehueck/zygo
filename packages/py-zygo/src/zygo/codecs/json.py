@@ -188,7 +188,9 @@ def _validate_json_value(value: object, *, path: str) -> None:
     if isinstance(value, dict):
         _validate_json_object(cast("dict[object, object]", value), path=path)
         return
-    raise TypeError(f"{path} expected a JSON-compatible value, got {type(value).__name__}")
+    raise TypeError(
+        f"{path} expected a JSON-compatible value, got {type(value).__name__}"
+    )
 
 
 def _typed_dict_fields(value_type: object) -> dict[str, object]:
