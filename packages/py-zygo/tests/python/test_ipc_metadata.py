@@ -1,34 +1,27 @@
+"""Unit tests for workflow metadata IPC output."""
+
 from dataclasses import asdict
 import json
-from typing import Annotated
 
 import pytest
 
-from zygo import Input, Output, Publisher, Reference, Workflow
+from zygo import Channel, Workflow
 from zygo.cli.v0 import metadata as metadata_module
 from zygo.cli.v0.metadata import build_workflow_metadata
 from zygo.cli.v0.types import STDOUT_IPC_PREFIX
+from zygo.codecs import Integer, String
 
 
 def _workflow() -> Workflow:
-    workflow = Workflow(id="example")
-    source = workflow.channel(id="source")
-    processed = workflow.channel(id="processed")
+    source = Channel(id="source", codec=Integer())
+    processed = Channel(id="processed", codec=String())
+    workflow = Workflow(id="example", input=source, output=processed)
 
-    @workflow.job(id="transform")
-    def transform(
-        input_ref: Annotated[Reference, Input(source)],
-        publisher: Annotated[Publisher, Output(processed)],
-    ) -> None:
-        del input_ref, publisher
+    @workflow.job(input=source, output=processed)
+    def transform(value: int) -> str:
+        return str(value)
 
-    @workflow.job
-    def consume(
-        input_ref: Annotated[Reference, Input(processed)],
-    ) -> None:
-        del input_ref
-
-    del transform, consume
+    del transform
     return workflow
 
 
@@ -40,22 +33,19 @@ def test_build_workflow_metadata() -> None:
     assert result == {
         "id": "example",
         "content_hash": workflow.content_hash,
-        "channels": [{"id": "source"}, {"id": "processed"}],
+        "input_channel_id": "source",
+        "output_channel_id": "processed",
         "jobs": [
             {
-                "id": entry.id,
-                "content_hash": entry.hash,
+                "id": "transform",
+                "content_hash": next(iter(workflow.jobs)).hash,
+                "input_channel_id": "source",
+                "output_channel_id": "processed",
             }
-            for entry in workflow.jobs.entries()
         ],
-        "edges": [
-            {"job_id": "transform", "channel_id": "source", "kind": "input"},
-            {
-                "job_id": "transform",
-                "channel_id": "processed",
-                "kind": "output",
-            },
-            {"job_id": "consume", "channel_id": "processed", "kind": "input"},
+        "channels": [
+            {"id": "source", "accepted_file_extensions": ["txt"]},
+            {"id": "processed", "accepted_file_extensions": ["txt"]},
         ],
     }
 

@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from http.client import HTTPResponse
 import os
 from pathlib import Path
 import sys
 import time
-from typing import TYPE_CHECKING, Protocol, TextIO
+from typing import TYPE_CHECKING, Protocol, TextIO, cast
 import urllib.error
 import urllib.request
 from uuid import uuid4
@@ -61,6 +62,7 @@ class HttpTransport:
         job_run_id: str,
         headers: Mapping[str, str] | None = None,
     ) -> None:
+        super().__init__()
         if not url.startswith(("http://", "https://")):
             raise ValueError(
                 f"HTTP IPC URL must start with http:// or https://, got: {url!r}"
@@ -106,7 +108,11 @@ class HttpTransport:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=self._timeout) as response:  # noqa: S310
+            response = cast(
+                "HTTPResponse",
+                urllib.request.urlopen(request, timeout=self._timeout),  # noqa: S310
+            )
+            with response:
                 if response.status // 100 == 2:  # noqa: PLR2004
                     return None
                 return RuntimeError(

@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, NewType
+from typing import NewType
 
-if TYPE_CHECKING:
-    from zygo.store import Reference
+from zygo.store import DataUri
 
 WorkflowId = NewType("WorkflowId", str)
 WorkflowRunId = NewType("WorkflowRunId", str)
@@ -32,7 +31,7 @@ class JobRunContext:
 
     workflow_run_id: WorkflowRunId
     job_run_id: JobRunId
-    data_ref: Reference
+    input: DataUri
 
 
 @dataclass(frozen=True)

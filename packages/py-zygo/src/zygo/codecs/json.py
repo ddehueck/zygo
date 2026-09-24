@@ -176,7 +176,7 @@ def _validate_json_value(value: object, *, path: str) -> None:
     if value is None or type(value) is bool or type(value) is int:
         return
     if type(value) is float:
-        if not math.isfinite(cast("float", value)):
+        if not math.isfinite(value):
             raise ValueError(f"{path} does not support NaN or infinity")
         return
     if type(value) is str:
@@ -186,7 +186,7 @@ def _validate_json_value(value: object, *, path: str) -> None:
             _validate_json_value(item, path=f"{path}[{index}]")
         return
     if isinstance(value, dict):
-        _validate_json_object(value, path=path)
+        _validate_json_object(cast("dict[object, object]", value), path=path)
         return
     raise TypeError(f"{path} expected a JSON-compatible value, got {type(value).__name__}")
 

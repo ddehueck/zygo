@@ -5,11 +5,12 @@ from zygo.cli.v0.arguments import (
     ValidatedHttpConfig,
     parse_http_config,
     parse_job_args,
+    parse_store_config,
 )
 from zygo.cli.v0.metadata import inspect_workflow
 from zygo.cli.v0.run import run
 from zygo.cli.v0.transport import HttpTransport, IpcTransport, StdioTransport
-from zygo.cli.v0.types import JobRunArgs
+from zygo.cli.v0.types import JobRunArgs, StoreConfig
 
 
 class IpcArguments(argparse.Namespace):
@@ -17,6 +18,7 @@ class IpcArguments(argparse.Namespace):
     target: str
     args: JobRunArgs | None
     http_config: ValidatedHttpConfig | None
+    store_config: StoreConfig | None
 
     def __init__(self) -> None:
         super().__init__()
@@ -24,6 +26,7 @@ class IpcArguments(argparse.Namespace):
         self.target = ""
         self.args = None
         self.http_config = None
+        self.store_config = None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -48,6 +51,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=parse_job_args,
         metavar="JSON",
         help="Orchestrator-provided job arguments as JSON",
+    )
+    run_parser.add_argument(
+        "--store-config",
+        type=parse_store_config,
+        metavar="JSON",
+        help="Store root URI and optional fsspec keyword arguments as JSON",
     )
     run_parser.add_argument(
         "--http-config",
@@ -96,7 +105,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 parser.error("--args is required")
                 return 2
             ipc_transport = _build_transport(args.http_config, job_args)
-            run(target=args.target, args=job_args, ipc_transport=ipc_transport)
+            run(
+                target=args.target,
+                args=job_args,
+                store_config=args.store_config,
+                ipc_transport=ipc_transport,
+            )
         case "metadata":
             inspect_workflow(args.target)
         case _:

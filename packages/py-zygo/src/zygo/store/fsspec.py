@@ -83,3 +83,4 @@ class FsspecUri:
     @override
     def __str__(self) -> str:
         return self.uri
+

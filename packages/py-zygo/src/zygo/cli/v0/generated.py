@@ -37,7 +37,12 @@ class JobRunArgs:
     data_reference_uri: str
     workflow_run_id: str
     job_run_id: str
-    store_root_uri: str | None = None
+
+
+@dataclass
+class StoreConfig:
+    root_uri: str
+    kwargs: dict[str, str] | None = field(default_factory=dict)
 
 
 @dataclass
@@ -80,4 +85,4 @@ class HttpIPCMessage:
     message: IpcMessage
 
 
-type ZygoProviderProtocolV0Payload = WorkflowMetadata | JobRunArgs | HttpConfig | IpcMessage | HttpIPCMessage
+type ZygoProviderProtocolV0Payload = WorkflowMetadata | JobRunArgs | StoreConfig | HttpConfig | IpcMessage | HttpIPCMessage

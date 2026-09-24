@@ -4,8 +4,7 @@ from pathlib import Path
 import tomllib
 from typing import TYPE_CHECKING, cast
 
-from zygo._internal.fsspec import FsspecUri
-from zygo.store import StoreOptions
+from zygo.store import DataUri, StoreOptions
 
 if TYPE_CHECKING:
     from types import ModuleType
@@ -38,7 +37,7 @@ def local_store_options(
 ) -> StoreOptions:
     """Use a supplied store URI, or load config within the calling project."""
     if store_root_uri is not None:
-        return StoreOptions(root_uri=FsspecUri(store_root_uri))
+        return StoreOptions(root_uri=DataUri(store_root_uri))
 
     search_paths = project_search_paths(module)
     path: Path | None = None
@@ -66,4 +65,4 @@ def local_store_options(
     if path is None:
         path = search_paths[0] / _DEFAULT_DATA_DIR
 
-    return StoreOptions(root_uri=FsspecUri(f"file://{path.resolve()}"))
+    return StoreOptions(root_uri=DataUri(f"file://{path.resolve()}"))

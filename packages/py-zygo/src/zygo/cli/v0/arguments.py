@@ -4,8 +4,8 @@ import json
 import math
 from typing import cast
 
-from zygo._internal.fsspec import FsspecUri
-from zygo.cli.v0.types import JobRunArgs
+from zygo.cli.v0.types import JobRunArgs, StoreConfig
+from zygo.store import DataUri
 
 _DEFAULT_HTTP_TIMEOUT_SECONDS = 30.0
 _DEFAULT_HTTP_MAX_RETRY_COUNT = 3
@@ -74,23 +74,8 @@ def parse_job_args(raw: str) -> JobRunArgs:
         "data_reference_uri",
         "workflow_run_id",
         "job_run_id",
-        "store_root_uri",
     }
     data = _parse_json_object(raw, "--args", fields)
-    store_root_uri: str | None = None
-    if "store_root_uri" in data:
-        value = data["store_root_uri"]
-        if not isinstance(value, str) or "://" not in value:
-            raise argparse.ArgumentTypeError(
-                "--args.store_root_uri must be a non-empty fsspec URI"
-            )
-        try:
-            FsspecUri(value)
-        except ValueError as error:
-            raise argparse.ArgumentTypeError(
-                f"--args.store_root_uri is invalid: {error}"
-            ) from error
-        store_root_uri = value
     return JobRunArgs(
         job_id=_parse_dict_value_as_string(data, "job_id", "--args"),
         data_reference_uri=_parse_dict_value_as_string(
@@ -98,8 +83,30 @@ def parse_job_args(raw: str) -> JobRunArgs:
         ),
         workflow_run_id=_parse_dict_value_as_string(data, "workflow_run_id", "--args"),
         job_run_id=_parse_dict_value_as_string(data, "job_run_id", "--args"),
-        store_root_uri=store_root_uri,
     )
+
+
+def parse_store_config(raw: str) -> StoreConfig:
+    data = _parse_json_object(raw, "--store-config", {"root_uri", "kwargs"})
+    root_uri = _parse_dict_value_as_string(data, "root_uri", "--store-config")
+    if "://" not in root_uri:
+        raise argparse.ArgumentTypeError("--store-config.root_uri must be a data URI")
+    try:
+        DataUri(root_uri)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            f"--store-config.root_uri is invalid: {error}"
+        ) from error
+
+    raw_kwargs = data.get("kwargs", {})
+    if not isinstance(raw_kwargs, dict) or any(
+        not isinstance(key, str) or not isinstance(value, str)
+        for key, value in cast("dict[object, object]", raw_kwargs).items()
+    ):
+        raise argparse.ArgumentTypeError(
+            "--store-config.kwargs must map strings to strings"
+        )
+    return StoreConfig(root_uri=root_uri, kwargs=cast("dict[str, str]", raw_kwargs))
 
 
 def parse_http_config(raw: str) -> ValidatedHttpConfig:

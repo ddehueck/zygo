@@ -19,6 +19,7 @@ class JobContextImpl(JobContext):
 
 class TagsImpl(TagsProtocol):
     def __init__(self, *, ipc_transport: IpcTransport) -> None:
+        super().__init__()
         self.ipc_transport = ipc_transport
 
     @override

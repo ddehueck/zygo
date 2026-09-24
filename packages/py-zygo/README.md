@@ -25,4 +25,4 @@ not search above that directory. If the module is outside it, the CLI checks
 only the working directory. If `data_dir` is not set, results go to a `zygo`
 directory beside the workflow module (or in the working directory for modules
 outside it). An orchestrator can override this for an individual job with
-`store_root_uri` in the CLI's `--args` JSON payload.
+`root_uri` in the CLI's `--store-config` JSON payload. Optional `kwargs` string pairs are passed to fsspec.
