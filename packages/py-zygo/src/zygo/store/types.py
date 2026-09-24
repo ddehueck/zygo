@@ -8,7 +8,12 @@ from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from zygo._internal.fsspec import FsspecUri
 
-Scope = Literal["job", "workflow", "global"]
+# Scopes represent the data visibility for different run contexts.
+# - job:      data visible only within the current job
+# - workflow: data visible across all jobs in the current workflow run
+# - cache:    data visible across all workflow runs
+# By default, the scope is "job". This way data is isolated by default.
+Scope = Literal["job", "workflow", "cache"]
 
 
 @dataclass(frozen=True)

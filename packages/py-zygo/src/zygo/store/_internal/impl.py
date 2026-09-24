@@ -16,13 +16,19 @@ from pathlib import Path
 import posixpath
 import re
 import tempfile
-from typing import TYPE_CHECKING, BinaryIO, Literal, TextIO, cast, overload, override
+from typing import TYPE_CHECKING, BinaryIO, Literal, TextIO, assert_never, cast, overload, override
 
 import fsspec  # type: ignore
 
 from zygo._internal.fsspec import FsspecUri
 from zygo.cli.v0.types import DataReferenceCreated
 from zygo.store import Reference, StoreProtocol
+from zygo.store._internal.util import (
+    _build_fs,
+    _contains_any_partition_key,
+    _normalize_key,
+    _partition,
+)
 from zygo.store.protocol import TmpFileProtocol
 
 if TYPE_CHECKING:
@@ -31,38 +37,9 @@ if TYPE_CHECKING:
     from fsspec.spec import AbstractFileSystem  # type: ignore
 
     from zygo.cli.v0.transport import IpcTransport
-    from zygo.store._internal.types import PartitionKey
     from zygo.store.protocol import StoreContextManager
     from zygo.store.types import Scope, StoreOptions
     from zygo.types import JobRunContext
-
-
-def _partition(partition_key: PartitionKey, value: str) -> str:
-    return f"{partition_key}={value}"
-
-
-def _contains_any_partition_key(key: str, partition_keys: list[PartitionKey]) -> bool:
-    return any(f"{pk}=" in key for pk in partition_keys)
-
-
-def _is_global_uri(value: str) -> bool:
-    return "store/global" in value
-
-
-def _normalize_key(key: str) -> str:
-    # This regex replaces any character that is not alphanumeric, underscore, hyphen, or period with an underscore.
-    # Fix: don't allow a dash/hyphen at the first or last position, don't allow repeated underscores or dots.
-    key = re.sub(r"[^\w\.-]", "_", key)
-    key = re.sub(r"_+", "_", key)  # Replace multiple underscores with one
-    key = re.sub(r"\.+", ".", key)  # Replace multiple dots with one
-    return key.strip("-.")
-
-
-def _build_fs(options: StoreOptions) -> AbstractFileSystem:
-    extra = options.kwargs or {}
-    fs = fsspec.filesystem(options.root_uri.protocol or "file", **extra)  # type: ignore
-    return cast("AbstractFileSystem", fs)
-
 
 class StoreImpl(StoreProtocol):
     """
@@ -79,7 +56,7 @@ class StoreImpl(StoreProtocol):
         super().__init__()
         self._context = context
         self._options = options
-        self.ipc_transport = ipc_transport
+        self._ipc_transport = ipc_transport
         self._fs = _build_fs(options)
 
     def _is_uri(self, value: str) -> bool:
@@ -87,10 +64,7 @@ class StoreImpl(StoreProtocol):
         Returns True if the value is a URI.
         Useful for allowing URIs to be free passed around.
         """
-        # TODO: This should really just check for a protocol prefix.
-        if _contains_any_partition_key(value, ["job_run_id", "workflow_run_id"]):
-            return True
-        return _is_global_uri(value)
+        return FsspecUri.is_valid(value)
 
     def _prefix(self, scope: Scope) -> str:
         """
@@ -100,32 +74,31 @@ class StoreImpl(StoreProtocol):
         # Keep paths POSIX-like even on Windows since many fsspec backends expect that.
         base = posixpath.join(self._options.root_uri.path)
 
-        if scope == "job":
-            return posixpath.join(
-                base,
-                _partition("workflow_run_id", self._context.workflow_run_id),
-                _partition("job_run_id", self._context.job_run_id),
-            )
-
-        if scope == "workflow":
-            return posixpath.join(
-                base,
-                _partition("workflow_run_id", self._context.workflow_run_id),
-                "shared",
-            )
-
-        # "global" = shared across runs (still under root, but outside run namespace)
-        return posixpath.join(self._options.root_uri.path, "store", "global")
+        match scope:
+            case "job":
+                return posixpath.join(
+                    base,
+                    _partition("wr", self._context.workflow_run_id),
+                    _partition("jr", self._context.job_run_id),
+                )
+            case "workflow":
+                return posixpath.join(
+                    base,
+                    _partition("wr", self._context.workflow_run_id),
+                    "shared",
+                )
+            case "cache":
+                return posixpath.join(base, "cache")
+            case _:
+                assert_never(scope)
 
     def _uri_for_key(self, key: str, scope: Scope) -> FsspecUri:
         # TODO: Better interface for passing URIs directly across the whole store.
         if self._is_uri(key):
             return FsspecUri(key)
 
-        key = _normalize_key(key)
-        prefix = self._prefix(scope)
-        uri = posixpath.join(prefix, key)
-        return FsspecUri(f"{self._options.root_uri.protocol}://{uri}")
+        path = posixpath.join(self._prefix(scope), _normalize_key(key))
+        return FsspecUri(f"{self._options.root_uri.protocol}://{path}")
 
     @override
     def put(
@@ -147,7 +120,7 @@ class StoreImpl(StoreProtocol):
             f.write(data)  # type: ignore
 
         # Send an IPC message to the parent process to notify it of the new data reference.
-        self.ipc_transport.emit(
+        self._ipc_transport.emit(
             DataReferenceCreated(type="data_reference_created", data_reference=str(uri))
         )
 
@@ -162,6 +135,11 @@ class StoreImpl(StoreProtocol):
             key.uri if isinstance(key, Reference) else self._uri_for_key(key, scope)
         )
         uri_str = str(uri_raw) if not isinstance(uri_raw, str) else uri_raw
+        uri = FsspecUri(uri_str)
+        if uri.protocol != self._options.root_uri.protocol:
+            with fsspec.open(uri_str, "rb") as f:
+                return f.read()
+
         with self._fs.open(uri_str, "rb") as f:  # type: ignore
             return f.read()  # type: ignore
 

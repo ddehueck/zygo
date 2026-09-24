@@ -11,22 +11,41 @@ class FsspecUri:
     uri: str
 
     def __post_init__(self) -> None:
-        """Basic validation of fsspec URI"""
+        """Validate and normalize the fsspec URI."""
         try:
-            # Check if protocol can be parsed
-            protocol, path = split_protocol(self.uri)
-            # Check if protocol is supported
-            filesystem(protocol)
-            # Check if path is not empty (for most protocols)
-            if not path and protocol not in {"memory"}:
-                raise ValueError(f"Empty path for protocol: {protocol}")
-
-            # We should only ever use absolute uris for local filesf
-            if self.is_local() and not self.is_absolute():
-                object.__setattr__(self, "uri", self.to_absolute().uri)
-
+            object.__setattr__(self, "uri", self._parse(self.uri))
         except Exception as e:
             raise ValueError(f"Invalid fsspec URI: {self.uri} ({e})") from e
+
+    @staticmethod
+    def _parse(uri: str) -> str:
+        """Validate an fsspec URI and normalize local paths to absolute URIs."""
+        protocol, path = split_protocol(uri)
+        filesystem(protocol) # raise on invalid protocol
+
+        if not path and protocol not in {"memory"}:
+            raise ValueError(f"Empty path for protocol: {protocol}")
+
+        # default to file protocol if none specified and ensure we have absolute paths locally
+        effective_protocol = protocol or "file"
+        if effective_protocol in {"file", "memory"} and not path.startswith("/"):
+            path = str(Path(path).resolve())
+            return f"{effective_protocol}://{path}"
+
+        return uri
+
+    @classmethod
+    def try_parse(cls, uri: str) -> "FsspecUri | None":
+        """Parse a URI, returning None instead of raising when it is invalid."""
+        try:
+            return cls(uri)
+        except ValueError:
+            return None
+
+    @classmethod
+    def is_valid(cls, uri: str) -> bool:
+        """Return whether the input is a valid fsspec URI."""
+        return cls.try_parse(uri) is not None
 
     @property
     def protocol(self) -> str:
@@ -49,7 +68,6 @@ class FsspecUri:
     def to_absolute(self) -> "FsspecUri":
         """Convert the fsspec URI to an absolute file URI."""
         absolute_path = Path(self.path).resolve()
-        print(f"Converting to absolute: {absolute_path}")
         return FsspecUri(f"{self.protocol}://{absolute_path}")
 
     def is_absolute(self) -> bool:

@@ -30,8 +30,8 @@ class StoreContextManager[T](Protocol):
 
 class StoreProtocol(Protocol):
     """
-    A key-value store with workflow/task-based isolation.
-    Built on top of fsspec to provide storage backends (local filesystem, S3, GCS, etc.)
+    A key-value store with workflow/job-based isolation.
+    Built on top of fsspec to support many different backends that can be used (local filesystem, S3, GCS, etc.)
     """
 
     def put(

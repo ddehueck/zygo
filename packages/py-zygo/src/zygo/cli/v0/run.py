@@ -30,10 +30,7 @@ def run(
     run_context = JobRunContext(
         workflow_run_id=WorkflowRunId(args.workflow_run_id),
         job_run_id=JobRunId(args.job_run_id),
-        data_ref=Reference(
-            key=args.data_reference_uri,
-            uri=FsspecUri(args.data_reference_uri),
-        ),
+        input=FsspecUri(args.data_reference_uri),
     )
 
     try:
