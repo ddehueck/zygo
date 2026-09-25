@@ -90,9 +90,9 @@ def parse_store_config(raw: str) -> StoreConfig:
     data = _parse_json_object(raw, "--store-config", {"root_uri", "kwargs"})
     root_uri = _parse_dict_value_as_string(data, "root_uri", "--store-config")
     if "://" not in root_uri:
-        raise argparse.ArgumentTypeError("--store-config.root_uri must be a data URI")
+        root_uri = f"file://{root_uri}"
     try:
-        DataUri(root_uri)
+        root_uri = DataUri(root_uri).uri
     except ValueError as error:
         raise argparse.ArgumentTypeError(
             f"--store-config.root_uri is invalid: {error}"

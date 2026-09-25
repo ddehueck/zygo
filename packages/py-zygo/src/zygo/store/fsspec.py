@@ -2,8 +2,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import override
 
-from fsspec import filesystem  # type: ignore
 from fsspec.core import split_protocol  # type: ignore
+from fsspec.registry import get_filesystem_class  # type: ignore
 
 
 @dataclass(frozen=True)
@@ -21,16 +21,19 @@ class FsspecUri:
     def _parse(uri: str) -> str:
         """Validate an fsspec URI and normalize local paths to absolute URIs."""
         protocol, path = split_protocol(uri)
-        filesystem(protocol)  # raise on invalid protocol
+        if protocol is None:
+            raise ValueError("A URI must have an explicit protocol")
+
+        # Backend options may be required, so check the class without instantiating it.
+        get_filesystem_class(protocol)
 
         if not path and protocol not in {"memory"}:
             raise ValueError(f"Empty path for protocol: {protocol}")
 
-        # default to file protocol if none specified and ensure we have absolute paths locally
-        effective_protocol = protocol or "file"
-        if effective_protocol in {"file", "memory"} and not path.startswith("/"):
+        # Ensure relative local paths are absolute.
+        if protocol in {"file", "memory"} and not path.startswith("/"):
             path = str(Path(path).resolve())
-            return f"{effective_protocol}://{path}"
+            return f"{protocol}://{path}"
 
         return uri
 
