@@ -13,6 +13,7 @@ import pytest
 
 if TYPE_CHECKING:
     from http.client import HTTPResponse
+    from pathlib import Path
     from types import TracebackType
 
     from zygo.cli.v0.transport import IpcTransport
@@ -91,6 +92,18 @@ def test_parse_store_config() -> None:
     assert parse_store_config('{"root_uri":"memory://results"}').kwargs == {}
 
 
+@pytest.mark.parametrize("root_uri", ["results", "absolute"])
+def test_parse_store_config_assumes_local_path(
+    root_uri: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    path = str(tmp_path / root_uri) if root_uri == "absolute" else root_uri
+    config = parse_store_config(json.dumps({"root_uri": path}))
+
+    assert config.root_uri == f"file://{tmp_path / root_uri}"
+    assert config.kwargs == {}
+
+
 def test_parse_zygo_store_and_input_uris_without_backend_credentials() -> None:
     config = parse_store_config(
         '{"root_uri":"zygo://runs","kwargs":{"api_host":"https://api.example.com","api_bearer_auth":"secret"}}'
@@ -113,7 +126,8 @@ def test_parse_zygo_store_and_input_uris_without_backend_credentials() -> None:
         ("{", "valid JSON"),
         ("[]", "JSON object"),
         ("{}", "root_uri"),
-        ('{"root_uri":"not-a-uri"}', "root_uri"),
+        ('{"root_uri":""}', "root_uri"),
+        ('{"root_uri":"unknown-protocol://results"}', "root_uri"),
         ('{"root_uri":"file:///tmp","extra":1}', "unknown fields"),
         ('{"root_uri":"file:///tmp","kwargs":[]}', "kwargs"),
         ('{"root_uri":"file:///tmp","kwargs":{"token":1}}', "kwargs"),

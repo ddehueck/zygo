@@ -21,7 +21,8 @@ class FsspecUri:
     def _parse(uri: str) -> str:
         """Validate an fsspec URI and normalize local paths to absolute URIs."""
         protocol, path = split_protocol(uri)
-        protocol = protocol or "file" # always have a protocol set
+        if protocol is None:
+            raise ValueError("A URI must have an explicit protocol")
 
         # Backend options may be required, so check the class without instantiating it.
         get_filesystem_class(protocol)

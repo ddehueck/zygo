@@ -75,23 +75,43 @@ def test_get_data_uri(tmp_path: Path) -> None:
     assert store.get(uri) == b"hello from uri"
 
 
-def test_put_get_round_trip(tmp_path: Path) -> None:
-    """Put then get returns the same bytes: core read/write path and URI building."""
+def test_put_get_round_trip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Put then get returns bytes under the store root, not the working directory."""
+    working_dir = tmp_path / "working"
+    working_dir.mkdir()
+    monkeypatch.chdir(working_dir)
     store = _make_store(str(tmp_path))
     data = b"hello store"
 
     uri = store.put("my-key", data)
     assert isinstance(uri, DataUri)
+    assert uri.path == str(tmp_path / "wr=wf1" / "jr=job1" / "my-key")
     assert store.get(uri) == data
+    assert not (working_dir / "my-key").exists()
 
 
-def test_get_by_uri(tmp_path: Path) -> None:
-    """get() accepts an DataUri and reads directly from it."""
+def test_get_by_uri(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """get() accepts a DataUri and reads directly from it."""
+    working_dir = tmp_path / "working"
+    working_dir.mkdir()
+    monkeypatch.chdir(working_dir)
     store = _make_store(str(tmp_path))
     data = b"ref-based read"
 
     uri = store.put("ref_key", data)
+    assert uri.path == str(tmp_path / "wr=wf1" / "jr=job1" / "ref_key")
     assert store.get(uri) == data
+    assert not (working_dir / "ref_key").exists()
+
+
+def test_put_with_explicit_uri(tmp_path: Path) -> None:
+    store = _make_store(str(tmp_path))
+    target = tmp_path / "explicit"
+
+    uri = store.put(f"file://{target}", b"explicit data")
+
+    assert uri.path == str(target)
+    assert target.read_bytes() == b"explicit data"
 
 
 def test_put_exists_delete_exists(tmp_path: Path) -> None:
