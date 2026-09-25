@@ -115,10 +115,10 @@ class StoreImpl(StoreProtocol):
         # Ensure parent directories for local-ish FS that require it
         parent = posixpath.dirname(uri.path)
         if self._root.is_local():
-            self._fs.makedirs(parent, exist_ok=True)  # type: ignore
+            self._fs.makedirs(parent, exist_ok=True)
 
-        with self._fs.open(uri, "wb") as f:  # type: ignore
-            f.write(data)  # type: ignore
+        with self._fs.open(str(uri), "wb") as f:
+            f.write(data)
 
         # Send an IPC message to the parent process to notify it of the new data URI.
         self._ipc_transport.emit(
@@ -135,19 +135,19 @@ class StoreImpl(StoreProtocol):
             f"Protocol mismatch: expected {self._root.protocol}, got {uri.protocol}"
         )
 
-        with self._fs.open(str(uri), "rb") as f:  # type: ignore
-            return f.read()  # type: ignore
+        with self._fs.open(str(uri), "rb") as f:
+            return f.read()
 
     @override
     def exists(self, key: str, *, scope: Scope = "job") -> bool:
         uri = self._uri_for_key(key, scope)
-        return self._fs.exists(uri)  # type: ignore
+        return self._fs.exists(str(uri))
 
     @override
     def delete(self, key: str, *, scope: Scope = "job") -> None:
         uri = self._uri_for_key(key, scope)
-        if self._fs.exists(uri):  # type: ignore
-            self._fs.rm(uri)  # type: ignore
+        if self._fs.exists(str(uri)):
+            self._fs.rm(str(uri))
 
     @overload
     def open(
@@ -190,11 +190,11 @@ class StoreImpl(StoreProtocol):
         if any(c in mode for c in "wa"):
             parent = posixpath.dirname(str(uri))
             if self._root.is_local():
-                self._fs.makedirs(parent, exist_ok=True)  # type: ignore
+                self._fs.makedirs(parent, exist_ok=True)
 
         context = cast(
             "AbstractContextManager[TextIO | BinaryIO]",
-            self._fs.open(str(uri), mode),  # type: ignore
+            self._fs.open(str(uri), mode),
         )
         return _StoreOpenContext(context, uri)
 

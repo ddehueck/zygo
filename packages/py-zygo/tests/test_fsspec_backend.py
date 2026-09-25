@@ -9,6 +9,15 @@ from urllib.request import Request
 import pytest
 
 from zygo._internal.cloud import fsspec_backend
+from zygo.cli.v0.types import IpcMessage
+from zygo.store import DataUri
+from zygo.store._internal.impl import StoreImpl
+from zygo.types import JobRunContext, JobRunId, WorkflowRunId
+
+
+class _NoopTransport:
+    def emit(self, message: IpcMessage) -> None:
+        pass
 
 
 @pytest.fixture
@@ -61,6 +70,38 @@ def test_read_streams_from_presigned_url(
             "Bearer test-secret",
         ),
         ("GET", "https://storage.example/object", None, None),
+    ]
+
+
+def test_store_put_with_zygo_backend(
+    transfers: list[tuple[str, str, bytes | None, str | None]],
+) -> None:
+    store = StoreImpl(
+        context=JobRunContext(
+            workflow_run_id=WorkflowRunId("wf1"),
+            job_run_id=JobRunId("job1"),
+            input=DataUri("zygo://runs/input"),
+        ),
+        root=DataUri("zygo://runs"),
+        ipc_transport=_NoopTransport(),
+        kwargs={
+            "api_host": "https://api.zygo.cloud",
+            "api_bearer_auth": "test-secret",
+            "skip_instance_cache": True,
+        },
+    )
+
+    uri = store.put("output.txt", b"output")
+
+    assert str(uri) == "zygo://runs/wr=wf1/jr=job1/output.txt"
+    assert transfers == [
+        (
+            "POST",
+            "https://api.zygo.cloud/v1/store/runs%2Fwr%3Dwf1%2Fjr%3Djob1%2Foutput.txt/presign",
+            b'{"method": "PUT"}',
+            "Bearer test-secret",
+        ),
+        ("PUT", "https://storage.example/object", b"output", None),
     ]
 
 
