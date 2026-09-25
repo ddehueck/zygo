@@ -34,6 +34,20 @@ def test_try_parse_and_is_valid() -> None:
     assert DataUri.is_valid("memory:///bucket/example.txt")
 
 
+def test_zygo_uri_does_not_require_backend_credentials() -> None:
+    uri = DataUri("zygo://runs/input.json")
+
+    assert uri.protocol == "zygo"
+    assert uri.path == "runs/input.json"
+    assert DataUri.is_valid("zygo://runs/input.json")
+
+
+@pytest.mark.parametrize("uri", ["zygo://", "file://"])
+def test_empty_path_is_invalid(uri: str) -> None:
+    with pytest.raises(ValueError, match="Empty path"):
+        DataUri(uri)
+
+
 def test_invalid_uri_raises_and_try_parse_returns_none() -> None:
     with pytest.raises(ValueError, match="Invalid fsspec URI"):
         DataUri("unsupported-protocol://bucket/file")

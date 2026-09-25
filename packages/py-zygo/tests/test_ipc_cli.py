@@ -29,6 +29,7 @@ from zygo.cli.v0.types import (
     TagInserted,
     serialize_ipc_message,
 )
+from zygo.store import DataUri
 
 
 class _SuccessfulResponse:
@@ -88,6 +89,22 @@ def test_parse_store_config() -> None:
     assert config.kwargs == {"auto_mkdir": "true"}
 
     assert parse_store_config('{"root_uri":"memory://results"}').kwargs == {}
+
+
+def test_parse_zygo_store_and_input_uris_without_backend_credentials() -> None:
+    config = parse_store_config(
+        '{"root_uri":"zygo://runs","kwargs":{"api_host":"https://api.example.com","api_bearer_auth":"secret"}}'
+    )
+    args = parse_job_args(
+        '{"job_id":"job","data_reference_uri":"zygo://runs/input.json","workflow_run_id":"wr-1","job_run_id":"jr-1"}'
+    )
+
+    assert DataUri(config.root_uri).protocol == "zygo"
+    assert config.kwargs == {
+        "api_host": "https://api.example.com",
+        "api_bearer_auth": "secret",
+    }
+    assert DataUri(args.data_reference_uri).path == "runs/input.json"
 
 
 @pytest.mark.parametrize(
