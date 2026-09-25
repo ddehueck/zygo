@@ -1,17 +1,25 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, cast
+from typing import (
+    IO,
+    TYPE_CHECKING,
+    BinaryIO,
+    Literal,
+    Protocol,
+    TextIO,
+    cast,
+    overload,
+)
 
 import fsspec  # type: ignore
 
 if TYPE_CHECKING:
-    from fsspec.spec import AbstractFileSystem  # type: ignore
-
     from zygo.store._internal.types import PartitionKey
     from zygo.store.types import DataUri
 
 __all__ = [
+    "StoreFileSystem",
     "build_fs",
     "contains_any_partition_key",
     "normalize_key",
@@ -37,9 +45,23 @@ def normalize_key(key: str) -> str:
     return key.strip("-.")
 
 
+class StoreFileSystem(Protocol):
+    @overload
+    def open(self, path: str, mode: Literal["wb", "rb"]) -> BinaryIO: ...
+
+    @overload
+    def open(self, path: str, mode: str) -> IO[bytes] | TextIO: ...
+
+    def exists(self, path: str) -> bool: ...
+
+    def rm(self, path: str) -> None: ...
+
+    def makedirs(self, path: str, *, exist_ok: bool = False) -> None: ...
+
+
 def build_fs(
     root: DataUri,
     kwargs: dict[str, str | int | float | bool | None] | None = None,
-) -> AbstractFileSystem:
+) -> StoreFileSystem:
     fs = fsspec.filesystem(root.protocol, **(kwargs or {}))  # type: ignore
-    return cast("AbstractFileSystem", fs)
+    return cast("StoreFileSystem", fs)
