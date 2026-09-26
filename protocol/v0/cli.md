@@ -58,9 +58,11 @@ python -m zygo.cli.v0 run myproject.main:workflow \
   --store-config '{"root_uri":"file:///tmp/my-results","kwargs":{}}'
 ```
 
-When `--store-config` is omitted, the CLI looks for `pyproject.toml` from the imported workflow module's directory up to the working directory, inclusive. Without a configured store root, the store defaults to a `zygo` directory beside the module. Relative file URIs supplied as overrides are resolved against the working directory. Unknown fields and non-string `kwargs` values are rejected before the job starts. Like other command-line arguments, store credentials in `kwargs` may be visible in process listings.
+When `--store-config` is omitted, the CLI looks for `pyproject.toml` from the imported workflow module's directory up to the working directory, inclusive. Without a configured store root, the store defaults to a `zygo` directory beside the module.
 
 A successful invocation exits with status 0 while uncaught/transport errors result in a nonzero exit. The process exit status indicates job completion while emitted messages indicate what happened during execution.
+
+The client emits `job_started` when the run begins, then either `job_succeeded` on success or `job_failed` (with an `error` string) before a nonzero exit. Orchestrators should treat these IPC messages as the source of job lifecycle events rather than inferring them solely from process start/exit.
 
 ### IPC transports
 
@@ -69,7 +71,9 @@ A successful invocation exits with status 0 while uncaught/transport errors resu
 Without `--http-config`, each publication is a flushed UTF-8 stdout line of the form `ZYGO_IPC=JSON\n`, where `JSON` matches `IpcMessage` in [`schema.json`](schema.json). For example:
 
 ```text
+ZYGO_IPC={"type":"job_started","job_run_id":"jr-1"}
 ZYGO_IPC={"type":"channel_item_inserted","channel_id":"output","data_reference":"file:///result.txt"}
+ZYGO_IPC={"type":"job_succeeded","job_run_id":"jr-1"}
 ```
 
 Workflow code may of course write ordinary output.

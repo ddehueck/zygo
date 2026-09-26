@@ -26,6 +26,7 @@ from zygo.cli.v0.transport import HttpTransport, StdioTransport
 from zygo.cli.v0.types import (
     ChannelItemInserted,
     DataReferenceCreated,
+    JobFailed,
     JobRunArgs,
     TagInserted,
     serialize_ipc_message,
@@ -73,6 +74,10 @@ def test_generated_protocol_models_keep_wire_format() -> None:
         (
             TagInserted("tag_inserted", "ready"),
             {"type": "tag_inserted", "value": "ready", "data_reference": None},
+        ),
+        (
+            JobFailed("job_failed", "jr-1", "boom"),
+            {"type": "job_failed", "job_run_id": "jr-1", "error": "boom"},
         ),
     ]
     for message, expected in messages:

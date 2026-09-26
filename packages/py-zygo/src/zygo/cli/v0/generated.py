@@ -74,7 +74,26 @@ class TagInserted:
     data_reference: str | None = None
 
 
-type IpcMessage = DataReferenceCreated | ChannelItemInserted | TagInserted
+@dataclass
+class JobStarted:
+    type: Literal["job_started"]
+    job_run_id: str
+
+
+@dataclass
+class JobSucceeded:
+    type: Literal["job_succeeded"]
+    job_run_id: str
+
+
+@dataclass
+class JobFailed:
+    type: Literal["job_failed"]
+    job_run_id: str
+    error: str
+
+
+type IpcMessage = DataReferenceCreated | ChannelItemInserted | TagInserted | JobStarted | JobSucceeded | JobFailed
 
 
 @dataclass
@@ -85,11 +104,4 @@ class HttpIPCMessage:
     message: IpcMessage
 
 
-type ZygoProviderProtocolV0Payload = (
-    WorkflowMetadata
-    | JobRunArgs
-    | StoreConfig
-    | HttpConfig
-    | IpcMessage
-    | HttpIPCMessage
-)
+type ZygoProviderProtocolV0Payload = WorkflowMetadata | JobRunArgs | StoreConfig | HttpConfig | IpcMessage | HttpIPCMessage

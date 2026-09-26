@@ -8,7 +8,8 @@ use crate::api::v0::interface::{
 };
 use crate::models::{
     self, Channel, ChannelId, ChannelItemInsertedData, ContentHash, DataReferenceInsertedData,
-    Entrypoint, EventKind, FileExtension, Job, JobId, TagInsertedData, WorkflowId, WorkflowSchema,
+    Entrypoint, EventKind, FileExtension, Job, JobFailedData, JobId, JobStartedData,
+    JobSucceededData, TagInsertedData, WorkflowId, WorkflowSchema,
 };
 
 type PythonExecPath = String;
@@ -95,10 +96,10 @@ impl PythonCli {
         command
     }
 
-    pub fn parse_run_stdout(line: &str) -> Result<Option<EventKind>> {
+    pub fn parse_run_stdout(line: &str) -> Result<Option<StdoutIPCMessage>> {
         if let Some(payload) = line.strip_prefix(STDOUT_IPC_PREFIX) {
             let message: StdoutIPCMessage = serde_json::from_str(payload)?;
-            return Ok(Some(EventKind::try_from(message)?));
+            return Ok(Some(message));
         }
         Ok(None)
     }
@@ -190,25 +191,70 @@ impl PythonCli {
     }
 }
 
+impl StdoutIPCMessage {
+    pub fn into_event_kind(self) -> anyhow::Result<EventKind> {
+        Ok(match self {
+            Self::DataReferenceCreated { data_reference } => {
+                EventKind::DataReferenceInserted(DataReferenceInsertedData {
+                    uri: models::DataReferenceUri::try_from(data_reference)?,
+                })
+            }
+            Self::ChannelItemInserted {
+                channel_id,
+                data_reference,
+            } => EventKind::ChannelItemInserted(ChannelItemInsertedData {
+                // TODO: This should be just a from?
+                channel_id: models::ChannelId::try_from(channel_id)?,
+                item: models::DataReferenceUri::try_from(data_reference)?,
+            }),
+            Self::TagInserted {
+                value,
+                data_reference,
+            } => EventKind::TagInserted(TagInsertedData {
+                value,
+                data_reference: data_reference
+                    .map(models::DataReferenceUri::try_from)
+                    .transpose()?,
+            }),
+            Self::JobStarted { job_run_id } => EventKind::JobStarted(JobStartedData {
+                job_run_id: models::JobRunId::try_from(job_run_id)?,
+            }),
+            Self::JobSucceeded { job_run_id } => EventKind::JobSucceeded(JobSucceededData {
+                job_run_id: models::JobRunId::try_from(job_run_id)?,
+            }),
+            Self::JobFailed { job_run_id, error } => EventKind::JobFailed(JobFailedData {
+                job_run_id: models::JobRunId::try_from(job_run_id)?,
+                error,
+            }),
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::PythonCli;
     use crate::models::EventKind;
 
+    fn parse_event(line: &str) -> EventKind {
+        PythonCli::parse_run_stdout(line)
+            .unwrap()
+            .unwrap()
+            .into_event_kind()
+            .unwrap()
+    }
+
     #[test]
     fn parses_uri_only_references() {
-        let event = PythonCli::parse_run_stdout(
+        let event = parse_event(
             r#"ZYGO_IPC={"type":"data_reference_created","data_reference":"file:///input"}"#,
-        )
-        .unwrap()
-        .unwrap();
+        );
         assert!(
             matches!(event, EventKind::DataReferenceInserted(data) if data.uri.as_ref() == "file:///input")
         );
 
-        let event = PythonCli::parse_run_stdout(
+        let event = parse_event(
             r#"ZYGO_IPC={"type":"channel_item_inserted","channel_id":"input","data_reference":"file:///input"}"#,
-        ).unwrap().unwrap();
+        );
         assert!(
             matches!(event, EventKind::ChannelItemInserted(data) if data.item.as_ref() == "file:///input")
         );
@@ -219,9 +265,7 @@ mod tests {
                 "value": "example",
                 "data_reference": reference,
             });
-            let event = PythonCli::parse_run_stdout(&format!("ZYGO_IPC={payload}"))
-                .unwrap()
-                .unwrap();
+            let event = parse_event(&format!("ZYGO_IPC={payload}"));
             assert!(
                 matches!(event, EventKind::TagInserted(data) if data.data_reference.as_ref().map(AsRef::as_ref) == reference)
             );
@@ -241,38 +285,10 @@ mod tests {
                 "value": "example",
                 "data_reference": "   ",
             });
-            assert!(PythonCli::parse_run_stdout(&format!("ZYGO_IPC={payload}")).is_err());
+            let message = PythonCli::parse_run_stdout(&format!("ZYGO_IPC={payload}"))
+                .unwrap()
+                .unwrap();
+            assert!(message.into_event_kind().is_err());
         }
-    }
-}
-
-impl TryFrom<StdoutIPCMessage> for EventKind {
-    type Error = anyhow::Error;
-
-    fn try_from(message: StdoutIPCMessage) -> std::result::Result<Self, Self::Error> {
-        Ok(match message {
-            StdoutIPCMessage::DataReferenceCreated { data_reference } => {
-                Self::DataReferenceInserted(DataReferenceInsertedData {
-                    uri: models::DataReferenceUri::try_from(data_reference)?,
-                })
-            }
-            StdoutIPCMessage::ChannelItemInserted {
-                channel_id,
-                data_reference,
-            } => Self::ChannelItemInserted(ChannelItemInsertedData {
-                // TODO: This should be just a from?
-                channel_id: models::ChannelId::try_from(channel_id)?,
-                item: models::DataReferenceUri::try_from(data_reference)?,
-            }),
-            StdoutIPCMessage::TagInserted {
-                value,
-                data_reference,
-            } => Self::TagInserted(TagInsertedData {
-                value,
-                data_reference: data_reference
-                    .map(models::DataReferenceUri::try_from)
-                    .transpose()?,
-            }),
-        })
     }
 }

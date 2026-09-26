@@ -68,4 +68,14 @@ pub enum StdoutIPCMessage {
         value: String,
         data_reference: Option<String>,
     },
+    JobStarted {
+        job_run_id: String,
+    },
+    JobSucceeded {
+        job_run_id: String,
+    },
+    JobFailed {
+        job_run_id: String,
+        error: String,
+    },
 }

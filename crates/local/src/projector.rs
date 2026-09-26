@@ -83,26 +83,15 @@ impl LocalProjector {
             }
             EventKind::JobStarted(data) => {
                 let job_run_id = data.job_run_id.to_string();
-                let input_id = self
-                    .repos
-                    .data_references
-                    .get_id_by_uri(&workflow_run_id, data.input.as_ref())
-                    .await?
-                    .ok_or_else(|| {
-                        anyhow::anyhow!(
-                            "input data reference with URI {:?} not found for workflow run {}",
-                            data.input,
-                            workflow_run_id
-                        )
-                    })?;
+                let existing = self.require_job_run(&workflow_run_id, &job_run_id).await?;
                 self.job_started_at.insert(job_run_id.clone(), timestamp);
                 self.repos
                     .job_runs
                     .record_started(
                         &workflow_run_id,
                         &job_run_id,
-                        &data.job_id.to_string(),
-                        input_id,
+                        &existing.job_id,
+                        existing.input_id,
                     )
                     .await?;
             }
@@ -110,7 +99,6 @@ impl LocalProjector {
                 self.record_job_completed(
                     &workflow_run_id,
                     &data.job_run_id.to_string(),
-                    &data.job_id.to_string(),
                     "succeeded",
                     timestamp,
                     None,
@@ -121,7 +109,6 @@ impl LocalProjector {
                 self.record_job_completed(
                     &workflow_run_id,
                     &data.job_run_id.to_string(),
-                    &data.job_id.to_string(),
                     "failed",
                     timestamp,
                     Some(&data.error),
@@ -161,15 +148,32 @@ impl LocalProjector {
         Ok(())
     }
 
+    async fn require_job_run(
+        &self,
+        workflow_run_id: &str,
+        job_run_id: &str,
+    ) -> anyhow::Result<crate::JobRunModel> {
+        self.repos
+            .job_runs
+            .get_by_public_id(workflow_run_id, job_run_id)
+            .await?
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "job run {job_run_id} not found for workflow run {workflow_run_id}; \
+                     expected JobEnqueued to project the run first"
+                )
+            })
+    }
+
     async fn record_job_completed(
         &mut self,
         workflow_run_id: &str,
         job_run_id: &str,
-        job_id: &str,
         status: &str,
         timestamp: SystemTime,
         error_message: Option<&str>,
     ) -> anyhow::Result<()> {
+        let existing = self.require_job_run(workflow_run_id, job_run_id).await?;
         let duration_ms = self
             .job_started_at
             .get(job_run_id)
@@ -181,7 +185,7 @@ impl LocalProjector {
             .record_completed(
                 workflow_run_id,
                 job_run_id,
-                job_id,
+                &existing.job_id,
                 status,
                 duration_ms,
                 error_message,
