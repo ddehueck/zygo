@@ -390,11 +390,13 @@ def test_http_transport_retries_same_envelope_and_uses_timeout(
         "id": first["id"],
         "workflow_run_id": "wr-1",
         "job_run_id": "jr-1",
-        "message": {
-            "type": "channel_item_inserted",
-            "channel_id": "out",
-            "data_reference": "file:///one",
-        },
+        "messages": [
+            {
+                "type": "channel_item_inserted",
+                "channel_id": "out",
+                "data_reference": "file:///one",
+            }
+        ],
     }
     assert isinstance(first["id"], str) and first["id"]
 

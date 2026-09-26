@@ -126,13 +126,12 @@ def _execute_job(
         )
         data_uris.append(uri)
 
-    # Then send each output URI to the output channel via IPC.
-    # todo: atomic batch?
-    for uri in data_uris:
-        ipc_transport.emit(
-            ChannelItemInserted(
-                type="channel_item_inserted",
-                channel_id=job_entry.output_channel.id,
-                data_reference=str(uri),
-            )
+    # Then send output URIs to the output channel via IPC.
+    ipc_transport.emit([
+        ChannelItemInserted(
+            type="channel_item_inserted",
+            channel_id=job_entry.output_channel.id,
+            data_reference=str(uri),
         )
+        for uri in data_uris
+    ])

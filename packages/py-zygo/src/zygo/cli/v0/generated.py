@@ -93,7 +93,14 @@ class JobFailed:
     error: str
 
 
-type IpcMessage = DataReferenceCreated | ChannelItemInserted | TagInserted | JobStarted | JobSucceeded | JobFailed
+type IpcMessage = (
+    DataReferenceCreated
+    | ChannelItemInserted
+    | TagInserted
+    | JobStarted
+    | JobSucceeded
+    | JobFailed
+)
 
 
 @dataclass
@@ -101,7 +108,14 @@ class HttpIPCMessage:
     id: str
     workflow_run_id: str
     job_run_id: str
-    message: IpcMessage
+    messages: list[IpcMessage]
 
 
-type ZygoProviderProtocolV0Payload = WorkflowMetadata | JobRunArgs | StoreConfig | HttpConfig | IpcMessage | HttpIPCMessage
+type ZygoProviderProtocolV0Payload = (
+    WorkflowMetadata
+    | JobRunArgs
+    | StoreConfig
+    | HttpConfig
+    | IpcMessage
+    | HttpIPCMessage
+)

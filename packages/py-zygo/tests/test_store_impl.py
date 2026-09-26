@@ -11,7 +11,7 @@ from zygo.store._internal.impl import StoreImpl
 from zygo.types import JobRunContext, JobRunId, WorkflowRunId
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
     from pathlib import Path
 
     from fsspec.spec import AbstractFileSystem  # type: ignore
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 
 class _NoopTransport:
-    def emit(self, message: IpcMessage) -> None:
+    def emit(self, messages: IpcMessage | Sequence[IpcMessage]) -> None:
         pass
 
 

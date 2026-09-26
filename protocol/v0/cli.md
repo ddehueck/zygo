@@ -83,20 +83,22 @@ NB: Setting `PYTHONUNBUFFERED=1` can help ordinary workflow output appear prompt
 
 #### HTTP messages
 
-With `--http-config JSON`, the CLI sends **each** publication as a separate UTF-8 JSON `POST` to the configured `url`, with `Content-Type: application/json`. 
+With `--http-config JSON`, the CLI sends each emit call as a UTF-8 JSON `POST` to the configured `url`, with `Content-Type: application/json`. One POST may include one or more IPC messages.
 
-The body is `HttpIPCMessage` in [`schema.json`](schema.json), wrapping the stdout `IpcMessage` without its prefix:
+The body is `HttpIPCMessage` in [`schema.json`](schema.json), wrapping a batch of stdout `IpcMessage` values without their prefixes:
 
 ```json
 {
   "id": "unique-message-id",
   "workflow_run_id": "wr-1",
   "job_run_id": "jr-1",
-  "message": {
-    "type": "channel_item_inserted",
-    "channel_id": "output",
-    "data_reference": "file:///result.txt"
-  }
+  "messages": [
+    {
+      "type": "channel_item_inserted",
+      "channel_id": "output",
+      "data_reference": "file:///result.txt"
+    }
+  ]
 }
 ```
 

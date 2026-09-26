@@ -157,7 +157,7 @@ class _ZygoApiClient:
         self._bearer_auth = bearer_auth
 
     def _request(self, method: str, route: str, *, data: bytes | None = None) -> bytes:
-        request = Request(  # noqa: S310
+        request = Request(  # ruff: ignore[suspicious-url-open-usage]
             f"{self._host}/v1/{route}",
             data=data,
             headers={
@@ -167,7 +167,7 @@ class _ZygoApiClient:
             method=method,
         )
         try:
-            with cast("IO[bytes]", urlopen(request, timeout=30)) as response:  # noqa: S310
+            with cast("IO[bytes]", urlopen(request, timeout=30)) as response:  # ruff: ignore[suspicious-url-open-usage]
                 return response.read()
         except HTTPError as error:
             if error.code == _NOT_FOUND:
@@ -210,8 +210,8 @@ class _PresignedUrlClient:
         }
         if parsed.scheme != "https" and not is_local_http:
             raise ValueError("Presigned transfer URL must use HTTPS or loopback HTTP")
-        request = Request(url, data=data, method=method)  # noqa: S310
-        return cast("IO[bytes]", urlopen(request, timeout=120))  # noqa: S310
+        request = Request(url, data=data, method=method)  # ruff: ignore[suspicious-url-open-usage]
+        return cast("IO[bytes]", urlopen(request, timeout=120))  # ruff: ignore[suspicious-url-open-usage]
 
     def get(self, url: str) -> IO[bytes]:
         return self._request(url, "GET")

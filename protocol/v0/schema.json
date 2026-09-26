@@ -91,19 +91,23 @@
       "additionalProperties": false
     },
     "HttpIPCMessage": {
-      "description": "One HTTP publication. The id is generated once per publication and reused unchanged on retries.",
+      "description": "One HTTP publication of one or more IPC messages. The id is generated once per publication and reused unchanged on retries.",
       "type": "object",
       "properties": {
         "id": { "type": "string", "description": "Stable idempotency key for this publication." },
         "workflow_run_id": { "type": "string" },
         "job_run_id": { "type": "string" },
-        "message": { "$ref": "#/definitions/IpcMessage" }
+        "messages": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/IpcMessage" },
+          "minItems": 1
+        }
       },
-      "required": ["id", "workflow_run_id", "job_run_id", "message"],
+      "required": ["id", "workflow_run_id", "job_run_id", "messages"],
       "additionalProperties": false
     },
     "IpcMessage": {
-      "description": "One job publication, emitted as a prefixed stdout line or nested inside an HTTP message. The Python client emits job_started, job_succeeded, and job_failed; the orchestrator must not assume the engine alone will produce these.",
+      "description": "One job publication, emitted as a prefixed stdout line or nested inside an HTTP message batch. The Python client emits job_started, job_succeeded, and job_failed; the orchestrator must not assume the engine alone will produce these.",
       "oneOf": [
         { "$ref": "#/definitions/DataReferenceCreated" },
         { "$ref": "#/definitions/ChannelItemInserted" },
