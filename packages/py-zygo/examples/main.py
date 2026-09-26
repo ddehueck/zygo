@@ -17,7 +17,7 @@ def square_values(input: int, *, ctx: JobContext) -> int:
 
     print(f"[reads_to_qc_reports] GOING TO SQUARE: {input}")  # ruff: ignore[print]
 
-    rand_wait = random.randint(1, 15)
+    rand_wait = random.randint(1, 15)  # ruff: ignore[suspicious-non-cryptographic-random-usage]
     if rand_wait % 2 == 0:
         tags.add("even")
     else:
@@ -34,7 +34,7 @@ def square_values(input: int, *, ctx: JobContext) -> int:
 def last_step(squared_value: int) -> str | None:
     print(f"[last_step] Received: {squared_value}")  # ruff: ignore[print]
 
-    rand_wait = random.randint(1, 15)
+    rand_wait = random.randint(1, 15)  # ruff: ignore[suspicious-non-cryptographic-random-usage]
     for i in range(rand_wait):
         print(f"[last_step] Waiting: {i + 1}/{rand_wait}")  # ruff: ignore[print]
         time.sleep(1)

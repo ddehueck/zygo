@@ -129,37 +129,57 @@ def _validate_value(
     origin = get_origin(expected)
     args = cast("tuple[object, ...]", get_args(expected))
     if origin is list:
-        if not isinstance(value, list):
-            _raise_type_error(path, expected, value)
-        item_type = args[0]
-        for index, item in enumerate(cast("list[object]", value)):
-            _validate_value(
-                item,
-                item_type,
-                path=f"{path}[{index}]",
-                decoding=decoding,
-            )
+        _validate_list_value(value, expected, args, path=path, decoding=decoding)
         return
 
     if origin is dict:
-        if not isinstance(value, dict):
-            _raise_type_error(path, expected, value)
-        item_type = args[1]
-        for key, item in cast("dict[object, object]", value).items():
-            if not isinstance(key, str):
-                raise TypeError(
-                    f"{path} expected string keys, got {type(key).__name__}"
-                )
-            _validate_value(
-                item,
-                item_type,
-                path=f"{path}.{key}",
-                decoding=decoding,
-            )
+        _validate_dict_value(value, expected, args, path=path, decoding=decoding)
         return
 
     action = "decode" if decoding else "encode"
     raise TypeError(f"Unsupported JSON type while attempting to {action}: {expected!r}")
+
+
+def _validate_list_value(
+    value: object,
+    expected: object,
+    args: tuple[object, ...],
+    *,
+    path: str,
+    decoding: bool,
+) -> None:
+    if not isinstance(value, list):
+        _raise_type_error(path, expected, value)
+    item_type = args[0]
+    for index, item in enumerate(cast("list[object]", value)):
+        _validate_value(
+            item,
+            item_type,
+            path=f"{path}[{index}]",
+            decoding=decoding,
+        )
+
+
+def _validate_dict_value(
+    value: object,
+    expected: object,
+    args: tuple[object, ...],
+    *,
+    path: str,
+    decoding: bool,
+) -> None:
+    if not isinstance(value, dict):
+        _raise_type_error(path, expected, value)
+    item_type = args[1]
+    for key, item in cast("dict[object, object]", value).items():
+        if not isinstance(key, str):
+            raise TypeError(f"{path} expected string keys, got {type(key).__name__}")
+        _validate_value(
+            item,
+            item_type,
+            path=f"{path}.{key}",
+            decoding=decoding,
+        )
 
 
 def _validate_json_object(value: object, *, path: str) -> None:

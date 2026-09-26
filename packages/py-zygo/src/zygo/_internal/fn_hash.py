@@ -211,29 +211,31 @@ def _get_object_source_hash_bytes(
     The hash is based on the AST, ignoring comments and formatting.
     """
     try:
-        if isinstance(obj, FunctionType):
-            # inspect.unwrap returns Any in the stdlib
-            unwrapped = inspect.unwrap(obj)  # pyright: ignore[reportAny]
-            source = textwrap.dedent(inspect.getsource(unwrapped))  # pyright: ignore[reportAny]
-            file_path = Path(inspect.getfile(unwrapped))  # pyright: ignore[reportAny]
-        else:
-            source = textwrap.dedent(inspect.getsource(obj))
-            file_path = Path(inspect.getfile(obj))
-
-        # Convert .pyc to .py to ensure stable hashing
-        file_path = _pyc_to_py(file_path)
-        file_path = _norm(file_path)
-
-        # Only include .py files
-        if file_path.suffix != ".py":
-            return None, None
-
-        if not _is_under(file_path, repo_root):
-            return None, None
-
-        return file_path, _source_to_ast_hash_bytes(source)
+        return _hash_local_object_source(obj, repo_root)
     except (TypeError, OSError, SyntaxError):
         return None, None
+
+
+def _hash_local_object_source(
+    obj: FunctionType | type, repo_root: Path
+) -> tuple[Path | None, bytes | None]:
+    if isinstance(obj, FunctionType):
+        # inspect.unwrap returns Any in the stdlib
+        unwrapped = inspect.unwrap(obj)  # pyright: ignore[reportAny]
+        source = textwrap.dedent(inspect.getsource(unwrapped))  # pyright: ignore[reportAny]
+        file_path = Path(inspect.getfile(unwrapped))  # pyright: ignore[reportAny]
+    else:
+        source = textwrap.dedent(inspect.getsource(obj))
+        file_path = Path(inspect.getfile(obj))
+
+    # Convert .pyc to .py to ensure stable hashing
+    file_path = _norm(_pyc_to_py(file_path))
+
+    # Only include local .py files
+    if file_path.suffix != ".py" or not _is_under(file_path, repo_root):
+        return None, None
+
+    return file_path, _source_to_ast_hash_bytes(source)
 
 
 def _resolve_name_value(

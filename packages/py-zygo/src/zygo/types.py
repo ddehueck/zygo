@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import NewType
+from typing import TYPE_CHECKING, NewType
 
-from zygo.store import DataUri
+if TYPE_CHECKING:
+    from zygo.store import DataUri
 
 WorkflowId = NewType("WorkflowId", str)
 WorkflowRunId = NewType("WorkflowRunId", str)
