@@ -33,20 +33,16 @@ pub struct JobEnqueuedData {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JobStartedData {
-    pub job_id: JobId,
     pub job_run_id: JobRunId,
-    pub input: DataReferenceUri,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JobSucceededData {
-    pub job_id: JobId,
     pub job_run_id: JobRunId,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JobFailedData {
-    pub job_id: JobId,
     pub job_run_id: JobRunId,
     pub error: String,
 }

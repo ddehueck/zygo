@@ -1,6 +1,7 @@
 # fsspec's untyped open signature obscures the binary mode in strict checking.
 # pyright: reportUnknownMemberType=false
 
+from collections.abc import Sequence
 from io import BytesIO
 import json
 from typing import IO, cast
@@ -16,7 +17,7 @@ from zygo.types import JobRunContext, JobRunId, WorkflowRunId
 
 
 class _NoopTransport:
-    def emit(self, message: IpcMessage) -> None:
+    def emit(self, messages: IpcMessage | Sequence[IpcMessage]) -> None:
         pass
 
 

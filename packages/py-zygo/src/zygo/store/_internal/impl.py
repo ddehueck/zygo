@@ -60,7 +60,8 @@ class StoreImpl(StoreProtocol):
         self._ipc_transport = ipc_transport
         self._fs = build_fs(root, kwargs)
 
-    def _is_uri(self, value: str) -> bool:
+    @staticmethod
+    def _is_uri(value: str) -> bool:
         """
         Returns True if the value is a URI.
         Useful for allowing URIs to be free passed around.
@@ -131,9 +132,10 @@ class StoreImpl(StoreProtocol):
     def get(self, key: str | DataUri, *, scope: Scope = "job") -> bytes:
         uri = key if isinstance(key, DataUri) else self._uri_for_key(key, scope)
 
-        assert uri.protocol == self._root.protocol, (
-            f"Protocol mismatch: expected {self._root.protocol}, got {uri.protocol}"
-        )
+        if uri.protocol != self._root.protocol:
+            raise ValueError(
+                f"Protocol mismatch: expected {self._root.protocol}, got {uri.protocol}"
+            )
 
         with self._fs.open(str(uri), "rb") as f:
             return f.read()

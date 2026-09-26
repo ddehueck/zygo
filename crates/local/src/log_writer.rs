@@ -1,4 +1,4 @@
-use crate::models::{JobRunSource, WorkflowRunId};
+use crate::models::{JobRunId, WorkflowRunId};
 
 use crate::LogsRepository;
 
@@ -6,7 +6,7 @@ impl LogsRepository {
     pub async fn write_all(
         &self,
         workflow_run_id: &WorkflowRunId,
-        source: &JobRunSource,
+        job_run_id: &JobRunId,
         bytes: &[u8],
     ) -> std::io::Result<()> {
         // Preserve delimiters and replace invalid UTF-8 for the searchable TEXT column.
@@ -14,7 +14,7 @@ impl LogsRepository {
         let lines = content.split_inclusive('\n').collect::<Vec<_>>();
         self.append(
             &workflow_run_id.to_string(),
-            &source.job_run_id.to_string(),
+            &job_run_id.to_string(),
             &lines,
         )
         .await

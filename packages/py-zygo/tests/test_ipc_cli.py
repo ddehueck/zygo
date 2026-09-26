@@ -26,6 +26,7 @@ from zygo.cli.v0.transport import HttpTransport, StdioTransport
 from zygo.cli.v0.types import (
     ChannelItemInserted,
     DataReferenceCreated,
+    JobFailed,
     JobRunArgs,
     TagInserted,
     serialize_ipc_message,
@@ -73,6 +74,10 @@ def test_generated_protocol_models_keep_wire_format() -> None:
         (
             TagInserted("tag_inserted", "ready"),
             {"type": "tag_inserted", "value": "ready", "data_reference": None},
+        ),
+        (
+            JobFailed("job_failed", "jr-1", "boom"),
+            {"type": "job_failed", "job_run_id": "jr-1", "error": "boom"},
         ),
     ]
     for message, expected in messages:
@@ -385,11 +390,13 @@ def test_http_transport_retries_same_envelope_and_uses_timeout(
         "id": first["id"],
         "workflow_run_id": "wr-1",
         "job_run_id": "jr-1",
-        "message": {
-            "type": "channel_item_inserted",
-            "channel_id": "out",
-            "data_reference": "file:///one",
-        },
+        "messages": [
+            {
+                "type": "channel_item_inserted",
+                "channel_id": "out",
+                "data_reference": "file:///one",
+            }
+        ],
     }
     assert isinstance(first["id"], str) and first["id"]
 

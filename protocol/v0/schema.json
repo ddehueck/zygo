@@ -91,23 +91,30 @@
       "additionalProperties": false
     },
     "HttpIPCMessage": {
-      "description": "One HTTP publication. The id is generated once per publication and reused unchanged on retries.",
+      "description": "One HTTP publication of one or more IPC messages. The id is generated once per publication and reused unchanged on retries.",
       "type": "object",
       "properties": {
         "id": { "type": "string", "description": "Stable idempotency key for this publication." },
         "workflow_run_id": { "type": "string" },
         "job_run_id": { "type": "string" },
-        "message": { "$ref": "#/definitions/IpcMessage" }
+        "messages": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/IpcMessage" },
+          "minItems": 1
+        }
       },
-      "required": ["id", "workflow_run_id", "job_run_id", "message"],
+      "required": ["id", "workflow_run_id", "job_run_id", "messages"],
       "additionalProperties": false
     },
     "IpcMessage": {
-      "description": "One job publication, emitted as a prefixed stdout line or nested inside an HTTP message.",
+      "description": "One job publication, emitted as a prefixed stdout line or nested inside an HTTP message batch. The Python client emits job_started, job_succeeded, and job_failed; the orchestrator must not assume the engine alone will produce these.",
       "oneOf": [
         { "$ref": "#/definitions/DataReferenceCreated" },
         { "$ref": "#/definitions/ChannelItemInserted" },
-        { "$ref": "#/definitions/TagInserted" }
+        { "$ref": "#/definitions/TagInserted" },
+        { "$ref": "#/definitions/JobStarted" },
+        { "$ref": "#/definitions/JobSucceeded" },
+        { "$ref": "#/definitions/JobFailed" }
       ]
     },
     "DataReferenceCreated": {
@@ -135,11 +142,42 @@
         "type": { "const": "tag_inserted" },
         "value": { "type": "string" },
         "data_reference": {
-          "description": "Optional. The Python emitter serializes an absent reference as null.",
+          "description": "Optional. The emitter serializes an absent reference as null.",
           "type": ["string", "null"]
         }
       },
       "required": ["type", "value"],
+      "additionalProperties": false
+    },
+    "JobStarted": {
+      "description": "Emitted when a job run begins. Orchestrators correlate via job_run_id (also present on the HTTP envelope / process context).",
+      "type": "object",
+      "properties": {
+        "type": { "const": "job_started" },
+        "job_run_id": { "type": "string" }
+      },
+      "required": ["type", "job_run_id"],
+      "additionalProperties": false
+    },
+    "JobSucceeded": {
+      "description": "Emitted when a job run completes successfully.",
+      "type": "object",
+      "properties": {
+        "type": { "const": "job_succeeded" },
+        "job_run_id": { "type": "string" }
+      },
+      "required": ["type", "job_run_id"],
+      "additionalProperties": false
+    },
+    "JobFailed": {
+      "description": "Emitted when a job run fails. The process still exits nonzero.",
+      "type": "object",
+      "properties": {
+        "type": { "const": "job_failed" },
+        "job_run_id": { "type": "string" },
+        "error": { "type": "string" }
+      },
+      "required": ["type", "job_run_id", "error"],
       "additionalProperties": false
     }
   }

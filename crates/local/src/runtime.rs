@@ -20,6 +20,7 @@ use managed_process::ManagedProcess;
 use worker::WorkerOutcome;
 use worker_pool::WorkerPool;
 
+#[derive(Clone)]
 pub struct RunJobArgs {
     pub input: DataReferenceUri,
     pub job_id: JobId,
@@ -176,7 +177,7 @@ impl LocalRuntime {
 }
 
 impl Worker {
-    async fn publish(&self, source: &JobRunSource, kind: EventKind) -> Result<()> {
+    async fn publish(&self, args: &RunJobArgs, kind: EventKind) -> Result<()> {
         self.ctx
             .events
             .send(Event {
@@ -184,18 +185,20 @@ impl Worker {
                 is_replay: false,
                 timestamp: SystemTime::now(),
                 kind,
-                source: Source::JobRun(source.clone()),
+                source: Source::JobRun(JobRunSource {
+                    job_id: args.job_id.clone(),
+                    job_run_id: args.job_run_id.clone(),
+                }),
                 run_id: self.ctx.run_id.clone(),
             })
             .map_err(|_| anyhow!("workflow actor stopped before accepting job event"))
     }
 
-    async fn fail(&self, source: &JobRunSource, error: String) -> Result<()> {
+    async fn fail(&self, args: &RunJobArgs, error: String) -> Result<()> {
         self.publish(
-            source,
+            args,
             EventKind::JobFailed(JobFailedData {
-                job_id: source.job_id.clone(),
-                job_run_id: source.job_run_id.clone(),
+                job_run_id: args.job_run_id.clone(),
                 error,
             }),
         )
@@ -220,13 +223,9 @@ impl LocalRuntime {
             bail!("job run is already queued or running: {}", args.job_run_id);
         }
 
-        let source = JobRunSource {
-            job_id: args.job_id.clone(),
-            job_run_id: args.job_run_id.clone(),
-        };
         self.worker
             .publish(
-                &source,
+                &args,
                 EventKind::JobEnqueued(JobEnqueuedData {
                     job_id: args.job_id.clone(),
                     job_run_id: args.job_run_id.clone(),
@@ -250,11 +249,15 @@ impl LocalRuntime {
 
         let worker = self.worker.clone();
         let cancelled_completion = completion.clone();
-        let job_run_id = source.job_run_id.clone();
+        let job_run_id = args.job_run_id.clone();
         let enqueue_result = self.worker_pool.enqueue(
             async move {
-                let result = match worker.worker(&source, args, cancellation).await {
-                    Ok(WorkerOutcome::Succeeded | WorkerOutcome::Cancelled) => Ok(()),
+                let result = match worker.worker(args.clone(), cancellation).await {
+                    Ok(
+                        WorkerOutcome::Succeeded
+                        | WorkerOutcome::FailedByClient
+                        | WorkerOutcome::Cancelled,
+                    ) => Ok(()),
                     Err(error) => {
                         let jobs = worker.state.jobs.lock().await;
                         let result =
@@ -262,7 +265,7 @@ impl LocalRuntime {
                                 Err(error)
                             } else {
                                 let error_message = format!("{error:#}");
-                                match worker.fail(&source, error_message.clone()).await {
+                                match worker.fail(&args, error_message.clone()).await {
                                     Ok(()) => Err(anyhow!(error_message)),
                                     Err(publish_error) => Err(publish_error
                                         .context(format!("job failed: {error_message}"))),
@@ -272,7 +275,7 @@ impl LocalRuntime {
                         result
                     }
                 };
-                worker.state.jobs.lock().await.remove(&source.job_run_id);
+                worker.state.jobs.lock().await.remove(&args.job_run_id);
                 completion.complete(result);
             },
             move || cancelled_completion.complete(Ok(())),
