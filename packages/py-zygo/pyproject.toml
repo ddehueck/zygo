@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "fsspec>=2026.7.0",
+    "pyarrow>=25.0.1",
 ]
 
 

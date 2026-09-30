@@ -4,9 +4,9 @@ import time
 from zygo import Channel, JobContext, Workflow
 from zygo.codecs import Integer, String
 
-raw = Channel(id="raw", codec=Integer())
-squared = Channel(id="squared", codec=Integer())
-output = Channel(id="output", codec=String())
+raw = Channel(id="raw", codec=Integer)
+squared = Channel(id="squared", codec=Integer)
+output = Channel(id="output", codec=String)
 
 workflow = Workflow(id="my_workflow", input=raw, output=output)
 

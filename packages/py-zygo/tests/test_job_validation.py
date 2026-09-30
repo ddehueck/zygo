@@ -6,8 +6,8 @@ from zygo.codecs import Integer, String
 
 
 def test_job_accepts_all_supported_return_annotations() -> None:
-    input_channel = Channel(id="input", codec=Integer())
-    output_channel = Channel(id="output", codec=String())
+    input_channel = Channel(id="input", codec=Integer)
+    output_channel = Channel(id="output", codec=String)
     workflow = Workflow(
         id="return-annotations",
         input=input_channel,
