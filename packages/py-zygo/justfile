@@ -26,11 +26,11 @@ init:
 
 [group('build')]
 generate-protocol:
-    uv run datamodel-codegen --input ../../protocol/v0/schema.json --input-file-type jsonschema --output-model-type dataclasses.dataclass --target-python-version 3.12 --disable-timestamp --no-allow-remote-refs --formatters builtin --use-double-quotes --output src/zygo/cli/v0/generated.py
+    uv run datamodel-codegen --input ../../protocol/v0/schema.json --input-file-type jsonschema --output-model-type dataclasses.dataclass --target-python-version 3.12 --disable-timestamp --no-allow-remote-refs --formatters ruff-check ruff-format --use-double-quotes --output src/zygo/cli/v0/generated.py
 
 [group('ci')]
 check-protocol:
-    uv run datamodel-codegen --input ../../protocol/v0/schema.json --input-file-type jsonschema --output-model-type dataclasses.dataclass --target-python-version 3.12 --disable-timestamp --no-allow-remote-refs --formatters builtin --use-double-quotes --output src/zygo/cli/v0/generated.py --check
+    uv run datamodel-codegen --input ../../protocol/v0/schema.json --input-file-type jsonschema --output-model-type dataclasses.dataclass --target-python-version 3.12 --disable-timestamp --no-allow-remote-refs --formatters ruff-check ruff-format --use-double-quotes --output src/zygo/cli/v0/generated.py --check
 
 # ---- Formatting & Linting ---------------------------------------------------
 

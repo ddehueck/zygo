@@ -13,8 +13,8 @@ from zygo.codecs import Integer, String
 
 
 def _workflow() -> Workflow:
-    source = Channel(id="source", codec=Integer())
-    processed = Channel(id="processed", codec=String())
+    source = Channel(id="source", codec=Integer)
+    processed = Channel(id="processed", codec=String)
     workflow = Workflow(id="example", input=source, output=processed)
 
     @workflow.job(input=source, output=processed)
