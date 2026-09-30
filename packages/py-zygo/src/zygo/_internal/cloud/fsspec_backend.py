@@ -196,6 +196,8 @@ class _ZygoApiClient:
         return str(response["url"])
 
     def list(self, uri: str) -> list[dict[str, object]]:
+        if not uri.endswith("/"):
+            uri += "/"
         response = self._request_json("POST", "store/ls", body={"uri": uri})
         return cast("list[dict[str, object]]", response["entries"])
 
