@@ -196,11 +196,11 @@ class _ZygoApiClient:
         return str(response["url"])
 
     def list(self, uri: str) -> list[dict[str, object]]:
-        response = self._request_json("POST", "store/list", body={"uri": uri})
+        response = self._request_json("POST", "store/ls", body={"uri": uri})
         return cast("list[dict[str, object]]", response["entries"])
 
     def delete(self, uri: str) -> None:
-        self._request("DELETE", "store/delete", body={"uri": uri})
+        self._request("DELETE", "store", body={"uri": uri})
 
 
 class _PresignedUrlClient:
