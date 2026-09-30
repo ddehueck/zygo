@@ -5,7 +5,7 @@ import json
 import logging
 from typing import IO, TYPE_CHECKING, cast, override
 from urllib.error import HTTPError
-from urllib.parse import quote, urlencode, urlsplit
+from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 from fsspec.spec import AbstractFileSystem  # type: ignore
@@ -58,15 +58,15 @@ class ZygoFileSystem(AbstractFileSystem):
             raise ValueError("verbose must be a boolean")
 
         super().__init__(**kwargs)  # type: ignore[reportUnknownMemberType]
-        self._verbose = verbose
-        self._logger = _VerboseLogger(enabled=self._verbose)
+        self._logger = _VerboseLogger(enabled=verbose)
         self._api = _ZygoApiClient(api_host, api_bearer_auth)
         self._transfer = _PresignedUrlClient()
 
-    @classmethod
-    @override
-    def _strip_protocol(cls, path: str) -> str:
-        return path.removeprefix(f"{_PROTOCOL}://").lstrip("/")
+    @staticmethod
+    def _ensure_uri(path: str) -> str:
+        if path.startswith(f"{_PROTOCOL}://"):
+            return path
+        return f"{_PROTOCOL}://{path.lstrip('/')}"
 
     # fsspec infers AbstractBufferedFile, but this backend returns other binary streams.
     @override
@@ -79,17 +79,17 @@ class ZygoFileSystem(AbstractFileSystem):
         cache_options: dict[str, object] | None = None,
         **kwargs: object,
     ) -> IO[bytes]:
-        path = self._strip_protocol(path)
+        uri = self._ensure_uri(path)
 
         match mode:
             case "rb":
-                self._logger.info("Getting presigned zygo object url %s", path)
-                url = self._api.presign(path, "GET")
-                self._logger.info("Downloading zygo object %s", path)
+                self._logger.info("Getting presigned zygo object url %s", uri)
+                url = self._api.presign(uri, "GET")
+                self._logger.info("Downloading zygo object %s", uri)
                 return self._transfer.get(url)
             case "wb":
-                self._logger.info("Opening zygo object for upload: %s", path)
-                return _UploadFile(self._api, self._transfer, path, logger=self._logger)
+                self._logger.info("Opening zygo object for upload: %s", uri)
+                return _UploadFile(self._api, self._transfer, uri, logger=self._logger)
             case _:
                 raise ValueError(f"zygo:// does not support mode {mode!r}")
 
@@ -97,18 +97,18 @@ class ZygoFileSystem(AbstractFileSystem):
     def ls(
         self, path: str, detail: bool = True, **kwargs: object
     ) -> list[dict[str, object]] | list[str]:
-        prefix = self._strip_protocol(path)
-        entries = self._api.list(prefix)
-        self._logger.info("Listed %d zygo objects under %s", len(entries), prefix)
+        uri = self._ensure_uri(path)
+        entries = self._api.list(uri)
+        self._logger.info("Listed %d zygo objects under %s", len(entries), uri)
         if detail:
             return entries
         return [str(entry["name"]) for entry in entries]
 
     @override
     def _rm(self, path: str) -> None:
-        path = self._strip_protocol(path)
-        self._api.delete(path)
-        self._logger.info("Deleted zygo object %s", path)
+        uri = self._ensure_uri(path)
+        self._api.delete(uri)
+        self._logger.info("Deleted zygo object %s", uri)
 
 
 class _UploadFile(BytesIO):
@@ -116,14 +116,14 @@ class _UploadFile(BytesIO):
         self,
         api: _ZygoApiClient,
         transfer: _PresignedUrlClient,
-        path: str,
+        uri: str,
         *,
         logger: _VerboseLogger,
     ) -> None:
         super().__init__()
         self._api = api
         self._transfer = transfer
-        self._path = path
+        self._uri = uri
         self._logger = logger
         self._discard = False
 
@@ -133,9 +133,9 @@ class _UploadFile(BytesIO):
             return
         try:
             if not self._discard:
-                url = self._api.presign(self._path, "PUT")
+                url = self._api.presign(self._uri, "PUT")
                 self._transfer.put(url, self.getvalue())
-                self._logger.info("Uploaded zygo object %s", self._path)
+                self._logger.info("Uploaded zygo object %s", self._uri)
         finally:
             super().close()
 
@@ -156,10 +156,12 @@ class _ZygoApiClient:
         self._host = host.rstrip("/")
         self._bearer_auth = bearer_auth
 
-    def _request(self, method: str, route: str, *, data: bytes | None = None) -> bytes:
+    def _request(
+        self, method: str, route: str, *, body: dict[str, object]
+    ) -> bytes:
         request = Request(  # ruff: ignore[suspicious-url-open-usage]
             f"{self._host}/v1/{route}",
-            data=data,
+            data=json.dumps(body).encode(),
             headers={
                 "Authorization": f"Bearer {self._bearer_auth}",
                 "Content-Type": "application/json",
@@ -171,31 +173,34 @@ class _ZygoApiClient:
                 return response.read()
         except HTTPError as error:
             if error.code == _NOT_FOUND:
-                raise FileNotFoundError(route) from error
+                raise FileNotFoundError(str(body["uri"])) from error
             raise RuntimeError(
                 f"Zygo Cloud API {method}:{route} failed (HTTP {error.code})"
             ) from error
 
-    def presign(self, path: str, method: str) -> str:
-        route = "store/presign"
-        data = json.dumps({"op": method, "uri": f"{_PROTOCOL}://{path}"}).encode()
+    def _request_json(
+        self, method: str, route: str, *, body: dict[str, object]
+    ) -> dict[str, object]:
+        data = self._request(method, route, body=body)
         try:
-            response = cast(
-                "dict[str, object]", json.loads(self._request("POST", route, data=data))
-            )
+            return cast("dict[str, object]", json.loads(data))
         except json.JSONDecodeError as error:
             raise RuntimeError(
-                f"Zygo Cloud API POST /v1/{route} returned non-JSON; check api_host and API route"
+                f"Zygo Cloud API {method} /v1/{route} returned non-JSON, check api_host and API route"
             ) from error
+
+    def presign(self, uri: str, method: str) -> str:
+        response = self._request_json(
+            "POST", "store/presign", body={"op": method, "uri": uri}
+        )
         return str(response["url"])
 
-    def list(self, prefix: str) -> list[dict[str, object]]:
-        route = f"ls?{urlencode({'prefix': prefix})}"
-        response = cast("dict[str, object]", json.loads(self._request("GET", route)))
+    def list(self, uri: str) -> list[dict[str, object]]:
+        response = self._request_json("POST", "store/list", body={"uri": uri})
         return cast("list[dict[str, object]]", response["entries"])
 
-    def delete(self, path: str) -> None:
-        self._request("DELETE", quote(path, safe=""))
+    def delete(self, uri: str) -> None:
+        self._request("DELETE", "store/delete", body={"uri": uri})
 
 
 class _PresignedUrlClient:
