@@ -1,7 +1,16 @@
 import pytest
 
 from zygo import Channel
-from zygo.codecs import Boolean, Bytes, FileExtension, Float, Integer, Json, String
+from zygo.codecs import (
+    Boolean,
+    Bytes,
+    Codec,
+    FileExtension,
+    Float,
+    Integer,
+    Json,
+    String,
+)
 
 
 @pytest.mark.parametrize(
@@ -32,7 +41,9 @@ def test_codec_formats_use_only_normalized_file_extensions() -> None:
         (String, "hello", str),
     ],
 )
-def test_primitive_codecs_are_ready_to_use(codec, value, value_type) -> None:
+def test_primitive_codecs_are_ready_to_use[T](
+    codec: Codec[T], value: T, value_type: type[T]
+) -> None:
     channel = Channel(id="value", codec=codec)
     other_channel = Channel(id="other", codec=codec)
 

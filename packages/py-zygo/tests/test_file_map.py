@@ -6,7 +6,7 @@ from zygo.store import DataUri
 
 
 def test_file_map_round_trip():
-    codec = FileMap()
+    codec = FileMap
     value = {"z": "memory:///output.txt", "a": DataUri("file:///input.txt")}
 
     payload = codec.encode(value)
@@ -22,7 +22,7 @@ def test_file_map_round_trip():
 
 
 def test_file_map_rejects_empty_map():
-    codec = FileMap()
+    codec = FileMap
     with pytest.raises(CodecEncodeError, match="at least one file"):
         codec.encode({})
     with pytest.raises(CodecDecodeError, match="at least one file"):
@@ -30,7 +30,7 @@ def test_file_map_rejects_empty_map():
 
 
 def test_file_map_normalizes_uri_strings():
-    codec = FileMap()
+    codec = FileMap
     uri = "file://relative.txt"
     assert codec.decode(codec.encode({"file": uri})) == {"file": DataUri(uri)}
 
@@ -39,9 +39,9 @@ def test_file_map_normalizes_uri_strings():
     "value",
     [[], {1: "file:///a"}, {"a": 1}, {"a": "relative.txt"}, {"a": "file:///folder/"}],
 )
-def test_file_map_rejects_invalid_values(value):
+def test_file_map_rejects_invalid_values(value: object):
     with pytest.raises(CodecEncodeError):
-        FileMap().encode(value)
+        FileMap.encode(value)  # pyright: ignore[reportArgumentType]
 
 
 @pytest.mark.parametrize(
@@ -55,6 +55,6 @@ def test_file_map_rejects_invalid_values(value):
         b"\xff",
     ],
 )
-def test_file_map_rejects_invalid_payloads(payload):
+def test_file_map_rejects_invalid_payloads(payload: bytes):
     with pytest.raises(CodecDecodeError):
-        FileMap().decode(payload)
+        FileMap.decode(payload)

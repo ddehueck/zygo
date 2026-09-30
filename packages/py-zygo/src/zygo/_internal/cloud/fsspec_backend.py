@@ -156,9 +156,7 @@ class _ZygoApiClient:
         self._host = host.rstrip("/")
         self._bearer_auth = bearer_auth
 
-    def _request(
-        self, method: str, route: str, *, body: dict[str, object]
-    ) -> bytes:
+    def _request(self, method: str, route: str, *, body: dict[str, object]) -> bytes:
         request = Request(  # ruff: ignore[suspicious-url-open-usage]
             f"{self._host}/v1/{route}",
             data=json.dumps(body).encode(),

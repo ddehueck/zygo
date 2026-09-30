@@ -1,3 +1,6 @@
+# Ready-to-use codec instances are intentionally initialized in this facade.
+# ruff: file-ignore[non-empty-init-module]
+
 from zygo.codecs.base import (
     Codec,
     CodecDecodeError,
@@ -6,8 +9,8 @@ from zygo.codecs.base import (
     FileExtension,
     FileFormat,
 )
+from zygo.codecs.fs import File as _File, FileMap as _FileMap, Folder as _Folder
 from zygo.codecs.json import Json
-from zygo.codecs.fs import FileMap as _FileMap, Folder as _Folder, File as _File
 from zygo.codecs.primitives import (
     Boolean as _Boolean,
     Bytes as _Bytes,
@@ -33,12 +36,12 @@ __all__ = [
     "CodecDecodeError",
     "CodecEncodeError",
     "CodecError",
+    "File",
     "FileExtension",
     "FileFormat",
     "FileMap",
-    "Folder",
-    "File",
     "Float",
+    "Folder",
     "Integer",
     "Json",
     "String",

@@ -13,10 +13,20 @@ from zygo.codecs.primitives import String
 from zygo.store import DataUri
 
 
-class Folder(String):
+class Folder(Codec[DataUri]):
     """
     Represents a folder and stores its path as a string.
     """
+
+    @property
+    @override
+    def value_type(self) -> type[DataUri]:
+        return DataUri
+
+    @property
+    @override
+    def format(self) -> FileFormat:
+        return FileFormat(extension=FileExtension(".txt"))
 
     @override
     def encode(self, value: str | DataUri) -> bytes:
@@ -24,18 +34,23 @@ class Folder(String):
             value = value.uri
         if not value.endswith("/"):
             raise CodecEncodeError(f"Folder path must end with '/', got {value}")
-        return super().encode(value)
+        return String().encode(value)
 
     @override
     def decode(self, value: bytes) -> DataUri:
-        result = super().decode(value)
+        result = String().decode(value)
         return DataUri(result)
 
 
-class File(String):
+class File(Codec[DataUri]):
     """
     Represents a file and stores its path as a string.
     """
+
+    @property
+    @override
+    def value_type(self) -> type[DataUri]:
+        return DataUri
 
     @property
     @override
@@ -48,11 +63,11 @@ class File(String):
             value = value.uri
         if value.endswith("/"):
             raise CodecEncodeError(f"File path must not end with '/', got {value}")
-        return super().encode(value)
+        return String().encode(value)
 
     @override
     def decode(self, value: bytes) -> DataUri:
-        result = super().decode(value)
+        result = String().decode(value)
         return DataUri(result)
 
 
@@ -89,7 +104,9 @@ class FileMap(Codec[dict[str, DataUri]]):
         if not value:
             raise CodecEncodeError("FileMap must contain at least one file")
         try:
-            normalized = {key: self._parse_file_uri(uri).uri for key, uri in value.items()}
+            normalized = {
+                key: self._parse_file_uri(uri).uri for key, uri in value.items()
+            }
         except ValueError as error:
             raise CodecEncodeError(str(error)) from error
         return self._json.encode(normalized)
