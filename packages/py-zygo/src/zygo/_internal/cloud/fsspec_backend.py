@@ -32,11 +32,11 @@ class ZygoFileSystem(AbstractFileSystem):
     """
     The zygo cloud storage backend - zygo://<path>
 
-    The zygo cloud storage API is built on top of object store
+    The zygo cloud storage API is built on top of an object store
     and provides presigned urls for get and put operations.
 
     e.g.
-       1. POST https://api.zygo.cloud/v1/store/<path>/presign with GET or PUT method --> {"url": "<presigned-url>"}
+       1. POST https://zygo.cloud/api/v1/store/presign with a body of {"op": "GET", "uri": "zygo://..."} --> {"url": "<presigned-url>"}
        2. Use the presigned URL to retrieve (GET) or upload (PUT) the object
 
     """
@@ -177,9 +177,8 @@ class _ZygoApiClient:
             ) from error
 
     def presign(self, path: str, method: str) -> str:
-        encoded_path = quote(path, safe="")
-        route = f"store/{encoded_path}/presign"
-        data = json.dumps({"method": method}).encode()
+        route = "store/presign"
+        data = json.dumps({"op": method, "uri": f"{_PROTOCOL}://{path}"}).encode()
         try:
             response = cast(
                 "dict[str, object]", json.loads(self._request("POST", route, data=data))

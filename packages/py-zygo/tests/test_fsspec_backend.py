@@ -66,8 +66,8 @@ def test_read_streams_from_presigned_url(
     assert transfers == [
         (
             "POST",
-            "https://api.zygo.cloud/v1/store/folder%2Fobject%20name/presign",
-            b'{"method": "GET"}',
+            "https://api.zygo.cloud/v1/store/presign",
+            b'{"op": "GET", "uri": "zygo://folder/object name"}',
             "Bearer test-secret",
         ),
         ("GET", "https://storage.example/object", None, None),
@@ -98,8 +98,8 @@ def test_store_put_with_zygo_backend(
     assert transfers == [
         (
             "POST",
-            "https://api.zygo.cloud/v1/store/runs%2Fwr%3Dwf1%2Fjr%3Djob1%2Foutput.txt/presign",
-            b'{"method": "PUT"}',
+            "https://api.zygo.cloud/v1/store/presign",
+            b'{"op": "PUT", "uri": "zygo://runs/wr=wf1/jr=job1/output.txt"}',
             "Bearer test-secret",
         ),
         ("PUT", "https://storage.example/object", b"output", None),
@@ -123,8 +123,8 @@ def test_write_puts_once_on_close(
     assert transfers == [
         (
             "POST",
-            "https://api.zygo.cloud/v1/store/file/presign",
-            b'{"method": "PUT"}',
+            "https://api.zygo.cloud/v1/store/presign",
+            b'{"op": "PUT", "uri": "zygo://file"}',
             "Bearer test-secret",
         ),
         ("PUT", "https://storage.example/object", b"first second", None),
