@@ -409,6 +409,18 @@ wheels = [
 ]
 
 [[package]]
+name = "pyarrow-stubs"
+version = "20.0.0.20260819"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyarrow" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/12/a7/8a2ca91ffe4c6576207f932de655d7d8a36485c520dccce70ce7d492b256/pyarrow_stubs-20.0.0.20260819.tar.gz", hash = "sha256:150710a72248bc834bf048d3092713f070904a4af76d40289c43afb3ee189823", size = 238222, upload-time = "2026-08-19T05:52:53.618Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/65/6c/eea1d03e475217aea95b1d52aee09c97575d05bbc592c39c085b71dab89f/pyarrow_stubs-20.0.0.20260819-py3-none-any.whl", hash = "sha256:297e60b6e5314739c082b4757d090d8be6047465510eb0684ca954ef7ea58be3", size = 235949, upload-time = "2026-08-19T05:52:54.711Z" },
+]
+
+[[package]]
 name = "pydantic"
 version = "2.13.5"
 source = { registry = "https://pypi.org/simple" }
@@ -706,6 +718,7 @@ dev = [
     { name = "basedpyright" },
     { name = "datamodel-code-generator" },
     { name = "pillow" },
+    { name = "pyarrow-stubs" },
     { name = "pytest" },
     { name = "python-dotenv" },
     { name = "ruff" },
@@ -724,6 +737,7 @@ dev = [
     { name = "basedpyright", specifier = ">=1.34.0" },
     { name = "datamodel-code-generator", specifier = ">=0.82.0,<0.83.0" },
     { name = "pillow", specifier = ">=11.0.0" },
+    { name = "pyarrow-stubs", specifier = ">=20.0.0.20260819" },
     { name = "pytest", specifier = ">=9.0.2" },
     { name = "python-dotenv", specifier = ">=1.2.1" },
     { name = "ruff", specifier = ">=0.14.4" },

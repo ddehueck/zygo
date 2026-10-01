@@ -5,12 +5,11 @@ from zygo.context import JobContext
 from zygo.ml import (
     ClassLabel,
     Dataset,
-
     Image,
     Model,
     ModelBundle,
-    Struct,
     TrainingContext,
+    TrainingStore,
 )
 from zygo.ml.features import Features, features
 from zygo.store import DataUri
@@ -25,13 +24,13 @@ __all__ = [
     "ClassLabel",
     "DataUri",
     "Dataset",
-    "features",
     "Features",
     "Image",
     "JobContext",
     "Model",
     "ModelBundle",
-    "Struct",
     "TrainingContext",
+    "TrainingStore",
     "Workflow",
+    "features",
 ]

@@ -4,7 +4,7 @@ from collections.abc import Callable, Mapping
 from inspect import Parameter, Signature, signature
 from typing import cast, get_args, get_origin, get_type_hints
 
-from zygo.ml.bundle import ModelBundle
+from zygo.ml._store import TrainingStore
 from zygo.ml.context import TrainingContext
 from zygo.ml.dataset import Dataset
 from zygo.ml.features import Features
@@ -27,18 +27,19 @@ class Model:
         if not name:
             raise ValueError("Model name must not be empty")
         self.name = name
-        self._train: Callable[..., ModelBundle] | None = None
-        self._load: Callable[[ModelBundle], object] | None = None
+        self._train: Callable[..., None] | None = None
+        self._load: Callable[[TrainingStore], object] | None = None
         self._infer: Callable[..., object] | None = None
         self._features: type[Features] | None = None
         self._model_type: type[object] | None = None
 
 
-    def train[F: Callable[..., ModelBundle]](self, fn: F) -> F:
-        """Register ``(dataset: Dataset[Features], *, ctx: TrainingContext)``.
+    def train[F: Callable[..., None]](self, fn: F) -> F:
+        """Register ``(dataset: Dataset[Features], *, ctx: TrainingContext) -> None``.
 
         The dataset location and training store are supplied at execution,
-        rather than captured in the model definition.
+        rather than captured in the model definition. Persist artifacts through
+        ctx.store() without returning a bundle.
         """
         if self._train is not None:
             raise ValueError("A training function is already registered")
@@ -49,24 +50,28 @@ class Model:
         _require_positional(dataset_parameter, role="Training dataset")
         annotation = hints.get(dataset_parameter.name)
         features = _dataset_features(annotation)
-        if hints.get("return") is not ModelBundle:
-            raise TypeError("Training must return ModelBundle")
+        if hints.get("return") is not type(None):
+            raise TypeError("Training must return None")
         _require_context(parameters[1], hints)
         self._features = features
         self._train = fn
         return fn
 
     def load[F: Callable[..., object]](self, fn: F) -> F:
-        """Register a loader returning the live model consumed by inference."""
+        """Register ``(store: TrainingStore)`` returning a live model for inference.
+
+        The runtime selects the artifact store. Read artifacts through get()
+        or open() without needing to enter the store itself as a context.
+        """
         if self._load is not None:
             raise ValueError("A load function is already registered")
         parameters, hints = _annotations(fn)
         if len(parameters) != 1:
-            raise TypeError("Loading requires exactly one ModelBundle parameter")
+            raise TypeError("Loading requires exactly one TrainingStore parameter")
         parameter = parameters[0]
-        _require_positional(parameter, role="Load bundle")
-        if hints.get(parameter.name) is not ModelBundle:
-            raise TypeError("The load parameter must be annotated as ModelBundle")
+        _require_positional(parameter, role="Load store")
+        if hints.get(parameter.name) is not TrainingStore:
+            raise TypeError("The load parameter must be annotated as TrainingStore")
         model_type = hints.get("return")
         if not isinstance(model_type, type):
             raise TypeError("Loading must declare a concrete model return type")
@@ -102,12 +107,12 @@ class Model:
         *,
         ctx: TrainingContext,
         storage_options: Mapping[str, object] | None = None,
-    ) -> ModelBundle:
+    ) -> None:
         """Inject a caller-selected dataset and a training-specific store context.
 
         Store-produced DataUri references and direct local/cloud locations are
-        accepted. Returned bundles must contain an artifact written through
-        this context's store during this execution.
+        accepted. The hook persists artifacts through ctx.store() and must
+        return None. No bundle result is required or validated.
         """
         if self._train is None:
             raise ValueError("No training function is registered")
@@ -120,22 +125,24 @@ class Model:
             training_dataset = Dataset.open(dataset, storage_options=storage_options)
         if self._features is not None:
             training_dataset = training_dataset.with_features(self._features)
-        ctx.begin_training()
-        bundle = self._train(training_dataset, ctx=ctx)
-        if not isinstance(cast("object", bundle), ModelBundle):
-            raise TypeError("Training returned a value that is not a ModelBundle")
-        ctx.validate_bundle(bundle)
-        return bundle
 
-    def run_load(self, bundle: ModelBundle) -> object:
-        """Load and runtime-check a live model that can be reused for inference.
+        result = self._train(training_dataset, ctx=ctx)
+        if cast("object", result) is not None:
+            raise TypeError("Training returned a value that is not None")
 
-        Call the decorated load function directly for its concrete static
-        return type. This runtime entry point returns object.
+    def run_load(self, store: TrainingStore) -> object:
+        """Inject a runtime-selected store and runtime-check the loaded model.
+
+        The caller may construct the store with ctx.store(). Reads through
+        get() and open() do not require entering the store context. Call the
+        decorated load function directly for its concrete static return type.
+        This runtime entry point returns object.
         """
         if self._load is None or self._model_type is None:
             raise ValueError("No load function is registered")
-        model = self._load(bundle)
+        if not isinstance(cast("object", store), TrainingStore):
+            raise TypeError("Loading requires a TrainingStore")
+        model = self._load(store)
         if not isinstance(model, self._model_type):
             raise TypeError("Loading returned a value incompatible with its return type")
         return model

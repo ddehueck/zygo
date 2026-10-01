@@ -60,6 +60,12 @@ class StoreImpl(StoreProtocol):
         self._ipc_transport = ipc_transport
         self._fs = build_fs(root, kwargs)
 
+    @property
+    def training_root(self) -> DataUri:
+        """The exact local directory or isolated remote prefix for training."""
+        path = self._root.path if self._root.protocol == "file" else self._prefix("job")
+        return DataUri(f"{self._root.protocol}://{path.rstrip('/')}/")
+
     @staticmethod
     def _is_uri(value: str) -> bool:
         """
@@ -316,7 +322,7 @@ class _OpenFileContext(AbstractContextManager[TmpFileProtocol]):
                 match self._mode:
                     case "w":
                         self._uri = self._store.put(
-                            self._target_uri.key, self.path.read_bytes()
+                            str(self._target_uri), self.path.read_bytes()
                         )
                     case "r":
                         self._uri = self._target_uri
