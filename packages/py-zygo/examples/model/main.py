@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 import zygo
 
-from .dataset import BlackWhiteFeatures
+from .dataset import DATASET_PATH, BlackWhiteFeatures
 
 
 @dataclass
@@ -24,6 +24,7 @@ def train(
     dataset: zygo.Dataset[BlackWhiteFeatures], *, ctx: zygo.TrainingContext
 ) -> None:
     label = next(iter(dataset)).label
+    print(f"training with label {label}")
     ctx.store.put("label.txt", str(label).encode())
 
 
@@ -36,3 +37,10 @@ def load(store: zygo.ModelStore) -> ConstantClassifier:
 def infer(model: ConstantClassifier, image: zygo.Image) -> Prediction:
     """Ignore the image and always predict the learned label."""
     return Prediction(label=model.label)
+
+
+if __name__ == "__main__":
+    store = zygo.train(model=app, dataset=DATASET_PATH)
+    dataset = zygo.Dataset.open(DATASET_PATH, features=BlackWhiteFeatures)
+    prediction = zygo.infer(model=app, store=store, data=next(iter(dataset)).image)
+    print(prediction)

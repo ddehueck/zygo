@@ -6,6 +6,8 @@ from zygo.ml import (
     Model,
     ModelStore,
     TrainingContext,
+    infer,
+    train,
 )
 from zygo.store import DataUri
 from zygo.tags import TagsProtocol
@@ -29,4 +31,6 @@ __all__ = [
     "TrainingContext",
     "Workflow",
     "features",
+    "infer",
+    "train",
 ]
