@@ -12,8 +12,8 @@ import pytest
 from zygo._internal.cloud import fsspec_backend
 from zygo.cli.v0.types import IpcMessage
 from zygo.store import DataUri
-from zygo.store._internal.impl import StoreImpl
-from zygo.types import JobRunContext, JobRunId, WorkflowRunId
+from zygo.store._internal.impl import WorkflowStore
+from zygo.workflow.types import JobRunContext, JobRunId, WorkflowRunId
 
 
 class _NoopTransport:
@@ -77,13 +77,13 @@ def test_read_streams_from_presigned_url(
 def test_store_put_with_zygo_backend(
     transfers: list[tuple[str, str, bytes | None, str | None]],
 ) -> None:
-    store = StoreImpl(
+    store = WorkflowStore(
         context=JobRunContext(
             workflow_run_id=WorkflowRunId("wf1"),
             job_run_id=JobRunId("job1"),
             input=DataUri("zygo://runs/input"),
         ),
-        root=DataUri("zygo://runs"),
+        root=DataUri("zygo://runs/"),
         ipc_transport=_NoopTransport(),
         kwargs={
             "api_host": "https://api.zygo.cloud",
@@ -92,7 +92,7 @@ def test_store_put_with_zygo_backend(
         },
     )
 
-    uri = store.put("output.txt", b"output")
+    uri = store.scope("job").put("output.txt", b"output")
 
     assert str(uri) == "zygo://runs/wr=wf1/jr=job1/output.txt"
     assert transfers == [

@@ -4,8 +4,8 @@ from types import FunctionType
 from typing import Any
 
 from zygo._internal.fn_hash import local_source_dependency_hash
-from zygo.channel import Channel
-from zygo.types import JobHash, JobId
+from zygo.workflow.channel import Channel
+from zygo.workflow.types import JobHash, JobId
 
 
 @dataclass(frozen=True)

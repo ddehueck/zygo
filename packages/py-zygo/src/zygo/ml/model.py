@@ -4,7 +4,7 @@ from collections.abc import Callable, Mapping
 from inspect import Parameter, Signature, signature
 from typing import cast, get_args, get_origin, get_type_hints
 
-from zygo.ml._store import TrainingStore
+from zygo.ml.store import ModelStore
 from zygo.ml.context import TrainingContext
 from zygo.ml.dataset import Dataset
 from zygo.ml.features import Features
@@ -28,7 +28,7 @@ class Model:
             raise ValueError("Model name must not be empty")
         self.name = name
         self._train: Callable[..., None] | None = None
-        self._load: Callable[[TrainingStore], object] | None = None
+        self._load: Callable[[ModelStore], object] | None = None
         self._infer: Callable[..., object] | None = None
         self._features: type[Features] | None = None
         self._model_type: type[object] | None = None
@@ -58,20 +58,20 @@ class Model:
         return fn
 
     def load[F: Callable[..., object]](self, fn: F) -> F:
-        """Register ``(store: TrainingStore)`` returning a live model for inference.
+        """Register ``(store: ModelStore)`` returning a live model for inference.
 
-        The runtime selects the artifact store. Read artifacts through get()
+        The runtime selects the model store. Read artifacts through get()
         or open() without needing to enter the store itself as a context.
         """
         if self._load is not None:
             raise ValueError("A load function is already registered")
         parameters, hints = _annotations(fn)
         if len(parameters) != 1:
-            raise TypeError("Loading requires exactly one TrainingStore parameter")
+            raise TypeError("Loading requires exactly one ModelStore parameter")
         parameter = parameters[0]
         _require_positional(parameter, role="Load store")
-        if hints.get(parameter.name) is not TrainingStore:
-            raise TypeError("The load parameter must be annotated as TrainingStore")
+        if hints.get(parameter.name) is not ModelStore:
+            raise TypeError("The load parameter must be annotated as ModelStore")
         model_type = hints.get("return")
         if not isinstance(model_type, type):
             raise TypeError("Loading must declare a concrete model return type")
@@ -100,66 +100,6 @@ class Model:
             )
         self._infer = fn
         return fn
-
-    def run_train(
-        self,
-        dataset: str | DataUri | Dataset[object],
-        *,
-        ctx: TrainingContext,
-        storage_options: Mapping[str, object] | None = None,
-    ) -> None:
-        """Inject a caller-selected dataset and a training-specific store context.
-
-        Store-produced DataUri references and direct local/cloud locations are
-        accepted. The hook persists artifacts through ctx.store() and must
-        return None. No bundle result is required or validated.
-        """
-        if self._train is None:
-            raise ValueError("No training function is registered")
-        if not isinstance(cast("object", ctx), TrainingContext):
-            raise TypeError("Training requires a TrainingContext")
-        training_dataset: Dataset[object]
-        if isinstance(dataset, Dataset):
-            training_dataset = dataset
-        else:
-            training_dataset = Dataset.open(dataset, storage_options=storage_options)
-        if self._features is not None:
-            training_dataset = training_dataset.with_features(self._features)
-
-        result = self._train(training_dataset, ctx=ctx)
-        if cast("object", result) is not None:
-            raise TypeError("Training returned a value that is not None")
-
-    def run_load(self, store: TrainingStore) -> object:
-        """Inject a runtime-selected store and runtime-check the loaded model.
-
-        The caller may construct the store with ctx.store(). Reads through
-        get() and open() do not require entering the store context. Call the
-        decorated load function directly for its concrete static return type.
-        This runtime entry point returns object.
-        """
-        if self._load is None or self._model_type is None:
-            raise ValueError("No load function is registered")
-        if not isinstance(cast("object", store), TrainingStore):
-            raise TypeError("Loading requires a TrainingStore")
-        model = self._load(store)
-        if not isinstance(model, self._model_type):
-            raise TypeError("Loading returned a value incompatible with its return type")
-        return model
-
-    def run_infer(self, model: object, /, **inputs: object) -> object:
-        """Inject a previously loaded model into the registered inference hook.
-
-        This dynamic runtime boundary accepts named inputs. Calling the
-        decorated inference function directly preserves its full static types.
-        """
-        if self._infer is None or self._model_type is None:
-            raise ValueError("No inference function is registered")
-        if not isinstance(model, self._model_type):
-            raise TypeError("Inference requires a model compatible with load's return type")
-        arguments = signature(self._infer).bind(model, **inputs)
-        return self._infer(*arguments.args, **arguments.kwargs)
-
 
 def _annotations(
     fn: Callable[..., object],

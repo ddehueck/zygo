@@ -13,10 +13,10 @@ if TYPE_CHECKING:
 
 from zygo._internal.meta.jobs import validate_job
 from zygo._internal.utils.hash import hash_to_str
-from zygo.channel import Channel
-from zygo.context import JobContext
-from zygo.jobs import JobRegistry
-from zygo.types import WorkflowId
+from zygo.workflow.channel import Channel
+from zygo.workflow.context import JobContext
+from zygo.workflow.jobs import JobRegistry
+from zygo.workflow.types import WorkflowId
 
 T_workflow_in = TypeVar("T_workflow_in")
 T_workflow_out = TypeVar("T_workflow_out")

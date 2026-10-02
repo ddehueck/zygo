@@ -2,7 +2,7 @@ import pyarrow as pa
 import pyarrow.dataset as pads
 import pytest
 
-from zygo import Dataset, DataUri, Model, TrainingContext, TrainingStore
+from zygo import Dataset, DataUri, Model, ModelStore, TrainingContext
 
 
 def test_runtime_selects_training_and_loading_roots(tmp_path):
@@ -15,7 +15,7 @@ def test_runtime_selects_training_and_loading_roots(tmp_path):
             store.put("label.txt", b"7")
 
     @app.load
-    def load(store: TrainingStore) -> int:
+    def load(store: ModelStore) -> int:
         return int(store.get("label.txt"))
 
     @app.infer

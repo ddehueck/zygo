@@ -4,7 +4,7 @@ Minimal typed features backed by Arrow rows.
 Example::
 
     @features
-    class Sample(Features):
+    class Sample:
         image: Image
         label: ClassLabel = ClassLabel("clear", "crystal", "precipitate")
 """

@@ -1,7 +1,7 @@
 from typing import override
 
 from zygo.codecs import Codec
-from zygo.types import ChannelId
+from zygo.workflow.types import ChannelId
 
 
 class Channel[T]:

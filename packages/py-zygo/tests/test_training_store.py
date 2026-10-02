@@ -9,7 +9,7 @@ def context_at(path: Path) -> TrainingContext:
     return TrainingContext.local(DataUri(path.as_uri() + "/"))
 
 
-def test_training_store_uses_injected_directory(tmp_path):
+def test_model_store_uses_injected_directory(tmp_path):
     with context_at(tmp_path).store() as store:
         uri = store.put("label.txt", b"7")
         assert store.path == tmp_path

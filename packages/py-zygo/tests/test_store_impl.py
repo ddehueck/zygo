@@ -1,4 +1,4 @@
-"""Tests for StoreImpl."""
+"""Tests for WorkflowStore."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING, cast
 import fsspec  # type: ignore
 
 from zygo.store import DataUri
-from zygo.store._internal.impl import StoreImpl
-from zygo.types import JobRunContext, JobRunId, WorkflowRunId
+from zygo.store._internal.impl import WorkflowStore
+from zygo.workflow.types import JobRunContext, JobRunId, WorkflowRunId
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -35,10 +35,10 @@ def _make_context(
     )
 
 
-def _make_store(root: str) -> StoreImpl:
-    return StoreImpl(
+def _make_store(root: str) -> WorkflowStore:
+    return WorkflowStore(
         context=_make_context(root),
-        root=DataUri(f"file://{root}"),
+        root=DataUri(f"file://{root}/"),
         ipc_transport=_NoopTransport(),
     )
 
@@ -56,9 +56,9 @@ def test_store_passes_kwargs_to_fsspec(
     monkeypatch.setattr(
         "zygo.store._internal.util.fsspec.filesystem", capture_filesystem
     )
-    StoreImpl(
+    WorkflowStore(
         context=_make_context(str(tmp_path)),
-        root=DataUri(f"file://{tmp_path}"),
+        root=DataUri(f"file://{tmp_path}/"),
         ipc_transport=_NoopTransport(),
         kwargs={"auto_mkdir": "true"},
     )
@@ -83,7 +83,7 @@ def test_put_get_round_trip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     store = _make_store(str(tmp_path))
     data = b"hello store"
 
-    uri = store.put("my-key", data)
+    uri = store.scope("job").put("my-key", data)
     assert isinstance(uri, DataUri)
     assert uri.path == str(tmp_path / "wr=wf1" / "jr=job1" / "my-key")
     assert store.get(uri) == data
@@ -98,7 +98,7 @@ def test_get_by_uri(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = _make_store(str(tmp_path))
     data = b"ref-based read"
 
-    uri = store.put("ref_key", data)
+    uri = store.scope("job").put("ref_key", data)
     assert uri.path == str(tmp_path / "wr=wf1" / "jr=job1" / "ref_key")
     assert store.get(uri) == data
     assert not (working_dir / "ref_key").exists()
@@ -118,8 +118,8 @@ def test_put_exists_delete_exists(tmp_path: Path) -> None:
     """Put creates key, delete removes it: exists and delete behave correctly."""
     store = _make_store(str(tmp_path))
 
-    store.put("x", b"y")
-    assert store.exists("x") is True
+    store.scope("job").put("x", b"y")
+    assert store.scope("job").exists("x") is True
 
-    store.delete("x")
-    assert store.exists("x") is False
+    store.scope("job").delete("x")
+    assert store.scope("job").exists("x") is False

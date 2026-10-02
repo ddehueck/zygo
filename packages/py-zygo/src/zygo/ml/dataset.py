@@ -12,9 +12,6 @@ from pyarrow.fs import FSSpecHandler, PyFileSystem
 from zygo.ml.features import Features
 from zygo.store import DataUri
 
-if TYPE_CHECKING:
-    from zygo.ml.torch import TorchDataset
-
 
 class Dataset[T]:
     """A Parquet file or sharded directory, optionally decoded with Features.

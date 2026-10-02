@@ -1,7 +1,6 @@
 """Typed datasets, model execution, and persistent training artifacts."""
 
-from zygo.ml._store import TrainingStore
-from zygo.ml.bundle import ModelBundle
+from zygo.ml.store import ModelStore
 from zygo.ml.context import TrainingContext
 from zygo.ml.dataset import Dataset
 from zygo.ml.features import ClassLabel, Features, Image, features
@@ -13,8 +12,7 @@ __all__ = [
     "Features",
     "Image",
     "Model",
-    "ModelBundle",
+    "ModelStore",
     "TrainingContext",
-    "TrainingStore",
     "features",
 ]

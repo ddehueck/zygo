@@ -1,19 +1,17 @@
 from fsspec import register_implementation  # type: ignore
 
-from zygo.channel import Channel
-from zygo.context import JobContext
+
 from zygo.ml import (
     ClassLabel,
     Dataset,
     Image,
     Model,
-    ModelBundle,
+    ModelStore,
     TrainingContext,
-    TrainingStore,
 )
 from zygo.ml.features import Features, features
 from zygo.store import DataUri
-from zygo.workflow import Workflow
+from zygo.workflow import Channel, JobContext, Workflow
 
 register_implementation(  # ruff: ignore[non-empty-init-module]
     "zygo", "zygo._internal.cloud.fsspec_backend.ZygoFileSystem"
@@ -28,9 +26,8 @@ __all__ = [
     "Image",
     "JobContext",
     "Model",
-    "ModelBundle",
+    "ModelStore",
     "TrainingContext",
-    "TrainingStore",
     "Workflow",
     "features",
 ]

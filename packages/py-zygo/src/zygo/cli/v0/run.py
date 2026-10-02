@@ -13,8 +13,8 @@ from zygo.cli.v0.types import (
     JobSucceeded,
 )
 from zygo.store import DataUri
-from zygo.store._internal.impl import StoreImpl
-from zygo.types import JobId, JobRunContext, JobRunId, WorkflowRunId
+from zygo.store._internal.impl import WorkflowStore
+from zygo.workflow.types import JobId, JobRunContext, JobRunId, WorkflowRunId
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -73,11 +73,12 @@ def _execute_job(
     if job_entry is None:
         raise ValueError(f"Could not find job {args.job_id}")
 
-    store = StoreImpl(
+    root = local_store_options(
+        module, store_config.root_uri if store_config is not None else None
+    ).root_uri
+    store = WorkflowStore(
         context=run_context,
-        root=local_store_options(
-            module, store_config.root_uri if store_config is not None else None
-        ).root_uri,
+        root=root,
         kwargs=cast(
             "dict[str, str | int | float | bool | None] | None",
             store_config.kwargs if store_config is not None else None,

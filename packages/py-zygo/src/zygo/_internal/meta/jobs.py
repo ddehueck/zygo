@@ -8,7 +8,7 @@ from typing import (
     get_type_hints,
 )
 
-from zygo.context import JobContext
+from zygo.workflow.context import JobContext
 
 CONTEXTUAL_JOB_PARAMETER_COUNT = 2
 

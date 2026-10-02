@@ -1,6 +1,9 @@
-from typing import Protocol
+from __future__ import annotations
 
-from zygo.store import StoreProtocol
+from typing import TYPE_CHECKING, Protocol
+
+if TYPE_CHECKING:
+    from zygo.store._internal.impl import WorkflowStore
 
 
 class TagsProtocol(Protocol):
@@ -12,7 +15,7 @@ class TagsProtocol(Protocol):
 class JobContext(Protocol):
     """Provides Zygo-specific helpers for interacting with the workflow system."""
 
-    store: StoreProtocol
+    store: WorkflowStore
     """A Zygo-managed store for reading and writing workflow data."""
 
     tags: TagsProtocol

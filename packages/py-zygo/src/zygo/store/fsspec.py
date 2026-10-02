@@ -87,6 +87,10 @@ class FsspecUri:
         """Check if the fsspec URI is a local filesystem."""
         return self.protocol in {"file", "memory"}
 
+    def as_str(self) -> str:
+        """Return the fsspec URI as a string."""
+        return str(self)
+
     @override
     def __str__(self) -> str:
         return self.uri

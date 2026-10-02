@@ -1,50 +1,23 @@
-"""
-This store is built on top of fsspec to enable local and remote data storage access.
-The store is a key-value store that can be used to store and retrieve data.
-
-Users bring their own protocol and root directory.
-Meanwhile, the store provides data isolation and versioning relative to the orchestration requirements.
-
-This way, task data is easily isolated to avoid data contamination between tasks by default.
-A user can still opt-in to a shared store across a workflow run via the `scope` parameter.
-"""
+"""Workflow storage with job, workflow, and cache isolation."""
 
 from __future__ import annotations
 
-from contextlib import AbstractContextManager
-from pathlib import Path
 import posixpath
-import tempfile
-from typing import (
-    TYPE_CHECKING,
-    BinaryIO,
-    Literal,
-    TextIO,
-    assert_never,
-    cast,
-    overload,
-    override,
-)
+from typing import TYPE_CHECKING, assert_never, override
 
 from zygo.cli.v0.types import DataReferenceCreated
-from zygo.store import StoreProtocol
-from zygo.store._internal.util import build_fs, normalize_key, partition
-from zygo.store.protocol import TmpFileProtocol
+from zygo.store._internal.base import BaseStore
+from zygo.store._internal.util import partition
 from zygo.store.types import DataUri
 
 if TYPE_CHECKING:
-    from types import TracebackType
-
     from zygo.cli.v0.transport import IpcTransport
-    from zygo.store.protocol import StoreContextManager
     from zygo.store.types import Scope
-    from zygo.types import JobRunContext
+    from zygo.workflow.types import JobRunContext
 
 
-class StoreImpl(StoreProtocol):
-    """
-    A high-level store built on fsspec.
-    """
+class WorkflowStore(BaseStore):
+    """A workflow store, isolated to the current job by default."""
 
     def __init__(
         self,
@@ -53,278 +26,48 @@ class StoreImpl(StoreProtocol):
         root: DataUri,
         ipc_transport: IpcTransport,
         kwargs: dict[str, str | int | float | bool | None] | None = None,
+        scope: Scope = "job",
     ) -> None:
-        super().__init__()
         self._context = context
-        self._root = root
+        self._workflow_root = root
         self._ipc_transport = ipc_transport
-        self._fs = build_fs(root, kwargs)
+        super().__init__(root=self._root_for_scope(scope), kwargs=kwargs)
 
-    @property
-    def training_root(self) -> DataUri:
-        """The exact local directory or isolated remote prefix for training."""
-        path = self._root.path if self._root.protocol == "file" else self._prefix("job")
-        return DataUri(f"{self._root.protocol}://{path.rstrip('/')}/")
-
-    @staticmethod
-    def _is_uri(value: str) -> bool:
-        """
-        Returns True if the value is a URI.
-        Useful for allowing URIs to be free passed around.
-        """
-        return DataUri.is_valid(value)
-
-    def _prefix(self, scope: Scope) -> str:
-        """
-        Map scope -> a path prefix under the user-provided root.
-        """
-
-        # Keep paths POSIX-like even on Windows since many fsspec backends expect that.
-        base = posixpath.join(self._root.path)
-
+    def _root_for_scope(self, scope: Scope) -> DataUri:
+        root = self._workflow_root
         match scope:
             case "job":
-                return posixpath.join(
-                    base,
+                path = posixpath.join(
+                    root.path,
                     partition("wr", self._context.workflow_run_id),
                     partition("jr", self._context.job_run_id),
                 )
             case "workflow":
-                return posixpath.join(
-                    base,
+                path = posixpath.join(
+                    root.path,
                     partition("wr", self._context.workflow_run_id),
                     "shared",
                 )
             case "cache":
-                return posixpath.join(base, "cache")
+                path = posixpath.join(root.path, "cache")
             case _:
                 assert_never(scope)
+        return DataUri(f"{root.protocol}://{path.rstrip('/')}/")
 
-    def _uri_for_key(self, key: str, scope: Scope) -> DataUri:
-        # TODO: Better interface for passing URIs directly across the whole store.
-        if self._is_uri(key):
-            return DataUri(key)
-
-        path = posixpath.join(self._prefix(scope), normalize_key(key))
-        return DataUri(f"{self._root.protocol}://{path}")
+    def scope(self, scope: Scope) -> WorkflowStore:
+        """Return a new store for this scope, without changing the current store."""
+        return WorkflowStore(
+            context=self._context,
+            root=self._workflow_root,
+            ipc_transport=self._ipc_transport,
+            kwargs=self.kwargs,
+            scope=scope,
+        )
 
     @override
-    def put(
-        self,
-        key: str,
-        data: bytes,
-        *,
-        scope: Scope = "job",
-        content_type: str | None = None,
-    ) -> DataUri:
-        uri = self._uri_for_key(key, scope)
-
-        # Ensure parent directories for local-ish FS that require it
-        parent = posixpath.dirname(uri.path)
-        if self._root.is_local():
-            self._fs.makedirs(parent, exist_ok=True)
-
-        with self._fs.open(str(uri), "wb") as f:
-            f.write(data)
-
-        # Send an IPC message to the parent process to notify it of the new data URI.
+    def put(self, key: str | DataUri, data: bytes) -> DataUri:
+        uri = super().put(key, data)
         self._ipc_transport.emit(
             DataReferenceCreated(type="data_reference_created", data_reference=str(uri))
         )
-
         return uri
-
-    @override
-    def get(self, key: str | DataUri, *, scope: Scope = "job") -> bytes:
-        uri = key if isinstance(key, DataUri) else self._uri_for_key(key, scope)
-
-        if uri.protocol != self._root.protocol:
-            raise ValueError(
-                f"Protocol mismatch: expected {self._root.protocol}, got {uri.protocol}"
-            )
-
-        with self._fs.open(str(uri), "rb") as f:
-            return f.read()
-
-    @override
-    def exists(self, key: str, *, scope: Scope = "job") -> bool:
-        uri = self._uri_for_key(key, scope)
-        return self._fs.exists(str(uri))
-
-    @override
-    def delete(self, key: str, *, scope: Scope = "job") -> None:
-        uri = self._uri_for_key(key, scope)
-        if self._fs.exists(str(uri)):
-            self._fs.rm(str(uri))
-
-    @overload
-    def open(
-        self,
-        ref: str | DataUri,
-        mode: Literal["r", "w", "a", "x", "rt", "wt", "at", "xt"] = ...,
-        *,
-        scope: Scope = ...,
-    ) -> StoreContextManager[TextIO]: ...
-
-    @overload
-    def open(
-        self,
-        ref: str | DataUri,
-        mode: Literal["rb", "wb", "ab", "xb"],
-        *,
-        scope: Scope = ...,
-    ) -> StoreContextManager[BinaryIO]: ...
-
-    @overload
-    def open(
-        self,
-        ref: str | DataUri,
-        mode: str,
-        *,
-        scope: Scope = ...,
-    ) -> StoreContextManager[TextIO | BinaryIO]: ...
-
-    @override
-    def open(
-        self,
-        ref: str | DataUri,
-        mode: str = "r",
-        *,
-        scope: Scope = "job",
-    ) -> StoreContextManager[TextIO | BinaryIO]:
-        uri = ref if isinstance(ref, DataUri) else self._uri_for_key(ref, scope)
-
-        # Ensure parent directories exist for write/append modes on local FS
-        if any(c in mode for c in "wa"):
-            parent = posixpath.dirname(str(uri))
-            if self._root.is_local():
-                self._fs.makedirs(parent, exist_ok=True)
-
-        context = cast(
-            "AbstractContextManager[TextIO | BinaryIO]",
-            self._fs.open(str(uri), mode),
-        )
-        return _StoreOpenContext(context, uri)
-
-    @override
-    def open_file(
-        self, key: str | DataUri, mode: Literal["r", "w"], *, scope: Scope = "job"
-    ) -> StoreContextManager[TmpFileProtocol]:
-        uri = key if isinstance(key, DataUri) else self._uri_for_key(key, scope)
-        return _OpenFileContext(self, uri, mode)
-
-
-class _StoreOpenContext[T](AbstractContextManager[T]):
-    def __init__(
-        self,
-        context: AbstractContextManager[T],
-        uri: DataUri,
-    ) -> None:
-        super().__init__()
-        self._context = context
-        self._target_uri = uri
-        self._uri: DataUri | None = None
-
-    @property
-    def uri(self) -> DataUri:
-        if self._uri is None:
-            raise RuntimeError("URI is only available after successful context exit")
-        return self._uri
-
-    @override
-    def __enter__(self) -> T:
-        super().__enter__()
-        return self._context.__enter__()
-
-    @override
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_value: BaseException | None,
-        traceback: TracebackType | None,
-    ) -> bool | None:
-        suppress = self._context.__exit__(exc_type, exc_value, traceback)
-        if exc_type is None:
-            self._uri = self._target_uri
-        return suppress
-
-
-class _OpenFileContext(AbstractContextManager[TmpFileProtocol]):
-    def __init__(
-        self,
-        store: StoreImpl,
-        uri: DataUri,
-        mode: Literal["r", "w"],
-    ) -> None:
-        super().__init__()
-
-        if mode not in {"r", "w"}:
-            raise ValueError(f"Invalid mode: {mode}")
-
-        self._store = store
-        self._target_uri = uri
-        self._mode: Literal["r", "w"] = mode
-        self._directory: tempfile.TemporaryDirectory[str] | None = None
-        self._path: Path | None = None
-        self._uri: DataUri | None = None
-
-    @property
-    def path(self) -> Path:
-        if self._path is None:
-            raise RuntimeError("Temporary file is only available inside its context")
-        return self._path
-
-    @property
-    def uri(self) -> DataUri:
-        if self._uri is None:
-            raise RuntimeError("URI is only available after successful context exit")
-        return self._uri
-
-    @override
-    def __enter__(self) -> TmpFileProtocol:
-        super().__enter__()
-        if self._directory is not None:
-            raise RuntimeError(
-                "Temporary file context cannot be entered more than once"
-            )
-
-        initial_data = self._store.get(self._target_uri) if self._mode == "r" else None
-        self._directory = tempfile.TemporaryDirectory()
-
-        # NB: It's important for to preserve the initial data file's name/extension.
-        # Some libs will validate files by extension, so we need to preserve it.
-        if initial_data is not None:
-            self._path = Path(self._directory.name) / posixpath.basename(
-                self._target_uri.key
-            )
-            self._path.write_bytes(initial_data)
-        else:
-            with tempfile.NamedTemporaryFile(
-                dir=self._directory.name,
-                delete=False,
-            ) as temporary_file:
-                self._path = Path(temporary_file.name)
-        return self
-
-    @override
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        _exc_value: BaseException | None,
-        _traceback: TracebackType | None,
-    ) -> None:
-        directory = self._directory
-        if directory is None:
-            raise RuntimeError("Temporary file context has not been entered")
-
-        try:
-            if exc_type is None:
-                match self._mode:
-                    case "w":
-                        self._uri = self._store.put(
-                            str(self._target_uri), self.path.read_bytes()
-                        )
-                    case "r":
-                        self._uri = self._target_uri
-        finally:
-            directory.cleanup()
