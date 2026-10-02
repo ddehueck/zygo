@@ -37,7 +37,7 @@ class Model:
 
         The dataset location and training store are supplied at execution,
         rather than captured in the model definition. Persist artifacts through
-        ctx.store() without returning a bundle.
+        ctx.store without returning a bundle.
         """
         if self._train is not None:
             raise ValueError("A training function is already registered")
@@ -56,6 +56,19 @@ class Model:
         self._features = features
         self._train = fn
         return fn
+
+    def run_train[T](self, dataset: Dataset[T], *, ctx: TrainingContext) -> None:
+        """Validate the dataset and invoke the registered training hook."""
+        if self._train is None:
+            raise ValueError("No training function is registered")
+        training_dataset = (
+            dataset.with_features(self._features)
+            if self._features is not None
+            else dataset
+        )
+        result = cast("Callable[..., object]", self._train)(training_dataset, ctx=ctx)
+        if result is not None:
+            raise TypeError("Training returned a value that is not None")
 
     def load[F: Callable[..., object]](self, fn: F) -> F:
         """Register ``(store: ModelStore)`` returning a live model for inference.
@@ -78,6 +91,15 @@ class Model:
         self._model_type = cast("type[object]", model_type)
         self._load = fn
         return fn
+
+    def run_load(self, store: ModelStore) -> object:
+        """Load a live model from its artifact store."""
+        if self._load is None:
+            raise ValueError("No loading function is registered")
+        model = self._load(store)
+        if self._model_type is not None and not isinstance(model, self._model_type):
+            raise TypeError("Loading returned a model that does not match its annotation")
+        return model
 
     def infer[F: Callable[..., object]](self, fn: F) -> F:
         """Register inference and check its model annotation against load's return.
@@ -102,6 +124,12 @@ class Model:
             )
         self._infer = fn
         return fn
+
+    def run_infer(self, model: object, data: object) -> object:
+        """Invoke the registered inference hook with a loaded model and input."""
+        if self._infer is None:
+            raise ValueError("No inference function is registered")
+        return self._infer(model, data)
 
 
 def _annotations(
