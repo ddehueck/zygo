@@ -51,13 +51,20 @@ pub struct RunCommandArgs {
 pub struct StoreConfig {
     pub root_uri: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub kwargs: Option<std::collections::HashMap<String, String>>,
+    pub kwargs: Option<std::collections::HashMap<String, serde_json::Value>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkflowStoreConfig {
+    pub job: StoreConfig,
+    pub workflow: StoreConfig,
+    pub cache: StoreConfig,
 }
 
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum StdoutIPCMessage {
-    DataReferenceCreated {
+    DataReferenceInserted {
         data_reference: String,
     },
     ChannelItemInserted {

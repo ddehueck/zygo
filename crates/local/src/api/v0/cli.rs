@@ -3,7 +3,7 @@ use tokio::process::Command;
 
 use crate::api::error::{self, Result};
 use crate::api::v0::interface::{
-    RunCommandArgs, STDOUT_IPC_PREFIX, StdoutIPCMessage, StoreConfig, WorkflowMetadata,
+    RunCommandArgs, STDOUT_IPC_PREFIX, StdoutIPCMessage, WorkflowMetadata, WorkflowStoreConfig,
     ZYGO_PKG_CLI_MODULE,
 };
 use crate::models::{
@@ -71,7 +71,7 @@ impl PythonCli {
     pub fn build_run_job_command(
         &self,
         args: RunCommandArgs,
-        store_config: Option<StoreConfig>,
+        store_config: Option<WorkflowStoreConfig>,
     ) -> Command {
         let mut command = Command::new(self.python.clone());
         command
@@ -82,6 +82,7 @@ impl PythonCli {
             .args(vec![
                 "-m".into(),
                 ZYGO_PKG_CLI_MODULE.into(),
+                "workflow".into(),
                 "run".into(),
                 self.target.clone(),
                 "--args".into(),
@@ -90,7 +91,8 @@ impl PythonCli {
         if let Some(store_config) = store_config {
             command.args([
                 "--store-config",
-                &serde_json::to_string(&store_config).expect("failed to serialize StoreConfig"),
+                &serde_json::to_string(&store_config)
+                    .expect("failed to serialize WorkflowStoreConfig"),
             ]);
         }
         command
@@ -109,6 +111,7 @@ impl PythonCli {
         command.current_dir(&self.cwd).args(vec![
             "-m".into(),
             ZYGO_PKG_CLI_MODULE.into(),
+            "workflow".into(),
             "metadata".into(),
             self.target.clone(),
         ]);
@@ -194,7 +197,7 @@ impl PythonCli {
 impl StdoutIPCMessage {
     pub fn into_event_kind(self) -> anyhow::Result<EventKind> {
         Ok(match self {
-            Self::DataReferenceCreated { data_reference } => {
+            Self::DataReferenceInserted { data_reference } => {
                 EventKind::DataReferenceInserted(DataReferenceInsertedData {
                     uri: models::DataReferenceUri::try_from(data_reference)?,
                 })
@@ -246,7 +249,7 @@ mod tests {
     #[test]
     fn parses_uri_only_references() {
         let event = parse_event(
-            r#"ZYGO_IPC={"type":"data_reference_created","data_reference":"file:///input"}"#,
+            r#"ZYGO_IPC={"type":"data_reference_inserted","data_reference":"file:///input"}"#,
         );
         assert!(
             matches!(event, EventKind::DataReferenceInserted(data) if data.uri.as_ref() == "file:///input")
@@ -275,7 +278,7 @@ mod tests {
     #[test]
     fn rejects_blank_reference_uris() {
         for kind in [
-            "data_reference_created",
+            "data_reference_inserted",
             "channel_item_inserted",
             "tag_inserted",
         ] {

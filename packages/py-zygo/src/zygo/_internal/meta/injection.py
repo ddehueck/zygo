@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from zygo.context import JobContext
+    from zygo.workflow.context import JobContext
 
 
 # TODO: Use the same function signature as the workflow.job decorator for consistency.

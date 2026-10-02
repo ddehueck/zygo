@@ -1,28 +1,8 @@
-"""
-This module provides IPC utilities for the zygo workflow engine.
+"""Versioned CLI boundary between the runtime and the Zygo Python package.
 
-There are two main components required by the workflow engine:
-    - Retrieving workflow metadata
-    - Executing workflow jobs
-
-While the main components should stay consistent the objects may
-need to be updated as the engine evolves.
-In anticipation of this evolution we version the IPC module interface.
-
-The workflow engine will call out to this module via a command line interface
-defined in the cli.vXYZ.__main__ module.
-
-This interface follows the form of:
-`python -m zygo.cli.version <command> <users_workflow_module>`
-
-For example:
-`python -m zygo.cli.v0 metadata examples.main:workflow`
-
-`python -m zygo.cli.v0 run examples.main:workflow --args '{...}'`
-
-`python -m zygo.cli.v0 run examples.main:workflow --args '{...}' \\
-  --http-config '{"url":"http://myservice.com/api/events"}'`
-
+Invoke workflow commands through ``python -m zygo.cli.v0 workflow`` and model
+commands through ``python -m zygo.cli.v0 ml``. Both command groups share the
+publication protocol and transport infrastructure.
 """
 
 from zygo.cli.importer import load_workflow

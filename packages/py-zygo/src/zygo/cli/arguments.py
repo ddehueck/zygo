@@ -3,7 +3,7 @@ import json
 import sys
 from typing import Any, cast
 
-from zygo.types import (
+from zygo.workflow.types import (
     JobId,
     RunJobArgs,
     WorkflowRunId,

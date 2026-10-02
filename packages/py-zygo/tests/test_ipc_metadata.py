@@ -6,10 +6,10 @@ import json
 import pytest
 
 from zygo import Channel, Workflow
-from zygo.cli.v0 import metadata as metadata_module
-from zygo.cli.v0.metadata import build_workflow_metadata
+from zygo.cli.v0 import workflow_metadata as metadata_module
 from zygo.cli.v0.types import STDOUT_IPC_PREFIX
-from zygo.codecs import Integer, String
+from zygo.cli.v0.workflow_metadata import build_workflow_metadata
+from zygo.workflow.codecs import Integer, String
 
 
 def _workflow() -> Workflow:

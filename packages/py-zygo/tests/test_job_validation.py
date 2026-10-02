@@ -2,7 +2,7 @@ import pytest
 
 from zygo import Channel, JobContext, Workflow
 from zygo._internal.meta.jobs import validate_job
-from zygo.codecs import Integer, String
+from zygo.workflow.codecs import Integer, String
 
 
 def test_job_accepts_all_supported_return_annotations() -> None:

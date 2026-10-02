@@ -33,16 +33,3 @@ class JobRunContext:
     workflow_run_id: WorkflowRunId
     job_run_id: JobRunId
     input: DataUri
-
-
-@dataclass(frozen=True)
-class GPUConfig:
-    type: str | None = None
-    count: int | None = None
-
-
-@dataclass(frozen=True)
-class JobResourceConfig:
-    cpu_cores: float | None = None
-    memory_gb: int | None = None
-    gpu: GPUConfig | None = None

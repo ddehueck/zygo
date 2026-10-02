@@ -1,153 +1,95 @@
+from __future__ import annotations
+
 import argparse
-from dataclasses import dataclass
-import json
-import math
-from typing import cast
+from typing import TYPE_CHECKING
 
-from zygo.cli.v0.types import JobRunArgs, StoreConfig
-from zygo.store import DataUri
+from pydantic import ValidationError
 
-_DEFAULT_HTTP_TIMEOUT_SECONDS = 30.0
-_DEFAULT_HTTP_MAX_RETRY_COUNT = 3
-_DEFAULT_HTTP_RETRY_INTERVAL_SECONDS = 5.0
+from zygo.cli.v0.inputs import (
+    CliInput,
+    DatasetConfigInput,
+    HttpConfigInput,
+    JobRunInput,
+    StoreConfigInput,
+    WorkflowStoreConfigInput,
+)
 
-
-@dataclass(frozen=True)
-class ValidatedHttpConfig:
-    url: str
-    headers: dict[str, str]
-    timeout: float
-    max_retries: int
-    retry_interval: float
-
-
-def _parse_json_object(raw: str, option: str, fields: set[str]) -> dict[str, object]:
-    try:
-        data = cast("object", json.loads(raw))
-    except json.JSONDecodeError as error:
-        raise argparse.ArgumentTypeError(f"{option} must be valid JSON") from error
-    if not isinstance(data, dict):
-        raise argparse.ArgumentTypeError(f"{option} must be a JSON object")
-
-    result = cast("dict[str, object]", data)
-
-    unknown = set(result.keys()) - fields
-    if unknown:
-        raise argparse.ArgumentTypeError(
-            f"{option} has unknown fields: {', '.join(sorted(unknown))}"
-        )
-    return result
-
-
-def _parse_dict_value_as_string(
-    data: dict[str, object], field: str, option: str
-) -> str:
-    value = data.get(field)
-    if not isinstance(value, str):
-        raise argparse.ArgumentTypeError(f"{option}.{field} must be a string")
-    return value
-
-
-def _positive_number(value: object, field: str) -> float:
-    error = argparse.ArgumentTypeError(
-        f"--http-config.{field} must be a positive finite number"
+if TYPE_CHECKING:
+    from zygo.cli.v0.types import (
+        DatasetConfig,
+        HttpConfig,
+        JobRunArgs,
+        StoreConfig,
+        WorkflowStoreConfig,
     )
-    if not isinstance(value, (int, float)):
-        raise error
-    if isinstance(value, bool):
-        raise error
 
-    is_finite = math.isfinite(value)
-    if not is_finite:
-        raise error
 
-    is_positive = value > 0
-    if not is_positive:
-        raise error
+class IpcArguments(argparse.Namespace):
+    domain: str
+    command: str
+    target: str
+    args: JobRunArgs | None
+    http_config: HttpConfig | None
+    dataset_config: DatasetConfig | None
+    store_config: StoreConfig | WorkflowStoreConfig | None
 
-    return float(value)
+    def __init__(self) -> None:
+        super().__init__()
+        self.domain = ""
+        self.command = ""
+        self.target = ""
+        self.args = None
+        self.http_config = None
+        self.dataset_config = None
+        self.store_config = None
+
+
+def add_publication_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--http-config",
+        type=parse_http_config,
+        metavar="JSON",
+        help="HTTP IPC settings as a JSON object. Omit to publish via stdout.",
+    )
+
+
+def _parse_input[Model: CliInput](raw: str, option: str, model: type[Model]) -> Model:
+    try:
+        return model.model_validate_json(raw)
+    except ValidationError as error:
+        # Keep diagnostics option-qualified and omit raw inputs, which may
+        # contain backend credentials or authorization headers.
+        messages: list[str] = []
+        for detail in error.errors(include_url=False, include_input=False):
+            path = ".".join([option, *(str(part) for part in detail["loc"])])
+            match detail["type"]:
+                case "json_invalid":
+                    message = "must be valid JSON"
+                case "model_type":
+                    message = "must be a JSON object"
+                case "extra_forbidden":
+                    message = "has unknown fields"
+                case _:
+                    message = detail["msg"]
+            messages.append(f"{path} {message}")
+        raise argparse.ArgumentTypeError("\n".join(messages)) from error
 
 
 def parse_job_args(raw: str) -> JobRunArgs:
-    fields = {
-        "job_id",
-        "data_reference_uri",
-        "workflow_run_id",
-        "job_run_id",
-    }
-    data = _parse_json_object(raw, "--args", fields)
-    return JobRunArgs(
-        job_id=_parse_dict_value_as_string(data, "job_id", "--args"),
-        data_reference_uri=_parse_dict_value_as_string(
-            data, "data_reference_uri", "--args"
-        ),
-        workflow_run_id=_parse_dict_value_as_string(data, "workflow_run_id", "--args"),
-        job_run_id=_parse_dict_value_as_string(data, "job_run_id", "--args"),
-    )
+    return _parse_input(raw, "--args", JobRunInput).to_protocol()
+
+
+def parse_dataset_config(raw: str) -> DatasetConfig:
+    return _parse_input(raw, "--dataset-config", DatasetConfigInput).to_protocol()
 
 
 def parse_store_config(raw: str) -> StoreConfig:
-    data = _parse_json_object(raw, "--store-config", {"root_uri", "kwargs"})
-    root_uri = _parse_dict_value_as_string(data, "root_uri", "--store-config")
-    if "://" not in root_uri:
-        root_uri = f"file://{root_uri}"
-    try:
-        root_uri = DataUri(root_uri).uri
-    except ValueError as error:
-        raise argparse.ArgumentTypeError(
-            f"--store-config.root_uri is invalid: {error}"
-        ) from error
-
-    raw_kwargs = data.get("kwargs", {})
-    if not isinstance(raw_kwargs, dict) or any(
-        not isinstance(key, str) or not isinstance(value, str)
-        for key, value in cast("dict[object, object]", raw_kwargs).items()
-    ):
-        raise argparse.ArgumentTypeError(
-            "--store-config.kwargs must map strings to strings"
-        )
-    return StoreConfig(root_uri=root_uri, kwargs=cast("dict[str, str]", raw_kwargs))
+    return _parse_input(raw, "--store-config", StoreConfigInput).to_protocol()
 
 
-def parse_http_config(raw: str) -> ValidatedHttpConfig:
-    data = _parse_json_object(
-        raw,
-        "--http-config",
-        {"url", "headers", "timeout", "max_retries", "retry_interval"},
-    )
-    url = _parse_dict_value_as_string(data, "url", "--http-config")
-    if not url.startswith(("http://", "https://")):
-        raise argparse.ArgumentTypeError(
-            "--http-config.url must be a full http:// or https:// URL"
-        )
+def parse_workflow_store_config(raw: str) -> WorkflowStoreConfig:
+    return _parse_input(raw, "--store-config", WorkflowStoreConfigInput).to_protocol()
 
-    headers_data = data.get("headers", {})
-    if not isinstance(headers_data, dict):
-        raise argparse.ArgumentTypeError(
-            "--http-config.headers must map nonempty names to strings"
-        )
-    headers: dict[str, str] = {}
-    for name, value in cast("dict[object, object]", headers_data).items():
-        if not isinstance(name, str) or not name.strip() or not isinstance(value, str):
-            raise argparse.ArgumentTypeError(
-                "--http-config.headers must map nonempty names to strings"
-            )
-        headers[name.strip()] = value.strip()
 
-    max_retries = data.get("max_retries", _DEFAULT_HTTP_MAX_RETRY_COUNT)
-    if type(max_retries) is not int or max_retries < 0:
-        raise argparse.ArgumentTypeError(
-            "--http-config.max_retries must be a nonnegative integer"
-        )
-    return ValidatedHttpConfig(
-        url=url,
-        headers=headers,
-        timeout=_positive_number(
-            data.get("timeout", _DEFAULT_HTTP_TIMEOUT_SECONDS), "timeout"
-        ),
-        max_retries=max_retries,
-        retry_interval=_positive_number(
-            data.get("retry_interval", _DEFAULT_HTTP_RETRY_INTERVAL_SECONDS),
-            "retry_interval",
-        ),
-    )
+def parse_http_config(raw: str) -> HttpConfig:
+    return _parse_input(raw, "--http-config", HttpConfigInput).to_protocol()

@@ -1,16 +1,16 @@
 from collections.abc import Mapping
 from typing import override
 
-from zygo.codecs.base import (
+from zygo.store import DataUri
+from zygo.workflow.codecs.base import (
     Codec,
     CodecDecodeError,
     CodecEncodeError,
     FileExtension,
     FileFormat,
 )
-from zygo.codecs.json import Json
-from zygo.codecs.primitives import String
-from zygo.store import DataUri
+from zygo.workflow.codecs.json import Json
+from zygo.workflow.codecs.primitives import String
 
 
 class Folder(Codec[DataUri]):

@@ -1,15 +1,14 @@
-"""Protocol interface for the Store abstraction."""
+"""Interfaces for store file context managers."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, BinaryIO, Literal, Protocol, TextIO, overload
+from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
     from pathlib import Path
     from types import TracebackType
 
     from zygo.store.fsspec import FsspecUri as DataUri
-    from zygo.store.types import Scope
 
 
 class StoreContextManager[T](Protocol):
@@ -27,165 +26,6 @@ class StoreContextManager[T](Protocol):
         traceback: TracebackType | None,
         /,
     ) -> bool | None: ...
-
-
-class StoreProtocol(Protocol):
-    """
-    A key-value store with workflow/job-based isolation.
-    Built on top of fsspec to support many different backends that can be used (local filesystem, S3, GCS, etc.)
-    """
-
-    def put(
-        self,
-        key: str,
-        data: bytes,
-        *,
-        scope: Scope = "job",
-        content_type: str | None = None,
-    ) -> DataUri:
-        """
-        Store data under the given key.
-
-        Args:
-            key: Logical name for the data.
-            data: Raw bytes to store.
-            scope: Isolation level - "job" (default), "workflow", or "global".
-            content_type: Optional MIME type hint.
-
-        Returns:
-            The URI of the stored object.
-        """
-        ...
-
-    @overload
-    def get(self, key: str, *, scope: Scope = "job") -> bytes: ...
-
-    @overload
-    def get(self, key: DataUri) -> bytes: ...
-
-    def get(self, key: str | DataUri, *, scope: Scope = "job") -> bytes:
-        """
-        Retrieve data by key or by DataUri.
-
-        Args:
-            key: Logical name for the data, or a DataUri obtained from put/ingest.
-            scope: Isolation level to look in (default: "job"). Ignored when
-                a DataUri is passed.
-
-        Returns:
-            The stored bytes.
-
-        Raises:
-            FileNotFoundError: If the key does not exist.
-        """
-        ...
-
-    def exists(self, key: str, *, scope: Scope = "job") -> bool:
-        """
-        Check if a key exists.
-
-        Args:
-            key: Logical name for the data.
-            scope: Isolation level to look in (default: "job").
-
-        Returns:
-            True if the key exists, False otherwise.
-        """
-        ...
-
-    def delete(self, key: str, *, scope: Scope = "job") -> None:
-        """
-        Delete data by key.
-
-        Args:
-            key: Logical name for the data.
-            scope: Isolation level to look in (default: "job").
-
-        Note:
-            No-op if the key does not exist.
-        """
-        ...
-
-    @overload
-    def open(
-        self,
-        ref: str | DataUri,
-        mode: Literal["r", "w", "a", "x", "rt", "wt", "at", "xt"] = ...,
-        *,
-        scope: Scope = ...,
-    ) -> StoreContextManager[TextIO]: ...
-
-    @overload
-    def open(
-        self,
-        ref: str | DataUri,
-        mode: Literal["rb", "wb", "ab", "xb"],
-        *,
-        scope: Scope = ...,
-    ) -> StoreContextManager[BinaryIO]: ...
-
-    @overload
-    def open(
-        self,
-        ref: str | DataUri,
-        mode: str,
-        *,
-        scope: Scope = ...,
-    ) -> StoreContextManager[TextIO | BinaryIO]: ...
-
-    def open(
-        self,
-        ref: str | DataUri,
-        mode: str = "r",
-        *,
-        scope: Scope = "job",
-    ) -> StoreContextManager[TextIO | BinaryIO]:
-        """
-        Open a stored object as a file-like handle (context manager).
-
-        Supports both text and binary modes, just like the built-in ``open()``.
-
-        Args:
-            ref: A uri obtained from put/ingest, or a key string.
-            mode: File mode string (e.g. ``"r"``, ``"w"``, ``"rb"``, ``"wb"``).
-            scope: Isolation level (default: "job"). Ignored when a DataUri
-                is passed.
-
-        Returns:
-            A context manager that yields a file-like object and exposes its
-            URI after a successful context exit.
-
-        Example::
-
-            with store.open(ref, "r") as f:
-                lines = f.readlines()
-
-            output = store.open("output.txt", "w")
-            with output as f:
-                f.writelines(lines)
-
-            uri = output.uri
-        """
-        ...
-
-    def open_file(
-        self, key: str | DataUri, mode: Literal["r", "w"], *, scope: Scope = "job"
-    ) -> StoreContextManager[TmpFileProtocol]:
-        """Return a temporary file.
-
-        When in write mode, the file is published under ``key`` on exit.
-        When in read mode, the file is downloaded from the store on enter.
-
-        This isn't as efficient as using open() but it is useful for integrating
-        with libraries that expect a real fs.
-
-        Args:
-            key: Logical name to read or publish.
-            mode: ``"r"`` to download an existing object or ``"w"`` to publish
-                the completed file.
-            scope: Isolation level (default: "job").
-        """
-        ...
 
 
 class TmpFileProtocol(Protocol):

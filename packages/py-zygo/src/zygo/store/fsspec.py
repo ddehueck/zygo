@@ -33,6 +33,8 @@ class FsspecUri:
         # Ensure relative local paths are absolute.
         if protocol in {"file", "memory"} and not path.startswith("/"):
             path = str(Path(path).resolve())
+            if uri.endswith("/") and not path.endswith("/"):
+                path += "/"
             return f"{protocol}://{path}"
 
         return uri
@@ -70,7 +72,9 @@ class FsspecUri:
 
     def to_absolute(self) -> "FsspecUri":
         """Convert the fsspec URI to an absolute file URI."""
-        absolute_path = Path(self.path).resolve()
+        absolute_path = str(Path(self.path).resolve())
+        if self.uri.endswith("/") and not absolute_path.endswith("/"):
+            absolute_path += "/"
         return FsspecUri(f"{self.protocol}://{absolute_path}")
 
     def is_absolute(self) -> bool:
@@ -82,6 +86,10 @@ class FsspecUri:
     def is_local(self) -> bool:
         """Check if the fsspec URI is a local filesystem."""
         return self.protocol in {"file", "memory"}
+
+    def as_str(self) -> str:
+        """Return the fsspec URI as a string."""
+        return str(self)
 
     @override
     def __str__(self) -> str:

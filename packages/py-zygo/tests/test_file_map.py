@@ -1,8 +1,8 @@
 import pytest
 
 from zygo import Channel
-from zygo.codecs import CodecDecodeError, CodecEncodeError, FileMap
 from zygo.store import DataUri
+from zygo.workflow.codecs import CodecDecodeError, CodecEncodeError, FileMap
 
 
 def test_file_map_round_trip():
