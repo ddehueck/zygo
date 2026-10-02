@@ -10,7 +10,7 @@ from typing import (
     override,
 )
 
-from zygo.codecs.base import (
+from zygo.workflow.codecs.base import (
     Codec,
     CodecDecodeError,
     CodecEncodeError,

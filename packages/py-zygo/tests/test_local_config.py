@@ -3,7 +3,7 @@ from types import ModuleType
 
 import pytest
 
-from zygo.cli.v0.config import local_store_options, project_search_paths
+from zygo.cli.v0.workflow_config import local_store_options, project_search_paths
 
 
 def test_local_store_options_precedence_and_fallback(

@@ -4,8 +4,7 @@ import sys
 
 import pyarrow as pa
 
-
-path = Path(__file__).parents[1] / "src/zygo/ml/features/__init__.py"
+path = Path(__file__).parents[1] / "src/zygo/dataset/features/__init__.py"
 spec = importlib.util.spec_from_file_location("_test_zygo_features", path)
 assert spec is not None and spec.loader is not None
 module = importlib.util.module_from_spec(spec)

@@ -1,7 +1,7 @@
 import pytest
 
 from zygo import Channel
-from zygo.codecs import (
+from zygo.workflow.codecs import (
     Boolean,
     Bytes,
     Codec,

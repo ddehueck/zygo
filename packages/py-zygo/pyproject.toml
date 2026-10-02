@@ -20,7 +20,7 @@ dev = [
     "pytest>=9.0.2",
     "python-dotenv>=1.2.1",
     "ruff>=0.14.4",
-    "ty>=0.0.1-alpha.26",
+    "ty>=0.0.8",
     "pyarrow-stubs>=20.0.0.20260819",
 ]
 

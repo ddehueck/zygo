@@ -1,15 +1,16 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator, Mapping
-from dataclasses import fields
-from typing import TYPE_CHECKING, cast, overload
+from collections.abc import Iterator, Mapping
+from pathlib import Path
+from typing import cast, overload
 
 from fsspec.core import url_to_fs
 import pyarrow as pa
 import pyarrow.dataset as pads
 from pyarrow.fs import FSSpecHandler, PyFileSystem
 
-from zygo.ml.features import Features
+from zygo.dataset.builder import DEFAULT_SHARD_SIZE, DatasetBuilder
+from zygo.dataset.features import Features
 from zygo.store import DataUri
 
 
@@ -30,6 +31,26 @@ class Dataset[T]:
         self._source: pads.Dataset = source
         self.uri = uri
         self._features = features
+
+    @classmethod
+    def builder(
+        cls,
+        output_path: str | Path,
+        *,
+        schema: type[Features],
+        shard_size: int = DEFAULT_SHARD_SIZE,
+        overwrite: bool = False,
+    ) -> DatasetBuilder:
+        """
+        Build a local dataset directory.
+        e.g.
+
+        >>> with Dataset.builder("mydataset/", schema=Features) as builder:
+        ...     builder.add({"image": image, "label": 0})
+        """
+        return DatasetBuilder(
+            output_path, schema=schema, shard_size=shard_size, overwrite=overwrite
+        )
 
     @property
     def features(self) -> type[T] | None:
@@ -56,13 +77,13 @@ class Dataset[T]:
     ) -> Dataset[F]: ...
 
     @classmethod
-    def open(
+    def open[F: Features](
         cls,
         uri: str | DataUri,
         *,
-        features: type[Features] | None = None,
+        features: type[F] | None = None,
         storage_options: Mapping[str, object] | None = None,
-    ) -> Dataset[object]:
+    ) -> Dataset[F] | Dataset[dict[str, object]]:
         location = str(uri)
         filesystem, path = url_to_fs(location, **dict(storage_options or {}))
         source = pads.dataset(
@@ -72,7 +93,8 @@ class Dataset[T]:
         )
         if features is not None:
             features.validate_arrow_schema(source.schema)
-        return Dataset(source, uri=location, features=features)
+            return Dataset[F](source, uri=location, features=features)
+        return Dataset[dict[str, object]](source, uri=location)
 
     @property
     def arrow_schema(self) -> pa.Schema:

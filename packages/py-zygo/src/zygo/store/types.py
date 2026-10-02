@@ -12,7 +12,8 @@ __all__ = ["DataUri", "Scope", "StoreOptions"]
 # Scopes represent the data visibility for different run contexts.
 # - job:      data visible only within the current job
 # - workflow: data visible across all jobs in the current workflow run
-# - cache:    data visible across all workflow runs
+# - cache:    reusable data across workflow runs using the same cache root
+# Cache callers must tolerate missing entries and be able to reconstruct them.
 # By default, the scope is "job". This way data is isolated by default.
 Scope = Literal["job", "workflow", "cache"]
 
@@ -22,4 +23,4 @@ class StoreOptions:
     """Configuration for the store backend."""
 
     root_uri: DataUri
-    kwargs: dict[str, str | int | float | bool | None] | None = None  # Jsonable?
+    kwargs: dict[str, object] | None = None  # Jsonable?

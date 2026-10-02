@@ -3,13 +3,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
-    from zygo.store._internal.impl import WorkflowStore
-
-
-class TagsProtocol(Protocol):
-    """A tag is an alpha-numeric string that can only contain the characters `a-z`, `A-Z`, `0-9`, `_`, and `-`. Tags are used to filter jobs in the workflow system."""
-
-    def add(self, value: str) -> None: ...
+    from zygo.tags import TagsProtocol
+    from zygo.workflow.store import WorkflowStore
 
 
 class JobContext(Protocol):

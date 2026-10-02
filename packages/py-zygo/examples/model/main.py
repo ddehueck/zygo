@@ -1,17 +1,10 @@
 from dataclasses import dataclass
-from pathlib import Path
-import sys
-from typing import Annotated
 
-from PIL import Image
-import zygo
 from pydantic import BaseModel
 
+import zygo
 
-@zygo.features
-class Features:
-    image: zygo.Image
-    label: zygo.ClassLabel = zygo.ClassLabel("black", "white")
+from .dataset import BlackWhiteFeatures
 
 
 @dataclass
@@ -28,11 +21,10 @@ app = zygo.Model("constant-classifier")
 
 @app.train
 def train(
-    dataset: zygo.Dataset[Features], *, ctx: zygo.TrainingContext
+    dataset: zygo.Dataset[BlackWhiteFeatures], *, ctx: zygo.TrainingContext
 ) -> None:
     label = next(iter(dataset)).label
     ctx.store.put("label.txt", str(label).encode())
-
 
 
 @app.load

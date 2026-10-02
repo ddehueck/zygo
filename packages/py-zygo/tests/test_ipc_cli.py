@@ -17,16 +17,21 @@ if TYPE_CHECKING:
     from types import TracebackType
 
     from zygo.cli.v0.transport import IpcTransport
-    from zygo.cli.v0.types import StoreConfig
+    from zygo.cli.v0.types import WorkflowStoreConfig
 
 import zygo.cli.v0.__main__ as cli_module
-from zygo.cli.v0.__main__ import IpcArguments, build_parser
-from zygo.cli.v0.arguments import parse_http_config, parse_job_args, parse_store_config
+from zygo.cli.v0.__main__ import build_parser
+from zygo.cli.v0.arguments import (
+    IpcArguments,
+    parse_http_config,
+    parse_job_args,
+    parse_store_config,
+    parse_workflow_store_config,
+)
 from zygo.cli.v0.transport import HttpTransport, StdioTransport
 from zygo.cli.v0.types import (
     ChannelItemInserted,
-    DataReferenceCreated,
-    JobFailed,
+    DataReferenceInserted,
     JobRunArgs,
     TagInserted,
     serialize_ipc_message,
@@ -60,8 +65,8 @@ def test_generated_protocol_models_keep_wire_format() -> None:
 
     messages = [
         (
-            DataReferenceCreated("data_reference_created", "file:///output"),
-            {"type": "data_reference_created", "data_reference": "file:///output"},
+            DataReferenceInserted("data_reference_inserted", "file:///output"),
+            {"type": "data_reference_inserted", "data_reference": "file:///output"},
         ),
         (
             ChannelItemInserted("channel_item_inserted", "out", "file:///output"),
@@ -75,10 +80,6 @@ def test_generated_protocol_models_keep_wire_format() -> None:
             TagInserted("tag_inserted", "ready"),
             {"type": "tag_inserted", "value": "ready", "data_reference": None},
         ),
-        (
-            JobFailed("job_failed", "jr-1", "boom"),
-            {"type": "job_failed", "job_run_id": "jr-1", "error": "boom"},
-        ),
     ]
     for message, expected in messages:
         assert json.loads(serialize_ipc_message(message)) == expected
@@ -88,11 +89,11 @@ _JOB_ARGS = '{"job_id":"job","data_reference_uri":"file:///input","workflow_run_
 
 
 def test_parse_store_config() -> None:
-    raw = '{"root_uri":"file:///custom-results","kwargs":{"auto_mkdir":"true"}}'
+    raw = '{"root_uri":"file:///custom-results","kwargs":{"auto_mkdir":true}}'
     config = parse_store_config(raw)
 
     assert config.root_uri == "file:///custom-results"
-    assert config.kwargs == {"auto_mkdir": "true"}
+    assert config.kwargs == {"auto_mkdir": True}
 
     assert parse_store_config('{"root_uri":"memory://results"}').kwargs == {}
 
@@ -135,7 +136,7 @@ def test_parse_zygo_store_and_input_uris_without_backend_credentials() -> None:
         ('{"root_uri":"unknown-protocol://results"}', "root_uri"),
         ('{"root_uri":"file:///tmp","extra":1}', "unknown fields"),
         ('{"root_uri":"file:///tmp","kwargs":[]}', "kwargs"),
-        ('{"root_uri":"file:///tmp","kwargs":{"token":1}}', "kwargs"),
+        ('{"root_uri":"file:///tmp","kwargs":{"token":NaN}}', "kwargs"),
         ('{"root_uri":"file:///tmp","kwargs":null}', "kwargs"),
     ],
 )
@@ -153,13 +154,13 @@ def _transport_from_cli(
         *,
         target: str,
         args: JobRunArgs,
-        store_config: StoreConfig | None,
+        store_config: WorkflowStoreConfig | None,
         ipc_transport: IpcTransport,
     ) -> None:
         del target, args, store_config
         transports.append(ipc_transport)
 
-    monkeypatch.setattr(cli_module, "run", capture_run)
+    monkeypatch.setattr("zygo.cli.v0.workflow.run", capture_run)
     assert cli_module.main(argv) == 0
     assert len(transports) == 1
     return transports[0]
@@ -167,7 +168,7 @@ def _transport_from_cli(
 
 def test_build_transport_defaults_to_stdio(monkeypatch: pytest.MonkeyPatch) -> None:
     transport = _transport_from_cli(
-        monkeypatch, ["run", "pkg.mod:workflow", "--args", _JOB_ARGS]
+        monkeypatch, ["workflow", "run", "pkg.mod:workflow", "--args", _JOB_ARGS]
     )
     assert isinstance(transport, StdioTransport)
 
@@ -187,6 +188,7 @@ def test_build_transport_http_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     transport = _transport_from_cli(
         monkeypatch,
         [
+            "workflow",
             "run",
             "pkg.mod:workflow",
             "--args",
@@ -221,11 +223,15 @@ def test_build_transport_http_configures_request(
         "max_retries": 2,
         "retry_interval": 0.5,
         "timeout": 4,
-        "headers": {" Authorization ": " Bearer secret "},
+        "headers": {
+            " Authorization ": " Bearer secret ",
+            "X-Zygo-Attempt-Handle": "opaque-attempt-handle",
+        },
     })
     transport = _transport_from_cli(
         monkeypatch,
         [
+            "workflow",
             "run",
             "pkg.mod:workflow",
             "--args",
@@ -238,6 +244,7 @@ def test_build_transport_http_configures_request(
     transport.emit(ChannelItemInserted("channel_item_inserted", "out", "file:///one"))
     assert requests[0].full_url == "https://example.com/api/events"
     assert requests[0].get_header("Authorization") == "Bearer secret"
+    assert requests[0].get_header("X-zygo-attempt-handle") == "opaque-attempt-handle"
     assert requests[0].get_header("Content-type") == "application/json"
     assert timeouts == [4.0]
 
@@ -299,7 +306,7 @@ def test_parse_job_args_rejects_invalid(raw: str, error: str) -> None:
         ("--args", "{", "--args must be valid JSON"),
         ("--args", "{}", "--args.job_id"),
         ("--store-config", "{", "--store-config must be valid JSON"),
-        ("--store-config", "{}", "--store-config.root_uri"),
+        ("--store-config", "{}", "--store-config.job"),
         ("--http-config", "{", "--http-config must be valid JSON"),
         ("--http-config", "{}", "--http-config.url"),
     ],
@@ -307,7 +314,7 @@ def test_parse_job_args_rejects_invalid(raw: str, error: str) -> None:
 def test_parser_reports_invalid_json_arguments(
     option: str, raw: str, error: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    argv = ["run", "pkg.mod:workflow", "--args", _JOB_ARGS]
+    argv = ["workflow", "run", "pkg.mod:workflow", "--args", _JOB_ARGS]
     if option == "--args":
         argv[-1] = raw
     else:
@@ -322,7 +329,7 @@ def test_parser_reports_invalid_json_arguments(
 
 def test_parser_run_stdio_defaults() -> None:
     args = build_parser().parse_args(
-        ["run", "pkg.mod:workflow", "--args", _JOB_ARGS],
+        ["workflow", "run", "pkg.mod:workflow", "--args", _JOB_ARGS],
         namespace=IpcArguments(),
     )
     assert args.command == "run"
@@ -333,18 +340,38 @@ def test_parser_run_stdio_defaults() -> None:
 
 
 def test_parser_run_store_config() -> None:
-    raw = '{"root_uri":"memory://results","kwargs":{"token":"secret"}}'
+    raw = json.dumps({
+        "job": {"root_uri": "memory://jobs", "kwargs": {"token": "secret"}},
+        "workflow": {"root_uri": "memory://workflows"},
+        "cache": {"root_uri": "memory://cache"},
+    })
     args = build_parser().parse_args(
-        ["run", "pkg.mod:workflow", "--args", _JOB_ARGS, "--store-config", raw],
+        [
+            "workflow",
+            "run",
+            "pkg.mod:workflow",
+            "--args",
+            _JOB_ARGS,
+            "--store-config",
+            raw,
+        ],
         namespace=IpcArguments(),
     )
-    assert args.store_config == parse_store_config(raw)
+    assert args.store_config == parse_workflow_store_config(raw)
 
 
 def test_parser_run_http_config() -> None:
     raw = '{"url":"http://myservice.com/api/events","timeout":5.5}'
     args = build_parser().parse_args(
-        ["run", "pkg.mod:workflow", "--args", _JOB_ARGS, "--http-config", raw],
+        [
+            "workflow",
+            "run",
+            "pkg.mod:workflow",
+            "--args",
+            _JOB_ARGS,
+            "--http-config",
+            raw,
+        ],
         namespace=IpcArguments(),
     )
     assert args.http_config == parse_http_config(raw)
@@ -377,8 +404,6 @@ def test_http_transport_retries_same_envelope_and_uses_timeout(
         max_retries=2,
         retry_interval=1.0,
         timeout=2.5,
-        workflow_run_id="wr-1",
-        job_run_id="jr-1",
     )
     transport.emit(ChannelItemInserted("channel_item_inserted", "out", "file:///one"))
     assert len(bodies) == 3
@@ -388,8 +413,6 @@ def test_http_transport_retries_same_envelope_and_uses_timeout(
     first = cast("dict[str, object]", json.loads(bodies[0]))
     assert first == {
         "id": first["id"],
-        "workflow_run_id": "wr-1",
-        "job_run_id": "jr-1",
         "messages": [
             {
                 "type": "channel_item_inserted",

@@ -8,6 +8,7 @@ import posixpath
 import tempfile
 from typing import TYPE_CHECKING, BinaryIO, Literal, TextIO, cast, overload, override
 
+from zygo.cli.v0.types import DataReferenceInserted
 from zygo.store._internal.util import build_fs, normalize_key
 from zygo.store.protocol import TmpFileProtocol
 from zygo.store.types import DataUri
@@ -15,6 +16,7 @@ from zygo.store.types import DataUri
 if TYPE_CHECKING:
     from types import TracebackType
 
+    from zygo.cli.v0.transport import IpcTransport
     from zygo.store.protocol import StoreContextManager
 
 
@@ -25,12 +27,14 @@ class BaseStore:
         self,
         *,
         root: DataUri,
-        kwargs: dict[str, str | int | float | bool | None] | None = None,
+        ipc_transport: IpcTransport,
+        kwargs: dict[str, object] | None = None,
     ) -> None:
         super().__init__()
         if not str(root).endswith("/"):
             raise ValueError("Store root must be a prefix ending in '/'")
         self._root = root
+        self._ipc_transport = ipc_transport
         self._kwargs = dict(kwargs) if kwargs is not None else None
         self._fs = build_fs(root, self._kwargs)
 
@@ -39,7 +43,7 @@ class BaseStore:
         return self._root
 
     @property
-    def kwargs(self) -> dict[str, str | int | float | bool | None] | None:
+    def kwargs(self) -> dict[str, object] | None:
         return dict(self._kwargs) if self._kwargs is not None else None
 
     def _uri_for_key(self, key: str) -> DataUri:
@@ -56,6 +60,11 @@ class BaseStore:
             self._fs.makedirs(posixpath.dirname(uri.path), exist_ok=True)
         with self._fs.open(str(uri), "wb") as f:
             f.write(data)
+        self._ipc_transport.emit(
+            DataReferenceInserted(
+                type="data_reference_inserted", data_reference=str(uri)
+            )
+        )
         return uri
 
     def get(self, key: str | DataUri) -> bytes:
@@ -184,7 +193,9 @@ class _OpenFileContext(AbstractContextManager[TmpFileProtocol]):
     def __enter__(self) -> TmpFileProtocol:
         super().__enter__()
         if self._directory is not None:
-            raise RuntimeError("Temporary file context cannot be entered more than once")
+            raise RuntimeError(
+                "Temporary file context cannot be entered more than once"
+            )
         initial_data = self._store.get(self._target_uri) if self._mode == "r" else None
         self._directory = tempfile.TemporaryDirectory()
         # Preserve the extension for libraries that identify formats by filename.
@@ -212,7 +223,9 @@ class _OpenFileContext(AbstractContextManager[TmpFileProtocol]):
         try:
             if exc_type is None:
                 if self._mode == "w":
-                    self._uri = self._store.put(self._target_uri, self.path.read_bytes())
+                    self._uri = self._store.put(
+                        self._target_uri, self.path.read_bytes()
+                    )
                 else:
                     self._uri = self._target_uri
         finally:

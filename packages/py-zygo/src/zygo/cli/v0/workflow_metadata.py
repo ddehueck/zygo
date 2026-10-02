@@ -3,7 +3,6 @@ import json
 import sys
 from typing import TypeVar
 
-
 from zygo.cli.importer import load_workflow
 from zygo.cli.v0.types import (
     STDOUT_IPC_PREFIX,

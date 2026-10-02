@@ -61,7 +61,7 @@ class StoreFileSystem(Protocol):
 
 def build_fs(
     root: DataUri,
-    kwargs: dict[str, str | int | float | bool | None] | None = None,
+    kwargs: dict[str, object] | None = None,
 ) -> StoreFileSystem:
     fs = fsspec.filesystem(root.protocol, **(kwargs or {}))  # type: ignore
     return cast("StoreFileSystem", fs)

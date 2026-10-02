@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import MISSING
 from io import BytesIO
-
 from typing import TYPE_CHECKING
 
 import pyarrow as pa

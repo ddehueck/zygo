@@ -22,7 +22,21 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
     from http.client import HTTPResponse
 
-    from zygo.cli.v0.types import IpcMessage
+    from zygo.cli.v0.types import HttpConfig, IpcMessage
+
+
+def build_transport(config: HttpConfig | None) -> IpcTransport:
+    if config is None:
+        return StdioTransport()
+    return HttpTransport(
+        url=config.url,
+        max_retries=config.max_retries if config.max_retries is not None else 3,
+        retry_interval=config.retry_interval
+        if config.retry_interval is not None
+        else 5.0,
+        timeout=config.timeout if config.timeout is not None else 30.0,
+        headers=config.headers,
+    )
 
 
 def _as_batch(messages: IpcMessage | Sequence[IpcMessage]) -> list[IpcMessage]:
@@ -64,6 +78,7 @@ class StdioTransport:
         except BrokenPipeError:
             # Keep stdout open for interpreter shutdown, but detach it from the pipe.
             sys.stdout = Path(os.devnull).open("w", encoding="utf-8")  # ruff: ignore[open-file-with-context-handler]
+            raise
 
 
 class HttpTransport:
@@ -76,8 +91,6 @@ class HttpTransport:
         max_retries: int,
         retry_interval: float,
         timeout: float,
-        workflow_run_id: str,
-        job_run_id: str,
         headers: Mapping[str, str] | None = None,
     ) -> None:
         super().__init__()
@@ -89,8 +102,7 @@ class HttpTransport:
         self._max_retries = max_retries
         self._retry_interval = retry_interval
         self._timeout = timeout
-        self._workflow_run_id = workflow_run_id
-        self._job_run_id = job_run_id
+
         self._headers = {
             "Content-Type": "application/json",
             **(dict(headers) if headers is not None else {}),
@@ -107,8 +119,6 @@ class HttpTransport:
         body = serialize_http_ipc_message(
             HttpIPCMessage(
                 id=str(uuid4()),
-                workflow_run_id=self._workflow_run_id,
-                job_run_id=self._job_run_id,
                 messages=batch,
             )
         ).encode("utf-8")

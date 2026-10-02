@@ -5,33 +5,26 @@ from typing import TYPE_CHECKING, cast
 from zygo._internal.meta.injection import build_injected_job_fn
 from zygo._internal.meta.job_context import JobContextImpl
 from zygo.cli.importer import load_workflow_with_module
-from zygo.cli.v0.config import local_store_options
-from zygo.cli.v0.types import (
-    ChannelItemInserted,
-    JobFailed,
-    JobStarted,
-    JobSucceeded,
-)
+from zygo.cli.v0.types import ChannelItemInserted, StoreConfig, WorkflowStoreConfig
+from zygo.cli.v0.workflow_config import local_store_options
 from zygo.store import DataUri
-from zygo.store._internal.impl import WorkflowStore
+from zygo.workflow.store import WorkflowStore
 from zygo.workflow.types import JobId, JobRunContext, JobRunId, WorkflowRunId
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
     from zygo.cli.v0.transport import IpcTransport
-    from zygo.cli.v0.types import JobRunArgs, StoreConfig
+    from zygo.cli.v0.types import JobRunArgs
 
 
 def run(
     *,
     target: str,
     args: JobRunArgs,
-    store_config: StoreConfig | None,
+    store_config: WorkflowStoreConfig | None,
     ipc_transport: IpcTransport,
 ) -> None:
-    ipc_transport.emit(JobStarted(type="job_started", job_run_id=args.job_run_id))
-
     try:
         _execute_job(
             target=target,
@@ -39,18 +32,8 @@ def run(
             store_config=store_config,
             ipc_transport=ipc_transport,
         )
-        ipc_transport.emit(
-            JobSucceeded(type="job_succeeded", job_run_id=args.job_run_id)
-        )
     except Exception as e:
         error_message = f"Failed to run job {args.job_id}: {e}"
-        ipc_transport.emit(
-            JobFailed(
-                type="job_failed",
-                job_run_id=args.job_run_id,
-                error=error_message,
-            )
-        )
         raise RuntimeError(error_message) from e
 
 
@@ -58,7 +41,7 @@ def _execute_job(
     *,
     target: str,
     args: JobRunArgs,
-    store_config: StoreConfig | None,
+    store_config: WorkflowStoreConfig | None,
     ipc_transport: IpcTransport,
 ) -> None:
     workflow, module = load_workflow_with_module(target)
@@ -73,21 +56,23 @@ def _execute_job(
     if job_entry is None:
         raise ValueError(f"Could not find job {args.job_id}")
 
-    root = local_store_options(
-        module, store_config.root_uri if store_config is not None else None
-    ).root_uri
+    if store_config is None:
+        # Use local store options + defaults when no configuration is provided
+        base = local_store_options(module).root_uri.uri.rstrip("/")
+        store_config = WorkflowStoreConfig(
+            job=StoreConfig(root_uri=f"{base}/jobs/"),
+            workflow=StoreConfig(root_uri=f"{base}/workflows/"),
+            cache=StoreConfig(root_uri=f"{base}/cache/"),
+        )
     store = WorkflowStore(
         context=run_context,
-        root=root,
-        kwargs=cast(
-            "dict[str, str | int | float | bool | None] | None",
-            store_config.kwargs if store_config is not None else None,
-        ),
+        config=store_config,
         ipc_transport=ipc_transport,
     )
 
-    input_bytes = store.get(run_context.input)
-    decoded_input = cast("object", job_entry.input_channel.codec.decode(input_bytes))
+    decoded_input = cast(
+        "object", job_entry.input_channel.codec.decode(store.get(run_context.input))
+    )
 
     callable_w_deps = build_injected_job_fn(
         cast("Callable[..., object]", job_entry.job_fn),
@@ -114,8 +99,6 @@ def _execute_job(
     # Save output to the store and collect its URI.
     data_uris: list[DataUri] = []
     for index, item in enumerate(result_as_batch):
-        output_bytes = job_entry.output_channel.codec.encode(item)
-
         extension = (
             f"{output_format.extension.with_leading_dot()}"
             if output_format.extension
@@ -123,7 +106,7 @@ def _execute_job(
         )
         uri = store.put(
             f"{job_entry.output_channel.id}_{index}{extension}",
-            output_bytes,
+            job_entry.output_channel.codec.encode(item),
         )
         data_uris.append(uri)
 

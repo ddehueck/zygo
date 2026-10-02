@@ -1,16 +1,14 @@
 from fsspec import register_implementation  # type: ignore
 
-
+from zygo.dataset.dataset import Dataset
+from zygo.dataset.features import ClassLabel, Features, Image, features
 from zygo.ml import (
-    ClassLabel,
-    Dataset,
-    Image,
     Model,
     ModelStore,
     TrainingContext,
 )
-from zygo.ml.features import Features, features
 from zygo.store import DataUri
+from zygo.tags import TagsProtocol
 from zygo.workflow import Channel, JobContext, Workflow
 
 register_implementation(  # ruff: ignore[non-empty-init-module]
@@ -27,6 +25,7 @@ __all__ = [
     "JobContext",
     "Model",
     "ModelStore",
+    "TagsProtocol",
     "TrainingContext",
     "Workflow",
     "features",

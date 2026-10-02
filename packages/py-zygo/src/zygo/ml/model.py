@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from inspect import Parameter, Signature, signature
 from typing import cast, get_args, get_origin, get_type_hints
 
-from zygo.ml.store import ModelStore
+from zygo.dataset.dataset import Dataset
+from zygo.dataset.features import Features
 from zygo.ml.context import TrainingContext
-from zygo.ml.dataset import Dataset
-from zygo.ml.features import Features
-from zygo.store import DataUri
+from zygo.ml.store import ModelStore
 
 
 class Model:
@@ -33,7 +32,6 @@ class Model:
         self._features: type[Features] | None = None
         self._model_type: type[object] | None = None
 
-
     def train[F: Callable[..., None]](self, fn: F) -> F:
         """Register ``(dataset: Dataset[Features], *, ctx: TrainingContext) -> None``.
 
@@ -45,7 +43,9 @@ class Model:
             raise ValueError("A training function is already registered")
         parameters, hints = _annotations(fn)
         if len(parameters) != 2:
-            raise TypeError("Training requires a dataset and keyword-only TrainingContext")
+            raise TypeError(
+                "Training requires a dataset and keyword-only TrainingContext"
+            )
         dataset_parameter = parameters[0]
         _require_positional(dataset_parameter, role="Training dataset")
         annotation = hints.get(dataset_parameter.name)
@@ -88,7 +88,9 @@ class Model:
         if self._infer is not None:
             raise ValueError("An inference function is already registered")
         if self._load is None:
-            raise ValueError("Register load before infer so its model type can be checked")
+            raise ValueError(
+                "Register load before infer so its model type can be checked"
+            )
         parameters, hints = _annotations(fn)
         if not parameters:
             raise TypeError("Inference requires a model as its first parameter")
@@ -101,13 +103,16 @@ class Model:
         self._infer = fn
         return fn
 
+
 def _annotations(
     fn: Callable[..., object],
 ) -> tuple[tuple[Parameter, ...], dict[str, object]]:
     try:
         hints = cast("dict[str, object]", get_type_hints(fn))
     except (NameError, TypeError) as error:
-        raise TypeError(f"Could not resolve ML function annotations: {error}") from error
+        raise TypeError(
+            f"Could not resolve ML function annotations: {error}"
+        ) from error
     return tuple(signature(fn).parameters.values()), hints
 
 
@@ -125,13 +130,17 @@ def _dataset_features(annotation: object) -> type[Features] | None:
     if annotation is Dataset:
         return None
     if get_origin(annotation) is not Dataset:
-        raise TypeError("The training input must be annotated as Dataset or Dataset[Features]")
+        raise TypeError(
+            "The training input must be annotated as Dataset or Dataset[Features]"
+        )
     arguments = cast("tuple[object, ...]", get_args(annotation))
     if len(arguments) != 1:
         raise TypeError("Dataset requires one feature type")
     features = arguments[0]
     if not isinstance(features, type) or not issubclass(features, Features):
-        raise TypeError("The training dataset's type argument must be a Features subclass")
+        raise TypeError(
+            "The training dataset's type argument must be a Features subclass"
+        )
     return features
 
 
@@ -142,4 +151,6 @@ def _require_context(parameter: Parameter, hints: dict[str, object]) -> None:
         or cast("object", parameter.default) is not Signature.empty
         or hints.get("ctx") is not TrainingContext
     ):
-        raise TypeError("Training context must be declared as '*, ctx: TrainingContext'")
+        raise TypeError(
+            "Training context must be declared as '*, ctx: TrainingContext'"
+        )

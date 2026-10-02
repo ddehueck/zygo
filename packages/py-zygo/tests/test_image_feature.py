@@ -6,7 +6,7 @@ import pyarrow as pa
 
 
 def test_image_round_trip():
-    path = Path(__file__).parents[1] / "src/zygo/ml/features/image.py"
+    path = Path(__file__).parents[1] / "src/zygo/dataset/features/image.py"
     Image = runpy.run_path(str(path))["Image"]
     original = PILImage.new("RGB", (1, 1), color=(10, 20, 30))
     table = pa.Table.from_pylist(

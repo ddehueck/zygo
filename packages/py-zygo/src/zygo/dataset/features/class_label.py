@@ -24,22 +24,17 @@ class ClassLabel:
     @classmethod
     def to_arrow_field(cls, name: str, default: object) -> pa.Field:
         if not isinstance(default, cls):
-            raise TypeError(
-                f"ClassLabel field {name!r} requires a ClassLabel default"
-            )
+            raise TypeError(f"ClassLabel field {name!r} requires a ClassLabel default")
         return pa.field(
             name,
             pa.int32(),
             metadata={b"class_names": json.dumps(default.names).encode("utf-8")},
         )
 
-
     @classmethod
     def decode_value(cls, name: str, value: object, default: object) -> int:
         if not isinstance(default, cls):
-            raise TypeError(
-                f"ClassLabel field {name!r} requires a ClassLabel default"
-            )
+            raise TypeError(f"ClassLabel field {name!r} requires a ClassLabel default")
         if type(value) is not int:
             raise TypeError(f"Field {name!r} requires int, got {type(value).__name__}")
         if not 0 <= value < len(default.names):

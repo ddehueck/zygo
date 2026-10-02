@@ -3,7 +3,8 @@ use serde::{Deserialize, Serialize};
 use crate::api;
 
 // Describes a shell-free command prefix used to launch a Zygo IPC CLI.
-// The runtime appends an IPC subcommand (`run` or `metadata`) and its arguments.
+// The runtime appends `workflow`, an IPC subcommand (`run` or `metadata`),
+// and its arguments.
 //
 // Examples:
 //
@@ -25,9 +26,12 @@ use crate::api;
 //       "python", "-m", "zygo.cli.v0",
 //   ]
 //
-// For example, invoking `run` through Docker produces:
+// For example, invoking `workflow run` through Docker produces:
 //   docker run --rm -i ... my-zygo-image \
-//       python -m zygo.cli.v0 run ...
+//       python -m zygo.cli.v0 workflow run TARGET --args JSON
+//
+// Invoking metadata directly produces:
+//   python -m zygo.cli.v0 workflow metadata TARGET
 //
 // Keeping the executable and arguments separate avoids shell parsing and quoting
 // issues while supporting other wrappers such as Podman or Nix.

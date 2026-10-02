@@ -1,17 +1,17 @@
-"""Workflow storage with job, workflow, and cache isolation."""
+"""Workflow storage with independent job, workflow, and cache scopes."""
 
 from __future__ import annotations
 
 import posixpath
-from typing import TYPE_CHECKING, assert_never, override
+from typing import TYPE_CHECKING, assert_never
 
-from zygo.cli.v0.types import DataReferenceCreated
 from zygo.store._internal.base import BaseStore
 from zygo.store._internal.util import partition
 from zygo.store.types import DataUri
 
 if TYPE_CHECKING:
     from zygo.cli.v0.transport import IpcTransport
+    from zygo.cli.v0.types import StoreConfig, WorkflowStoreConfig
     from zygo.store.types import Scope
     from zygo.workflow.types import JobRunContext
 
@@ -23,18 +23,33 @@ class WorkflowStore(BaseStore):
         self,
         *,
         context: JobRunContext,
-        root: DataUri,
+        config: WorkflowStoreConfig,
         ipc_transport: IpcTransport,
-        kwargs: dict[str, str | int | float | bool | None] | None = None,
         scope: Scope = "job",
     ) -> None:
         self._context = context
-        self._workflow_root = root
-        self._ipc_transport = ipc_transport
-        super().__init__(root=self._root_for_scope(scope), kwargs=kwargs)
+        self._config = config
 
-    def _root_for_scope(self, scope: Scope) -> DataUri:
-        root = self._workflow_root
+        scope_config = self._config_for_scope(scope)
+        super().__init__(
+            root=self._root_for_scope(scope, scope_config),
+            ipc_transport=ipc_transport,
+            kwargs=scope_config.kwargs,
+        )
+
+    def _config_for_scope(self, scope: Scope) -> StoreConfig:
+        match scope:
+            case "job":
+                return self._config.job
+            case "workflow":
+                return self._config.workflow
+            case "cache":
+                return self._config.cache
+            case _:
+                assert_never(scope)
+
+    def _root_for_scope(self, scope: Scope, config: StoreConfig) -> DataUri:
+        root = DataUri(config.root_uri)
         match scope:
             case "job":
                 path = posixpath.join(
@@ -46,10 +61,9 @@ class WorkflowStore(BaseStore):
                 path = posixpath.join(
                     root.path,
                     partition("wr", self._context.workflow_run_id),
-                    "shared",
                 )
             case "cache":
-                path = posixpath.join(root.path, "cache")
+                path = root.path
             case _:
                 assert_never(scope)
         return DataUri(f"{root.protocol}://{path.rstrip('/')}/")
@@ -58,16 +72,7 @@ class WorkflowStore(BaseStore):
         """Return a new store for this scope, without changing the current store."""
         return WorkflowStore(
             context=self._context,
-            root=self._workflow_root,
+            config=self._config,
             ipc_transport=self._ipc_transport,
-            kwargs=self.kwargs,
             scope=scope,
         )
-
-    @override
-    def put(self, key: str | DataUri, data: bytes) -> DataUri:
-        uri = super().put(key, data)
-        self._ipc_transport.emit(
-            DataReferenceCreated(type="data_reference_created", data_reference=str(uri))
-        )
-        return uri

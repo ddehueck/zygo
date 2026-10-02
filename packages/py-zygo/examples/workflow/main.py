@@ -2,7 +2,7 @@ import random
 import time
 
 from zygo import Channel, JobContext, Workflow
-from zygo.codecs import Integer, String
+from zygo.workflow.codecs import Integer, String
 
 raw = Channel(id="raw", codec=Integer)
 squared = Channel(id="squared", codec=Integer)

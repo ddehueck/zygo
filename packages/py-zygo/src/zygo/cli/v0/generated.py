@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 
 @dataclass
@@ -40,9 +40,15 @@ class JobRunArgs:
 
 
 @dataclass
+class DatasetConfig:
+    uri: str
+    kwargs: dict[str, Any] | None = field(default_factory=dict)
+
+
+@dataclass
 class StoreConfig:
     root_uri: str
-    kwargs: dict[str, str] | None = field(default_factory=dict)
+    kwargs: dict[str, Any] | None = field(default_factory=dict)
 
 
 @dataclass
@@ -55,8 +61,8 @@ class HttpConfig:
 
 
 @dataclass
-class DataReferenceCreated:
-    type: Literal["data_reference_created"]
+class DataReferenceInserted:
+    type: Literal["data_reference_inserted"]
     data_reference: str
 
 
@@ -75,45 +81,26 @@ class TagInserted:
 
 
 @dataclass
-class JobStarted:
-    type: Literal["job_started"]
-    job_run_id: str
+class WorkflowStoreConfig:
+    job: StoreConfig
+    workflow: StoreConfig
+    cache: StoreConfig
 
 
-@dataclass
-class JobSucceeded:
-    type: Literal["job_succeeded"]
-    job_run_id: str
-
-
-@dataclass
-class JobFailed:
-    type: Literal["job_failed"]
-    job_run_id: str
-    error: str
-
-
-type IpcMessage = (
-    DataReferenceCreated
-    | ChannelItemInserted
-    | TagInserted
-    | JobStarted
-    | JobSucceeded
-    | JobFailed
-)
+type IpcMessage = DataReferenceInserted | ChannelItemInserted | TagInserted
 
 
 @dataclass
 class HttpIPCMessage:
     id: str
-    workflow_run_id: str
-    job_run_id: str
     messages: list[IpcMessage]
 
 
 type ZygoProviderProtocolV0Payload = (
     WorkflowMetadata
     | JobRunArgs
+    | DatasetConfig
+    | WorkflowStoreConfig
     | StoreConfig
     | HttpConfig
     | IpcMessage

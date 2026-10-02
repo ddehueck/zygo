@@ -2,10 +2,12 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
 
   "title": "Zygo provider protocol v0 payload",
-  "description": "JSON payloads exchanged with the zygo.cli.v0 Python CLI. Stdout emits IpcMessage with a ZYGO_IPC= line prefix; HTTP sends HttpIPCMessage.",
+  "description": "JSON payloads for the CLI, python -m zygo.cli.v0.",
   "oneOf": [
     { "$ref": "#/definitions/WorkflowMetadata" },
     { "$ref": "#/definitions/JobRunArgs" },
+    { "$ref": "#/definitions/DatasetConfig" },
+    { "$ref": "#/definitions/WorkflowStoreConfig" },
     { "$ref": "#/definitions/StoreConfig" },
     { "$ref": "#/definitions/HttpConfig" },
     { "$ref": "#/definitions/IpcMessage" },
@@ -36,7 +38,7 @@
       "additionalProperties": false
     },
     "WorkflowMetadata": {
-      "description": "JSON payload returned by the metadata subcommand on stdout.",
+      "description": "JSON payload returned by python -m zygo.cli.v0 workflow metadata TARGET on stdout.",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
@@ -56,7 +58,7 @@
       "additionalProperties": false
     },
     "JobRunArgs": {
-      "description": "JSON supplied to the run subcommand via --args.",
+      "description": "JSON supplied to python -m zygo.cli.v0 workflow run TARGET via --args. Run IDs are retained for workflow store path construction, not publication attribution.",
       "type": "object",
       "properties": {
         "job_id": { "type": "string" },
@@ -67,22 +69,43 @@
       "required": ["job_id", "data_reference_uri", "workflow_run_id", "job_run_id"],
       "additionalProperties": false
     },
-    "StoreConfig": {
-      "description": "JSON supplied via --store-config to configure the fsspec store for a job.",
+    "DatasetConfig": {
+      "description": "Reusable configuration for an existing Parquet file or sharded dataset directory. Supplied to ml train via --dataset-config.",
       "type": "object",
       "properties": {
-        "root_uri": { "type": "string", "description": "fsspec URI for the store root. Overrides tool.zygo.local.data_dir." },
-        "kwargs": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Optional keyword arguments passed to fsspec.filesystem.", "default": {} }
+        "uri": { "type": "string", "minLength": 1, "description": "fsspec URI of the input dataset." },
+        "kwargs": { "type": "object", "additionalProperties": {}, "description": "JSON-valued backend options passed as dataset storage_options.", "default": {} }
+      },
+      "required": ["uri"],
+      "additionalProperties": false
+    },
+    "WorkflowStoreConfig": {
+      "description": "JSON supplied via --store-config to workflow run. Each scope has independent backend options and a base root. Zygo appends workflow-run and job-run partitions to the job root, a workflow-run partition to the workflow root, and no run partitions to the cache root. Cache data is reusable across executions using that configured root. Callers must tolerate missing entries and be able to reconstruct them. All three scopes are required when supplied. When omitted, local configuration derives jobs/, workflows/, and cache/ roots from tool.zygo.local.data_dir.",
+      "type": "object",
+      "properties": {
+        "job": { "$ref": "#/definitions/StoreConfig" },
+        "workflow": { "$ref": "#/definitions/StoreConfig" },
+        "cache": { "$ref": "#/definitions/StoreConfig" }
+      },
+      "required": ["job", "workflow", "cache"],
+      "additionalProperties": false
+    },
+    "StoreConfig": {
+      "description": "Reusable configuration for a writable fsspec directory or prefix. Supplied directly to ml train via --store-config and composed into WorkflowStoreConfig for workflow execution.",
+      "type": "object",
+      "properties": {
+        "root_uri": { "type": "string", "minLength": 1, "description": "fsspec URI for the store directory or prefix." },
+        "kwargs": { "type": "object", "additionalProperties": {}, "description": "Optional JSON-valued keyword arguments passed to fsspec.filesystem.", "default": {} }
       },
       "required": ["root_uri"],
       "additionalProperties": false
     },
     "HttpConfig": {
-      "description": "JSON supplied via --http-config to send job publications over HTTP. Optional settings use CLI defaults.",
+      "description": "JSON supplied via --http-config to python -m zygo.cli.v0 workflow run TARGET to send publications over HTTP. Also defines the transport contract for python -m zygo.cli.v0 ml train TARGET, which parses the training contract but whose stub training executor intentionally raises NotImplementedError. Optional settings use CLI defaults. The runtime binds the callback URL or configured headers to a specific execution attempt. The CLI forwards headers on every request without interpreting execution identity.",
       "type": "object",
       "properties": {
-        "url": { "type": "string", "pattern": "^https?://", "description": "Full POST URL." },
-        "headers": { "type": "object", "additionalProperties": { "type": "string" }, "default": {} },
+        "url": { "type": "string", "pattern": "^https?://", "description": "Full POST URL, optionally scoped by the runtime to an execution attempt." },
+        "headers": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Headers forwarded on every publication and retry. The runtime may supply an opaque attempt handle or authorization here. Header names are not prescribed by the protocol.", "default": {} },
         "timeout": { "type": "number", "exclusiveMinimum": 0, "default": 30.0 },
         "max_retries": { "type": "integer", "minimum": 0, "default": 3 },
         "retry_interval": { "type": "number", "exclusiveMinimum": 0, "default": 5.0 }
@@ -91,36 +114,32 @@
       "additionalProperties": false
     },
     "HttpIPCMessage": {
-      "description": "One HTTP publication of one or more IPC messages. The id is generated once per publication and reused unchanged on retries.",
+      "description": "One HTTP publication of one or more IPC messages belonging to the same execution attempt. The runtime attributes and authorizes the publication through the configured callback URL or headers, not fields in the body. The id and body are generated once per publication and reused unchanged on retries. Receivers acknowledge only after durable acceptance, deduplicate retries, and handle late publications from cancelled or superseded attempts.",
       "type": "object",
       "properties": {
-        "id": { "type": "string", "description": "Stable idempotency key for this publication." },
-        "workflow_run_id": { "type": "string" },
-        "job_run_id": { "type": "string" },
+        "id": { "type": "string", "description": "Stable idempotency key for this publication, distinct from an execution ID." },
         "messages": {
           "type": "array",
           "items": { "$ref": "#/definitions/IpcMessage" },
           "minItems": 1
         }
       },
-      "required": ["id", "workflow_run_id", "job_run_id", "messages"],
+      "required": ["id", "messages"],
       "additionalProperties": false
     },
     "IpcMessage": {
-      "description": "One job publication, emitted as a prefixed stdout line or nested inside an HTTP message batch. The Python client emits job_started, job_succeeded, and job_failed; the orchestrator must not assume the engine alone will produce these.",
+      "description": "One side-effect publication, emitted as a bare prefixed stdout line or nested inside an HTTP message batch. The runtime owns started, succeeded, failed, and cancelled execution states. Stdout receivers attribute events through the invoking process and must drain and accept its publications before declaring success. The runtime validates whether an event is permitted for the owning execution.",
       "oneOf": [
-        { "$ref": "#/definitions/DataReferenceCreated" },
+        { "$ref": "#/definitions/DataReferenceInserted" },
         { "$ref": "#/definitions/ChannelItemInserted" },
-        { "$ref": "#/definitions/TagInserted" },
-        { "$ref": "#/definitions/JobStarted" },
-        { "$ref": "#/definitions/JobSucceeded" },
-        { "$ref": "#/definitions/JobFailed" }
+        { "$ref": "#/definitions/TagInserted" }
       ]
     },
-    "DataReferenceCreated": {
+    "DataReferenceInserted": {
+      "description": "Emitted after an artifact write completes successfully, including writes through a writable store context manager. Does not indicate that training or the owning execution succeeded, or that a model artifact set is ready.",
       "type": "object",
       "properties": {
-        "type": { "const": "data_reference_created" },
+        "type": { "const": "data_reference_inserted" },
         "data_reference": { "type": "string" }
       },
       "required": ["type", "data_reference"],
@@ -137,6 +156,7 @@
       "additionalProperties": false
     },
     "TagInserted": {
+      "description": "Associates a tag with the referenced artifact. If data_reference is absent or null, the tag applies to the execution attributed by the runtime through the invoking process, callback URL, or configured headers.",
       "type": "object",
       "properties": {
         "type": { "const": "tag_inserted" },
@@ -147,37 +167,6 @@
         }
       },
       "required": ["type", "value"],
-      "additionalProperties": false
-    },
-    "JobStarted": {
-      "description": "Emitted when a job run begins. Orchestrators correlate via job_run_id (also present on the HTTP envelope / process context).",
-      "type": "object",
-      "properties": {
-        "type": { "const": "job_started" },
-        "job_run_id": { "type": "string" }
-      },
-      "required": ["type", "job_run_id"],
-      "additionalProperties": false
-    },
-    "JobSucceeded": {
-      "description": "Emitted when a job run completes successfully.",
-      "type": "object",
-      "properties": {
-        "type": { "const": "job_succeeded" },
-        "job_run_id": { "type": "string" }
-      },
-      "required": ["type", "job_run_id"],
-      "additionalProperties": false
-    },
-    "JobFailed": {
-      "description": "Emitted when a job run fails. The process still exits nonzero.",
-      "type": "object",
-      "properties": {
-        "type": { "const": "job_failed" },
-        "job_run_id": { "type": "string" },
-        "error": { "type": "string" }
-      },
-      "required": ["type", "job_run_id", "error"],
       "additionalProperties": false
     }
   }
