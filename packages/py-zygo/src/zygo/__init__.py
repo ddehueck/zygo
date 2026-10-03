@@ -3,6 +3,7 @@ from fsspec import register_implementation  # type: ignore
 from zygo.dataset.dataset import Dataset
 from zygo.dataset.features import ClassLabel, Features, Image, features
 from zygo.ml import (
+    HyperParams,
     Model,
     ModelStore,
     TrainingContext,
@@ -23,6 +24,7 @@ __all__ = [
     "DataUri",
     "Dataset",
     "Features",
+    "HyperParams",
     "Image",
     "JobContext",
     "Model",
