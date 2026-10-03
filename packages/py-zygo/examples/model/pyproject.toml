@@ -7,5 +7,9 @@ dependencies = [
     "zygo",
 ]
 
+
+[tool.zygo.local]
+data_dir = "runs"
+
 [tool.uv.sources]
 zygo = { path = "../..", editable = true }

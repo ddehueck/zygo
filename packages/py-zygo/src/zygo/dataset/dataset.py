@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
+import json
 from pathlib import Path
 from typing import cast, overload
 
@@ -10,7 +11,7 @@ import pyarrow.dataset as pads
 from pyarrow.fs import FSSpecHandler, PyFileSystem
 
 from zygo.dataset.builder import DEFAULT_SHARD_SIZE, DatasetBuilder
-from zygo.dataset.features import Features
+from zygo.dataset.features import ClassLabel, Features
 from zygo.store import DataUri
 
 
@@ -104,6 +105,41 @@ class Dataset[T]:
         """Validate and bind features to an already-open dataset."""
         features.validate_arrow_schema(self.arrow_schema)
         return Dataset(self._source, uri=self.uri, features=features)
+
+    def where(self, **equals: object) -> Dataset[T]:
+        """Create a lazy view matching all keyword equalities.
+
+        Chained calls combine with AND. ``None`` matches null values.
+        Filtering reads no rows and preserves the URI and feature decoding.
+        """
+        predicate = pads.scalar(True)
+        for name, value in equals.items():
+            field = pads.field(name)
+            predicate = predicate & (field.is_null() if value is None else field == value)
+        return Dataset(
+            self._source.filter(predicate), uri=self.uri, features=self.features
+        )
+
+    def class_names(self, column: str) -> tuple[str, ...]:
+        """Return the full ordered ClassLabel vocabulary without reading rows.
+
+        Filtered views retain all classes, including those absent from the view.
+        """
+        field = self.arrow_schema.field(column)
+        metadata = field.metadata or {}
+        if b"class_names" not in metadata and self.features is not None:
+            features = cast("type[Features]", self.features)
+            if column in features.to_schema().names:
+                metadata = features.to_schema().field(column).metadata or {}
+        encoded = metadata.get(b"class_names")
+        if encoded is None:
+            raise ValueError(f"Field {column!r} has no ClassLabel class names")
+        names: object = json.loads(encoded)
+        if not isinstance(names, list) or not all(
+            isinstance(name, str) for name in names
+        ):
+            raise ValueError(f"Field {column!r} has invalid ClassLabel class names")
+        return ClassLabel(*cast("list[str]", names)).names
 
     def __len__(self) -> int:
         return self._source.count_rows()
