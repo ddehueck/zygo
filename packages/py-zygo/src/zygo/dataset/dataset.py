@@ -11,7 +11,12 @@ import pyarrow.dataset as pads
 from pyarrow.fs import FSSpecHandler, PyFileSystem
 import pyarrow.parquet as pq
 
-from zygo.dataset.builder import DEFAULT_SHARD_SIZE, DatasetBuilder
+from zygo.dataset.builder import (
+    DEFAULT_SHARD_SIZE_MB,
+    DatasetBuilder,
+    shard_size_bytes,
+    shard_tables,
+)
 from zygo.dataset.features import ClassLabel, Features
 
 if TYPE_CHECKING:
@@ -49,7 +54,7 @@ class Dataset[T]:
         output_path: str | Path,
         *,
         schema: type[Features],
-        shard_size: int = DEFAULT_SHARD_SIZE,
+        shard_size_mb: int = DEFAULT_SHARD_SIZE_MB,
         overwrite: bool = False,
     ) -> DatasetBuilder:
         """
@@ -60,7 +65,7 @@ class Dataset[T]:
         ...     builder.add({"image": image, "label": 0})
         """
         return DatasetBuilder(
-            output_path, schema=schema, shard_size=shard_size, overwrite=overwrite
+            output_path, schema=schema, shard_size_mb=shard_size_mb, overwrite=overwrite
         )
 
     @property
@@ -292,29 +297,23 @@ class Dataset[T]:
         )
 
     def write(
-        self, output_path: str | Path, *, shard_size: int = DEFAULT_SHARD_SIZE
+        self, output_path: str | Path, *, shard_size_mb: int = DEFAULT_SHARD_SIZE_MB
     ) -> Dataset[T]:
         """Stream encoded rows to a new local Parquet directory, without decoding.
 
         The destination must be empty. Return an independently readable dataset.
+
         """
-        if type(shard_size) is not int or shard_size <= 0:
-            raise ValueError("shard_size must be a positive integer row count")
+        max_bytes = shard_size_bytes(shard_size_mb)
         path = Path(output_path)
         path.mkdir(parents=True, exist_ok=True)
         if any(path.iterdir()):
             raise FileExistsError(f"Output directory {path} must be empty")
-        pads.write_dataset(
-            self._batches(),
-            base_dir=str(path),
-            schema=self.arrow_schema,
-            format="parquet",
-            basename_template="part-{i}.parquet",
-            max_rows_per_file=shard_size,
-            max_rows_per_group=shard_size,
-            max_open_files=1,
-            use_threads=False,
-        )
+        for index, table in enumerate(
+            shard_tables(self._batches(), max_bytes=max_bytes)
+        ):
+            with (path / f"part-{index}.parquet").open("xb") as output:
+                pq.write_table(table, output)
         if not any(path.iterdir()):
             pq.write_table(
                 pa.Table.from_batches([], schema=self.arrow_schema),

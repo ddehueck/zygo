@@ -1,16 +1,61 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
 from pathlib import Path
-from types import TracebackType
-from typing import Self
+from typing import TYPE_CHECKING, Self
 
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from zygo.dataset.features import Features
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Iterator
+    from types import TracebackType
 
-DEFAULT_SHARD_SIZE = 10_000
+    from zygo.dataset.features import Features
+
+DEFAULT_SHARD_SIZE_MB = 512
+BYTES_PER_MB = 1_000_000
+
+
+def shard_size_bytes(shard_size_mb: int) -> int:
+    if type(shard_size_mb) is not int or shard_size_mb <= 0:
+        raise ValueError("shard_size_mb must be a positive integer number of MB")
+    return shard_size_mb * BYTES_PER_MB
+
+
+def _rows_for_bytes(batch: pa.RecordBatch, target_bytes: int) -> int:
+    if batch.nbytes < target_bytes:
+        return batch.num_rows
+    low, high = 1, batch.num_rows
+    while low < high:
+        middle = (low + high) // 2
+        if batch.slice(0, middle).nbytes >= target_bytes:
+            high = middle
+        else:
+            low = middle + 1
+    return low
+
+
+def shard_tables(
+    batches: Iterable[pa.RecordBatch], *, max_bytes: int
+) -> Iterator[pa.Table]:
+
+    pending: list[pa.RecordBatch] = []
+    size = 0
+    for batch in batches:
+        offset = 0
+        while offset < batch.num_rows:
+            remaining = batch.slice(offset)
+            count = _rows_for_bytes(remaining, max_bytes - size)
+            chunk = remaining.slice(0, count)
+            pending.append(chunk)
+            size += chunk.nbytes
+            offset += count
+            if size >= max_bytes:
+                yield pa.Table.from_batches(pending)
+                pending = []
+                size = 0
+    if pending:
+        yield pa.Table.from_batches(pending)
 
 
 class DatasetBuilder:
@@ -21,17 +66,17 @@ class DatasetBuilder:
         path: Path | str,
         *,
         schema: type[Features],
-        shard_size: int = DEFAULT_SHARD_SIZE,
+        shard_size_mb: int = DEFAULT_SHARD_SIZE_MB,
         overwrite: bool = False,
     ) -> None:
-        if type(shard_size) is not int or shard_size <= 0:
-            raise ValueError("shard_size must be a positive integer row count")
+        self._max_shard_bytes = shard_size_bytes(shard_size_mb)
         self.schema = schema
         self.path = Path(path)
-        self.shard_size = shard_size
+        self.shard_size_mb = shard_size_mb
         self.overwrite = overwrite
         self._arrow_schema = schema.to_schema()
         self._rows: list[dict[str, object]] = []
+        self._rows_bytes = 0
         self._shard_index = 0
         self._active = False
         self._closed = False
@@ -68,9 +113,10 @@ class DatasetBuilder:
             raise RuntimeError("Use DatasetBuilder inside a with block")
         row = self.schema.encode(data)
         # Catch storage errors such as integer overflow before buffering the row.
-        pa.Table.from_pylist([row], schema=self._arrow_schema)
+        table = pa.Table.from_pylist([row], schema=self._arrow_schema)
         self._rows.append(row)
-        if len(self._rows) >= self.shard_size:
+        self._rows_bytes += table.nbytes
+        if self._rows_bytes >= self._max_shard_bytes:
             self._write_shard()
 
     def add_many(self, data: Iterable[object]) -> None:
@@ -99,4 +145,5 @@ class DatasetBuilder:
         with path.open(mode) as output:
             pq.write_table(table, output)
         self._rows.clear()
+        self._rows_bytes = 0
         self._shard_index += 1
