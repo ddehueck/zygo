@@ -1,18 +1,23 @@
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
 import json
 from pathlib import Path
-from typing import cast, overload
+import random
+from typing import TYPE_CHECKING, cast, overload
 
 from fsspec.core import url_to_fs
 import pyarrow as pa
 import pyarrow.dataset as pads
 from pyarrow.fs import FSSpecHandler, PyFileSystem
+import pyarrow.parquet as pq
 
 from zygo.dataset.builder import DEFAULT_SHARD_SIZE, DatasetBuilder
 from zygo.dataset.features import ClassLabel, Features
-from zygo.store import DataUri
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator, Mapping
+
+    from zygo.store import DataUri
 
 
 class Dataset[T]:
@@ -28,10 +33,15 @@ class Dataset[T]:
         *,
         uri: str,
         features: type[T] | None = None,
+        _batch_reader: Callable[[list[str] | None], Iterator[pa.RecordBatch]]
+        | None = None,
+        _row_count: int | None = None,
     ) -> None:
         self._source: pads.Dataset = source
         self.uri = uri
         self._features = features
+        self._batch_reader = _batch_reader
+        self._row_count = _row_count
 
     @classmethod
     def builder(
@@ -104,7 +114,13 @@ class Dataset[T]:
     def with_features[F: Features](self, features: type[F]) -> Dataset[F]:
         """Validate and bind features to an already-open dataset."""
         features.validate_arrow_schema(self.arrow_schema)
-        return Dataset(self._source, uri=self.uri, features=features)
+        return Dataset(
+            self._source,
+            uri=self.uri,
+            features=features,
+            _batch_reader=self._batch_reader,
+            _row_count=self._row_count,
+        )
 
     def where(self, **equals: object) -> Dataset[T]:
         """Create a lazy view matching all keyword equalities.
@@ -112,12 +128,34 @@ class Dataset[T]:
         Chained calls combine with AND. ``None`` matches null values.
         Filtering reads no rows and preserves the URI and feature decoding.
         """
-        predicate = pads.scalar(True)
+        predicate = pads.scalar(value=True)
         for name, value in equals.items():
             field = pads.field(name)
-            predicate = predicate & (field.is_null() if value is None else field == value)
+            predicate &= field.is_null() if value is None else field == value
+        # Bind the expression against the schema now, without reading any rows.
+        source = self._source.filter(predicate)
+        if self._batch_reader is None:
+            return Dataset(source, uri=self.uri, features=self.features)
+
+        def read(columns: list[str] | None) -> Iterator[pa.RecordBatch]:
+            required = (
+                None if columns is None else list(dict.fromkeys([*columns, *equals]))
+            )
+            schema = (
+                self.arrow_schema
+                if required is None
+                else pa.schema([self.arrow_schema.field(name) for name in required])
+            )
+            scanner = pads.Scanner.from_batches(
+                self._batches(required),
+                schema=schema,
+                columns=columns,
+                filter=predicate,
+            )
+            yield from scanner.to_batches()
+
         return Dataset(
-            self._source.filter(predicate), uri=self.uri, features=self.features
+            self._source, uri=self.uri, features=self.features, _batch_reader=read
         )
 
     def class_names(self, column: str) -> tuple[str, ...]:
@@ -141,7 +179,170 @@ class Dataset[T]:
             raise ValueError(f"Field {column!r} has invalid ClassLabel class names")
         return ClassLabel(*cast("list[str]", names)).names
 
+    def sample(
+        self,
+        *,
+        per_group: int,
+        group_by: str | tuple[str, ...],
+        seed: int | None = None,
+    ) -> Dataset[T]:
+        """Select up to ``per_group`` rows per group, uniformly without replacement.
+
+        Scan only grouping columns and keep a reservoir of row positions per group.
+        The returned view reads encoded rows in bounded batches when consumed and
+        retains source order. Smaller groups keep all rows. A seed is reproducible
+        for unchanged data and scan order. Source files must remain unchanged.
+        """
+        if type(per_group) is not int or per_group <= 0:
+            raise ValueError("per_group must be a positive integer row count")
+        columns = (group_by,) if isinstance(group_by, str) else group_by
+        if not columns or any(not isinstance(name, str) for name in columns):
+            raise ValueError("group_by must contain one or more column names")
+        if len(set(columns)) != len(columns):
+            raise ValueError("group_by columns must be unique")
+        for name in columns:
+            field = self.arrow_schema.field(name)
+            if (
+                pa.types.is_nested(field.type)
+                or pa.types.is_binary(field.type)
+                or pa.types.is_large_binary(field.type)
+            ):
+                raise TypeError(
+                    f"Grouping field {name!r} must be a scalar, non-binary column"
+                )
+
+        positions = self._sample_positions(columns, per_group, seed)
+        return Dataset(
+            self._source,
+            uri=self.uri,
+            features=self.features,
+            _batch_reader=lambda projected: self._selected_batches(
+                positions, projected
+            ),
+            _row_count=len(positions),
+        )
+
+    def _sample_positions(
+        self, columns: tuple[str, ...], per_group: int, seed: int | None
+    ) -> list[int]:
+        rng = random.Random(seed)  # noqa: S311 - Reproducible sampling, not security.
+        reservoirs: dict[tuple[object, ...], list[int]] = {}
+        counts: dict[tuple[object, ...], int] = {}
+        position = 0
+        for batch in self._batches(list(columns)):
+            for row in batch.to_pylist():
+                key = tuple(row[name] for name in columns)
+                count = counts.get(key, 0) + 1
+                counts[key] = count
+                reservoir = reservoirs.setdefault(key, [])
+                if len(reservoir) < per_group:
+                    reservoir.append(position)
+                    position += 1
+                    continue
+                replacement = rng.randrange(count)
+                if replacement < per_group:
+                    reservoir[replacement] = position
+                position += 1
+        return sorted(index for group in reservoirs.values() for index in group)
+
+    def _selected_batches(
+        self, positions: list[int], columns: list[str] | None
+    ) -> Iterator[pa.RecordBatch]:
+        if not positions:
+            return
+        offset = 0
+        selected = 0
+        for batch in self._batches(columns):
+            end = offset + batch.num_rows
+            indices: list[int] = []
+            while selected < len(positions) and positions[selected] < end:
+                indices.append(positions[selected] - offset)
+                selected += 1
+            if indices:
+                yield batch.take(pa.array(indices, type=pa.int64()))
+            if selected == len(positions):
+                return
+            offset = end
+
+    @staticmethod
+    def concat[U](*datasets: Dataset[U]) -> Dataset[U]:
+        """Lazily concatenate datasets with identical schemas and feature bindings.
+
+        Input order and duplicates are preserved. No rows are read at creation.
+        """
+        if not datasets:
+            raise ValueError("concat requires at least one dataset")
+        first = datasets[0]
+        for dataset in datasets[1:]:
+            if not first.arrow_schema.equals(dataset.arrow_schema, check_metadata=True):
+                raise ValueError(
+                    "Concatenated datasets must have identical Arrow schemas"
+                )
+            if dataset.features is not first.features:
+                raise ValueError(
+                    "Concatenated datasets must have identical feature bindings"
+                )
+
+        def read(columns: list[str] | None) -> Iterator[pa.RecordBatch]:
+            for dataset in datasets:
+                yield from dataset._batches(columns)
+
+        return Dataset(
+            first._source, uri=first.uri, features=first.features, _batch_reader=read
+        )
+
+    def write(
+        self, output_path: str | Path, *, shard_size: int = DEFAULT_SHARD_SIZE
+    ) -> Dataset[T]:
+        """Stream encoded rows to a new local Parquet directory, without decoding.
+
+        The destination must be empty. Return an independently readable dataset.
+        """
+        if type(shard_size) is not int or shard_size <= 0:
+            raise ValueError("shard_size must be a positive integer row count")
+        path = Path(output_path)
+        path.mkdir(parents=True, exist_ok=True)
+        if any(path.iterdir()):
+            raise FileExistsError(f"Output directory {path} must be empty")
+        pads.write_dataset(
+            self._batches(),
+            base_dir=str(path),
+            schema=self.arrow_schema,
+            format="parquet",
+            basename_template="part-{i}.parquet",
+            max_rows_per_file=shard_size,
+            max_rows_per_group=shard_size,
+            max_open_files=1,
+            use_threads=False,
+        )
+        if not any(path.iterdir()):
+            pq.write_table(
+                pa.Table.from_batches([], schema=self.arrow_schema),
+                path / "part-0.parquet",
+            )
+        return Dataset(
+            pads.dataset(str(path), format="parquet"),
+            uri=str(path),
+            features=self.features,
+        )
+
+    def _batches(self, columns: list[str] | None = None) -> Iterator[pa.RecordBatch]:
+        if self._batch_reader is not None:
+            yield from self._batch_reader(columns)
+        else:
+            yield from self._source.to_batches(
+                columns=columns,
+                batch_size=1024,
+                batch_readahead=1,
+                fragment_readahead=1,
+                use_threads=False,
+            )
+
     def __len__(self) -> int:
+        if self._row_count is not None:
+            return self._row_count
+        if self._batch_reader is not None:
+            return sum(batch.num_rows for batch in self._batches([]))
         return self._source.count_rows()
 
     def __iter__(self) -> Iterator[T]:
@@ -155,7 +356,7 @@ class Dataset[T]:
         full advantage of arrow performance as it decodes each row individually
         rather than using vectorized Arrow operations.
         """
-        for batch in self._source.to_batches():
+        for batch in self._batches():
             for row in batch.to_pylist():
                 if self.features is None:
                     yield cast("T", row)
