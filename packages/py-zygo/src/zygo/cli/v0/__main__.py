@@ -5,8 +5,8 @@ from zygo.cli.v0 import ml, workflow
 from zygo.cli.v0.arguments import parse_command
 from zygo.cli.v0.types import (
     ModelTrainCommand,
-    WorkflowMetadataCommand,
-    WorkflowRunCommand,
+    WorkflowGetMetadataCommand,
+    WorkflowRunJobCommand,
 )
 
 
@@ -31,7 +31,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     command = parser.parse_args(argv).args
 
     match command:
-        case WorkflowRunCommand() | WorkflowMetadataCommand():
+        case WorkflowRunJobCommand() | WorkflowGetMetadataCommand():
             workflow.execute(command)
         case ModelTrainCommand():
             ml.execute(command)

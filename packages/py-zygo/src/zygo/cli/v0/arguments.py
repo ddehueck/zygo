@@ -31,7 +31,8 @@ def parse_command(raw: str) -> CliCommand:
                     message = "requires a command field"
                 case "union_tag_invalid":
                     message = (
-                        "command must be workflow_run, workflow_metadata, or model_train"
+                        "command must be workflow_run_job, workflow_get_metadata, "
+                        "or model_train"
                     )
                 case "extra_forbidden":
                     message = "has unknown fields"

@@ -1,16 +1,16 @@
 from zygo.cli.v0.transport import build_transport
 from zygo.cli.v0.types import (
-    WorkflowMetadataCommand,
-    WorkflowRunCommand,
-    WorkflowStoreConfig,
+    WorkflowGetMetadataCommand,
+    WorkflowRunJobCommand,
 )
 from zygo.cli.v0.workflow_metadata import inspect_workflow
 from zygo.cli.v0.workflow_run import run
+from zygo.workflow.store import WorkflowStoreConfig
 
 
-def execute(command: WorkflowRunCommand | WorkflowMetadataCommand) -> None:
+def execute(command: WorkflowRunJobCommand | WorkflowGetMetadataCommand) -> None:
     match command:
-        case WorkflowRunCommand():
+        case WorkflowRunJobCommand():
             store_config = None
             if (
                 command.job_store_config is not None
@@ -28,5 +28,5 @@ def execute(command: WorkflowRunCommand | WorkflowMetadataCommand) -> None:
                 store_config=store_config,
                 ipc_transport=build_transport(command.http_config),
             )
-        case WorkflowMetadataCommand():
+        case WorkflowGetMetadataCommand():
             inspect_workflow(command.target)

@@ -8,50 +8,6 @@ from typing import Any, Literal
 
 
 @dataclass
-class WorkflowMetadataCommand:
-    command: Literal["workflow_metadata"]
-    target: str
-
-
-@dataclass
-class ChannelMetadata:
-    id: str
-    accepted_file_extensions: list[str]
-
-
-@dataclass
-class JobMetadata:
-    id: str
-    content_hash: str
-    input_channel_id: str
-    output_channel_id: str
-
-
-@dataclass
-class WorkflowMetadata:
-    id: str
-    content_hash: str
-    input_channel_id: str
-    output_channel_id: str
-    jobs: list[JobMetadata]
-    channels: list[ChannelMetadata]
-
-
-@dataclass
-class JobRunArgs:
-    job_id: str
-    data_reference_uri: str
-    workflow_run_id: str
-    job_run_id: str
-
-
-@dataclass
-class DatasetConfig:
-    uri: str
-    kwargs: dict[str, Any] | None = field(default_factory=dict)
-
-
-@dataclass
 class StoreConfig:
     root_uri: str
     kwargs: dict[str, Any] | None = field(default_factory=dict)
@@ -87,31 +43,70 @@ class TagInserted:
 
 
 @dataclass
+class WorkflowGetMetadataCommand:
+    command: Literal["workflow_get_metadata"]
+    target: str
+
+
+@dataclass
+class JobRunArgs:
+    job_id: str
+    data_reference_uri: str
+    workflow_run_id: str
+    job_run_id: str
+
+
+@dataclass
+class JobMetadata:
+    id: str
+    content_hash: str
+    input_channel_id: str
+    output_channel_id: str
+
+
+@dataclass
+class ChannelMetadata:
+    id: str
+    accepted_file_extensions: list[str]
+
+
+@dataclass
 class ModelTrainCommand:
     command: Literal["model_train"]
     target: str
-    dataset_config: DatasetConfig
+    dataset_config: StoreConfig
     store_config: StoreConfig
     http_config: HttpConfig | None = None
 
 
 @dataclass
-class WorkflowStoreConfig:
-    job: StoreConfig
-    workflow: StoreConfig
-    cache: StoreConfig
+class WorkflowRunJobCommand:
+    command: Literal["workflow_run_job"]
+    target: str
+    args: JobRunArgs
+    job_store_config: StoreConfig | None = None
+    workflow_store_config: StoreConfig | None = None
+    cache_store_config: StoreConfig | None = None
+    http_config: HttpConfig | None = None
 
 
 type IpcMessage = DataReferenceInserted | ChannelItemInserted | TagInserted
 
 
 @dataclass
-class WorkflowRunCommand:
-    command: Literal["workflow_run"]
-    target: str
-    args: JobRunArgs
-    store_config: WorkflowStoreConfig | None = None
-    http_config: HttpConfig | None = None
+class WorkflowGetMetadataOutput:
+    id: str
+    content_hash: str
+    input_channel_id: str
+    output_channel_id: str
+    jobs: list[JobMetadata]
+    channels: list[ChannelMetadata]
+
+
+type CliOutput = WorkflowGetMetadataOutput
+
+
+type CliCommand = WorkflowRunJobCommand | WorkflowGetMetadataCommand | ModelTrainCommand
 
 
 @dataclass
@@ -120,4 +115,4 @@ class HttpIPCMessage:
     messages: list[IpcMessage]
 
 
-type CliCommand = WorkflowRunCommand | WorkflowMetadataCommand | ModelTrainCommand
+type CliPayload = CliCommand | CliOutput

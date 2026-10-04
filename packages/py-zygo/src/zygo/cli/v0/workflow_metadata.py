@@ -8,15 +8,15 @@ from zygo.cli.v0.types import (
     STDOUT_IPC_PREFIX,
     ChannelMetadata,
     JobMetadata,
-    WorkflowMetadata,
+    WorkflowGetMetadataOutput,
 )
 from zygo.workflow import Channel, Workflow
 
 C = TypeVar("C")
 
 
-def build_workflow_metadata(workflow: Workflow) -> WorkflowMetadata:
-    return WorkflowMetadata(
+def build_workflow_metadata(workflow: Workflow) -> WorkflowGetMetadataOutput:
+    return WorkflowGetMetadataOutput(
         id=workflow.id,
         input_channel_id=workflow.input_channel.id,
         output_channel_id=workflow.output_channel.id,

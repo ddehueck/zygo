@@ -28,7 +28,7 @@ pub struct JobMetadata {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub struct WorkflowMetadata {
+pub struct WorkflowGetMetadataOutput {
     pub id: String,
     pub input_channel_id: String,
     pub output_channel_id: String,
@@ -39,7 +39,7 @@ pub struct WorkflowMetadata {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub struct RunCommandArgs {
+pub struct JobRunArgs {
     pub job_id: String,
     pub data_reference_uri: String,
 
@@ -64,9 +64,9 @@ pub struct WorkflowStoreConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "command", rename_all = "snake_case")]
 pub enum CliCommand {
-    WorkflowRun {
+    WorkflowRunJob {
         target: String,
-        args: RunCommandArgs,
+        args: JobRunArgs,
         #[serde(skip_serializing_if = "Option::is_none")]
         job_store_config: Option<StoreConfig>,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -74,7 +74,7 @@ pub enum CliCommand {
         #[serde(skip_serializing_if = "Option::is_none")]
         cache_store_config: Option<StoreConfig>,
     },
-    WorkflowMetadata {
+    WorkflowGetMetadata {
         target: String,
     },
 }
@@ -92,15 +92,5 @@ pub enum StdoutIPCMessage {
     TagInserted {
         value: String,
         data_reference: Option<String>,
-    },
-    JobStarted {
-        job_run_id: String,
-    },
-    JobSucceeded {
-        job_run_id: String,
-    },
-    JobFailed {
-        job_run_id: String,
-        error: String,
     },
 }

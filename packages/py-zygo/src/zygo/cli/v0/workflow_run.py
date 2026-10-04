@@ -5,11 +5,11 @@ from typing import TYPE_CHECKING, cast
 from zygo._internal.meta.injection import build_injected_job_fn
 from zygo._internal.meta.job_context import JobContextImpl
 from zygo.cli.importer import Importer
-from zygo.cli.v0.types import ChannelItemInserted, StoreConfig, WorkflowStoreConfig
+from zygo.cli.v0.types import ChannelItemInserted, StoreConfig
 from zygo.cli.v0.workflow_config import local_store_options
 from zygo.store import DataUri
 from zygo.workflow import Workflow
-from zygo.workflow.store import WorkflowStore
+from zygo.workflow.store import WorkflowStore, WorkflowStoreConfig
 from zygo.workflow.types import JobId, JobRunContext, JobRunId, WorkflowRunId
 
 if TYPE_CHECKING:

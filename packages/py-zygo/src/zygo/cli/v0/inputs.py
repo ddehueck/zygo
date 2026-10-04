@@ -16,14 +16,12 @@ from pydantic import (
 )
 
 from zygo.cli.v0.types import (
-
     HttpConfig,
     JobRunArgs,
     ModelTrainCommand,
     StoreConfig,
-    WorkflowMetadataCommand,
-    WorkflowRunCommand,
-    WorkflowStoreConfig,
+    WorkflowGetMetadataCommand,
+    WorkflowRunJobCommand,
 )
 from zygo.store import DataUri
 
@@ -61,9 +59,8 @@ class JobRunInput(CliInput):
         )
 
 
-
 class StoreConfigInput(CliInput):
-    root_uri: str
+    root_uri: NonemptyString
     kwargs: dict[str, JsonValue] = Field(default_factory=dict)
 
     @field_validator("root_uri")
@@ -74,19 +71,6 @@ class StoreConfigInput(CliInput):
 
     def to_protocol(self) -> StoreConfig:
         return StoreConfig(root_uri=self.root_uri, kwargs=self.kwargs)
-
-
-class WorkflowStoreConfigInput(CliInput):
-    job: StoreConfigInput
-    workflow: StoreConfigInput
-    cache: StoreConfigInput
-
-    def to_protocol(self) -> WorkflowStoreConfig:
-        return WorkflowStoreConfig(
-            job=self.job.to_protocol(),
-            workflow=self.workflow.to_protocol(),
-            cache=self.cache.to_protocol(),
-        )
 
 
 class HttpConfigInput(CliInput):
@@ -113,8 +97,8 @@ class HttpConfigInput(CliInput):
         )
 
 
-class WorkflowRunCommandInput(CliInput):
-    command: Literal["workflow_run"]
+class WorkflowRunJobCommandInput(CliInput):
+    command: Literal["workflow_run_job"]
     target: NonemptyString
     args: JobRunInput
     job_store_config: StoreConfigInput | None = None
@@ -147,8 +131,8 @@ class WorkflowRunCommandInput(CliInput):
             )
         return self
 
-    def to_protocol(self) -> WorkflowRunCommand:
-        return WorkflowRunCommand(
+    def to_protocol(self) -> WorkflowRunJobCommand:
+        return WorkflowRunJobCommand(
             command=self.command,
             target=self.target,
             args=self.args.to_protocol(),
@@ -161,18 +145,20 @@ class WorkflowRunCommandInput(CliInput):
                 else None
             ),
             cache_store_config=(
-                self.cache_store_config.to_protocol() if self.cache_store_config else None
+                self.cache_store_config.to_protocol()
+                if self.cache_store_config
+                else None
             ),
             http_config=self.http_config.to_protocol() if self.http_config else None,
         )
 
 
-class WorkflowMetadataCommandInput(CliInput):
-    command: Literal["workflow_metadata"]
+class WorkflowGetMetadataCommandInput(CliInput):
+    command: Literal["workflow_get_metadata"]
     target: NonemptyString
 
-    def to_protocol(self) -> WorkflowMetadataCommand:
-        return WorkflowMetadataCommand(command=self.command, target=self.target)
+    def to_protocol(self) -> WorkflowGetMetadataCommand:
+        return WorkflowGetMetadataCommand(command=self.command, target=self.target)
 
 
 class ModelTrainCommandInput(CliInput):
@@ -193,6 +179,8 @@ class ModelTrainCommandInput(CliInput):
 
 
 type CliCommandInput = Annotated[
-    WorkflowRunCommandInput | WorkflowMetadataCommandInput | ModelTrainCommandInput,
+    WorkflowRunJobCommandInput
+    | WorkflowGetMetadataCommandInput
+    | ModelTrainCommandInput,
     Field(discriminator="command"),
 ]

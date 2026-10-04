@@ -1,8 +1,8 @@
 use std::sync::atomic::Ordering;
 
-use crate::api::v0::{PythonCli, RunCommandArgs};
+use crate::api::v0::{JobRunArgs, PythonCli};
 
-use crate::models::EventKind;
+use crate::models::{EventKind, JobStartedData, JobSucceededData};
 use anyhow::{Result, bail};
 use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -12,8 +12,6 @@ use super::{ManagedProcess, RunJobArgs, Worker, wait_for_cancellation};
 
 pub enum WorkerOutcome {
     Succeeded,
-    /// The Python client already published `job_failed` before exiting nonzero.
-    FailedByClient,
     Cancelled,
 }
 
@@ -34,7 +32,7 @@ impl Worker {
         args: RunJobArgs,
         cancellation: &mut watch::Receiver<bool>,
     ) -> Result<WorkerOutcome> {
-        let command_args = RunCommandArgs {
+        let command_args = JobRunArgs {
             job_id: args.job_id.to_string(),
             data_reference_uri: args.input.to_string(),
             workflow_run_id: self.ctx.run_id.to_string(),
@@ -51,7 +49,16 @@ impl Worker {
         command.stderr(writer);
         let mut process = ManagedProcess::spawn(command)?;
 
-        let work = async { self.process_output(&args, pipe_file(reader)).await };
+        let work = async {
+            self.publish(
+                &args,
+                EventKind::JobStarted(JobStartedData {
+                    job_run_id: args.job_run_id.clone(),
+                }),
+            )
+            .await?;
+            self.process_output(&args, pipe_file(reader)).await
+        };
         let result = tokio::select! {
             biased;
             _ = wait_for_cancellation(cancellation) => {
@@ -60,12 +67,9 @@ impl Worker {
             }
             result = work => result,
         };
-        let client_failed = match result {
-            Ok(client_failed) => client_failed,
-            Err(error) => {
-                return Err(terminate_after_error(&mut process, error).await);
-            }
-        };
+        if let Err(error) = result {
+            return Err(terminate_after_error(&mut process, error).await);
+        }
 
         let result = tokio::select! {
             biased;
@@ -82,9 +86,6 @@ impl Worker {
             }
         };
         if !status.success() {
-            if client_failed {
-                return Ok(WorkerOutcome::FailedByClient);
-            }
             bail!("job process exited with {status}");
         }
 
@@ -94,17 +95,22 @@ impl Worker {
         if self.state.cancelled.load(Ordering::SeqCst) {
             return Ok(WorkerOutcome::Cancelled);
         }
+        self.publish(
+            &args,
+            EventKind::JobSucceeded(JobSucceededData {
+                job_run_id: args.job_run_id.clone(),
+            }),
+        )
+        .await?;
         drop(jobs);
 
         Ok(WorkerOutcome::Succeeded)
     }
 
-    /// Reads process output and publishes IPC events. Returns whether the client
-    /// already emitted `job_failed`.
-    async fn process_output(&self, args: &RunJobArgs, pipe: File) -> Result<bool> {
+    /// Drains process output and publishes side effects before checking exit status.
+    async fn process_output(&self, args: &RunJobArgs, pipe: File) -> Result<()> {
         let mut reader = BufReader::new(pipe);
         let mut line = Vec::new();
-        let mut client_failed = false;
         while reader.read_until(b'\n', &mut line).await? != 0 {
             self.ctx
                 .logs
@@ -116,15 +122,12 @@ impl Worker {
             if let Ok(payload) = std::str::from_utf8(payload) {
                 if let Some(message) = PythonCli::parse_run_stdout(payload)? {
                     let kind = message.into_event_kind()?;
-                    if matches!(kind, EventKind::JobFailed(_)) {
-                        client_failed = true;
-                    }
                     self.publish(args, kind).await?;
                 }
             }
             line.clear();
         }
-        Ok(client_failed)
+        Ok(())
     }
 }
 

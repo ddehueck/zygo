@@ -7,8 +7,9 @@ from zygo.cli.v0.generated import (
     ChannelItemInserted,
     ChannelMetadata,
     CliCommand,
+    CliOutput,
+    CliPayload,
     DataReferenceInserted,
-
     HttpConfig,
     HttpIPCMessage,
     IpcMessage,
@@ -17,10 +18,9 @@ from zygo.cli.v0.generated import (
     ModelTrainCommand,
     StoreConfig,
     TagInserted,
-    WorkflowMetadata,
-    WorkflowMetadataCommand,
-    WorkflowRunCommand,
-    WorkflowStoreConfig,
+    WorkflowGetMetadataCommand,
+    WorkflowGetMetadataOutput,
+    WorkflowRunJobCommand,
 )
 
 __all__ = [
@@ -28,8 +28,9 @@ __all__ = [
     "ChannelItemInserted",
     "ChannelMetadata",
     "CliCommand",
+    "CliOutput",
+    "CliPayload",
     "DataReferenceInserted",
-
     "HttpConfig",
     "HttpIPCMessage",
     "IpcMessage",
@@ -38,10 +39,9 @@ __all__ = [
     "ModelTrainCommand",
     "StoreConfig",
     "TagInserted",
-    "WorkflowMetadata",
-    "WorkflowMetadataCommand",
-    "WorkflowRunCommand",
-    "WorkflowStoreConfig",
+    "WorkflowGetMetadataCommand",
+    "WorkflowGetMetadataOutput",
+    "WorkflowRunJobCommand",
     "serialize_http_ipc_message",
     "serialize_ipc_message",
 ]

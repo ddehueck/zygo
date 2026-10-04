@@ -29,6 +29,7 @@ def train[T](
     model: Model,
     dataset: str | Path | DataUri | Dataset[T],
     params: HyperParams | Mapping[str, object] | None = None,
+    store: ModelStore | None = None,
 ) -> ModelStore:
     """Run training synchronously and return its persistent artifact store.
 
@@ -45,10 +46,11 @@ def train[T](
     else:
         training_dataset = dataset
 
-    root = Path.cwd() / "zygo" / "models" / uuid4().hex
-    store = ModelStore(
-        root=DataUri(root.as_uri() + "/"), ipc_transport=LocalTransport()
-    )
+    if store is None:
+        root = Path.cwd() / "zygo" / "models" / uuid4().hex
+        store = ModelStore(
+            root=DataUri(root.as_uri() + "/"), ipc_transport=LocalTransport()
+        )
     model.run_train(training_dataset, ctx=_TrainingContext(store=store), params=params)
     return store
 
