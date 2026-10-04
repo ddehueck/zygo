@@ -133,3 +133,52 @@ def test_write_puts_once_on_close(
         ),
         ("PUT", "https://storage.example/object", b"first second", None),
     ]
+
+
+def test_ls_strips_protocol_and_defaults_size(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def urlopen(request: Request, timeout: int) -> BytesIO:
+        assert request.full_url.endswith("/store/ls")
+        assert timeout == 30
+        return BytesIO(
+            json.dumps(
+                {
+                    "entries": [
+                        {
+                            "name": "zygo://wsp_1/dsv/dsv_1/part-0.parquet",
+                            "type": "file",
+                            "size": 12,
+                        },
+                        {
+                            "name": "zygo://wsp_1/dsv/dsv_1/nested",
+                            "type": "directory",
+                        },
+                    ]
+                }
+            ).encode()
+        )
+
+    monkeypatch.setattr(fsspec_backend, "urlopen", urlopen)
+    fs = fsspec_backend.ZygoFileSystem(
+        api_host="https://api.zygo.cloud",
+        api_bearer_auth="test-secret",
+        skip_instance_cache=True,
+    )
+
+    assert fs.ls("zygo://wsp_1/dsv/dsv_1/", detail=True) == [
+        {
+            "name": "wsp_1/dsv/dsv_1/part-0.parquet",
+            "type": "file",
+            "size": 12,
+        },
+        {
+            "name": "wsp_1/dsv/dsv_1/nested",
+            "type": "directory",
+            "size": 0,
+        },
+    ]
+    assert fs.ls("wsp_1/dsv/dsv_1/", detail=False) == [
+        "wsp_1/dsv/dsv_1/part-0.parquet",
+        "wsp_1/dsv/dsv_1/nested",
+    ]
