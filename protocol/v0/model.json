@@ -21,6 +21,11 @@
         "store_config": {
           "$ref": "./store.json#/definitions/StoreConfig"
         },
+        "params": {
+          "description": "Optional JSON-valued training parameters. The CLI accepts any object and the model validates its parameter contract. When omitted, the model uses its declared defaults.",
+          "type": "object",
+          "additionalProperties": {}
+        },
         "http_config": {
           "anyOf": [
             {

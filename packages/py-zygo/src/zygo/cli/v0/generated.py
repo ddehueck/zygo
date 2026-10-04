@@ -76,6 +76,7 @@ class ModelTrainCommand:
     target: str
     dataset_config: StoreConfig
     store_config: StoreConfig
+    params: dict[str, Any] | None = None
     http_config: HttpConfig | None = None
 
 

@@ -12,6 +12,8 @@ from zygo.ml.store import ModelStore
 from zygo.store import DataUri
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from zygo.cli.v0.transport import IpcTransport
     from zygo.cli.v0.types import StoreConfig
 
@@ -21,6 +23,7 @@ def execute(command: ModelTrainCommand) -> None:
         target=command.target,
         dataset_config=command.dataset_config,
         store_config=command.store_config,
+        params=command.params,
         ipc_transport=build_transport(command.http_config),
     )
 
@@ -31,6 +34,7 @@ def train(
     dataset_config: StoreConfig,
     store_config: StoreConfig,
     ipc_transport: IpcTransport,
+    params: Mapping[str, object] | None = None,
 ) -> None:
     model = Importer.from_target(target).load(Model)
     dataset = Dataset.open(
@@ -41,4 +45,4 @@ def train(
         ipc_transport=ipc_transport,
         kwargs=store_config.kwargs,
     )
-    executor_train(model=model, dataset=dataset, store=store)
+    executor_train(model=model, dataset=dataset, store=store, params=params)
