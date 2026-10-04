@@ -6,10 +6,14 @@ import random
 from typing import TYPE_CHECKING, cast, overload
 
 from fsspec.core import url_to_fs
+from fsspec.implementations.local import LocalFileSystem as FSSpecLocalFileSystem
 import pyarrow as pa
 import pyarrow.dataset as pads
-from pyarrow.fs import FSSpecHandler, PyFileSystem
-import pyarrow.parquet as pq
+from pyarrow.fs import (
+    FSSpecHandler,
+    LocalFileSystem as ArrowLocalFileSystem,
+    PyFileSystem,
+)
 
 from zygo.dataset.builder import (
     DEFAULT_SHARD_SIZE_MB,
@@ -18,10 +22,17 @@ from zygo.dataset.builder import (
     shard_tables,
 )
 from zygo.dataset.features import ClassLabel, Features
+from zygo.dataset.manifest import (
+    MANIFEST_FILENAME,
+    DatasetManifest,
+    publish_manifest,
+    write_parquet,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Mapping
 
+    from zygo.dataset.manifest import FileManifestEntry
     from zygo.store import DataUri
 
 
@@ -41,12 +52,15 @@ class Dataset[T]:
         _batch_reader: Callable[[list[str] | None], Iterator[pa.RecordBatch]]
         | None = None,
         _row_count: int | None = None,
+        _backing_sources: tuple[pads.Dataset, ...] | None = None,
     ) -> None:
+        super().__init__()
         self._source: pads.Dataset = source
         self.uri = uri
         self._features = features
         self._batch_reader = _batch_reader
         self._row_count = _row_count
+        self._backing_sources = _backing_sources or (source,)
 
     @classmethod
     def builder(
@@ -102,9 +116,11 @@ class Dataset[T]:
     ) -> Dataset[F] | Dataset[dict[str, object]]:
         location = str(uri)
         filesystem, path = url_to_fs(location, **dict(storage_options or {}))
-        source = pads.dataset(
+        # pyarrow-stubs omits FSSpecHandler's concrete abstract-method implementations.
+        handler = FSSpecHandler(filesystem)  # ty: ignore[call-non-callable]
+        source: pads.Dataset = pads.dataset(
             path,
-            filesystem=PyFileSystem(FSSpecHandler(filesystem)),
+            filesystem=PyFileSystem(handler),
             format="parquet",
         )
         if features is not None:
@@ -116,6 +132,41 @@ class Dataset[T]:
     def arrow_schema(self) -> pa.Schema:
         return self._source.schema
 
+    @property
+    def local_file_paths(self) -> list[Path]:
+        """Return local backing shard paths, including for filtered or sampled views."""
+        paths: list[Path] = []
+        for source in self._backing_sources:
+            if not isinstance(source, pads.FileSystemDataset):
+                raise TypeError("This dataset is not in the local filesystem")
+            filesystem = source.filesystem
+            is_local = isinstance(filesystem, ArrowLocalFileSystem) or (
+                isinstance(filesystem, PyFileSystem)
+                and isinstance(filesystem.handler, FSSpecHandler)
+                and isinstance(filesystem.handler.fs, FSSpecLocalFileSystem)
+            )
+            if not is_local:
+                raise ValueError("local_file_paths requires a local filesystem")
+            paths.extend(Path(path) for path in source.files)
+        return list(dict.fromkeys(paths))
+
+    @property
+    def local_content_manifest(self) -> dict[Path, FileManifestEntry]:
+        """Load stored metadata for local backing shards. Requires _manifest.json."""
+        paths = self.local_file_paths
+        filesystem, location = url_to_fs(self.uri)
+        if not isinstance(filesystem, FSSpecLocalFileSystem):
+            raise ValueError("local_content_manifest requires a local dataset URI")
+        local_path = Path(cast("str", location)).resolve()
+        root = local_path.parent if local_path.is_file() else local_path
+        manifest = DatasetManifest.model_validate_json(
+            (root / MANIFEST_FILENAME).read_text(encoding="utf-8")
+        )
+        return {
+            path: manifest.files[path.resolve().relative_to(root).as_posix()]
+            for path in paths
+        }
+
     def with_features[F: Features](self, features: type[F]) -> Dataset[F]:
         """Validate and bind features to an already-open dataset."""
         features.validate_arrow_schema(self.arrow_schema)
@@ -125,6 +176,7 @@ class Dataset[T]:
             features=features,
             _batch_reader=self._batch_reader,
             _row_count=self._row_count,
+            _backing_sources=self._backing_sources,
         )
 
     def where(self, **equals: object) -> Dataset[T]:
@@ -140,7 +192,12 @@ class Dataset[T]:
         # Bind the expression against the schema now, without reading any rows.
         source = self._source.filter(predicate)
         if self._batch_reader is None:
-            return Dataset(source, uri=self.uri, features=self.features)
+            return Dataset(
+                source,
+                uri=self.uri,
+                features=self.features,
+                _backing_sources=self._backing_sources,
+            )
 
         def read(columns: list[str] | None) -> Iterator[pa.RecordBatch]:
             required = (
@@ -160,7 +217,11 @@ class Dataset[T]:
             yield from scanner.to_batches()
 
         return Dataset(
-            self._source, uri=self.uri, features=self.features, _batch_reader=read
+            self._source,
+            uri=self.uri,
+            features=self.features,
+            _batch_reader=read,
+            _backing_sources=self._backing_sources,
         )
 
     def class_names(self, column: str) -> tuple[str, ...]:
@@ -177,9 +238,9 @@ class Dataset[T]:
         encoded = metadata.get(b"class_names")
         if encoded is None:
             raise ValueError(f"Field {column!r} has no ClassLabel class names")
-        names: object = json.loads(encoded)
+        names = cast("object", json.loads(encoded))
         if not isinstance(names, list) or not all(
-            isinstance(name, str) for name in names
+            isinstance(name, str) for name in cast("list[object]", names)
         ):
             raise ValueError(f"Field {column!r} has invalid ClassLabel class names")
         return ClassLabel(*cast("list[str]", names)).names
@@ -225,6 +286,7 @@ class Dataset[T]:
                 positions, projected
             ),
             _row_count=len(positions),
+            _backing_sources=self._backing_sources,
         )
 
     def _sample_positions(
@@ -293,7 +355,13 @@ class Dataset[T]:
                 yield from dataset._batches(columns)
 
         return Dataset(
-            first._source, uri=first.uri, features=first.features, _batch_reader=read
+            first._source,
+            uri=first.uri,
+            features=first.features,
+            _batch_reader=read,
+            _backing_sources=tuple(
+                source for dataset in datasets for source in dataset._backing_sources
+            ),
         )
 
     def write(
@@ -309,16 +377,20 @@ class Dataset[T]:
         path.mkdir(parents=True, exist_ok=True)
         if any(path.iterdir()):
             raise FileExistsError(f"Output directory {path} must be empty")
+        files: dict[str, FileManifestEntry] = {}
         for index, table in enumerate(
             shard_tables(self._batches(), max_bytes=max_bytes)
         ):
-            with (path / f"part-{index}.parquet").open("xb") as output:
-                pq.write_table(table, output)
-        if not any(path.iterdir()):
-            pq.write_table(
+            filename = f"part-{index}.parquet"
+            files[filename] = write_parquet(table, path / filename, filename=filename)
+        if not files:
+            filename = "part-0.parquet"
+            files[filename] = write_parquet(
                 pa.Table.from_batches([], schema=self.arrow_schema),
-                path / "part-0.parquet",
+                path / filename,
+                filename=filename,
             )
+        publish_manifest(path, files)
         return Dataset(
             pads.dataset(str(path), format="parquet"),
             uri=str(path),

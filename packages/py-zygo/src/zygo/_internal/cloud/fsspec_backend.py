@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 from io import BytesIO
 import json
 import logging
@@ -143,11 +144,11 @@ class _UploadFile(BytesIO):
     def __exit__(
         self,
         exc_type: type[BaseException] | None,
-        exc_value: BaseException | None,
-        traceback: TracebackType | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
     ) -> None:
         self._discard = exc_type is not None
-        super().__exit__(exc_type, exc_value, traceback)
+        super().__exit__(exc_type, exc_val, exc_tb)
 
 
 class _ZygoApiClient:
@@ -193,11 +194,11 @@ class _ZygoApiClient:
         )
         return str(response["url"])
 
-    def list(self, uri: str) -> list[dict[str, object]]:
+    def list(self, uri: str) -> builtins.list[dict[str, object]]:
         if not uri.endswith("/"):
             uri += "/"
         response = self._request_json("POST", "store/ls", body={"uri": uri})
-        return cast("list[dict[str, object]]", response["entries"])
+        return cast("builtins.list[dict[str, object]]", response["entries"])
 
     def delete(self, uri: str) -> None:
         self._request("DELETE", "store", body={"uri": uri})

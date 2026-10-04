@@ -11,8 +11,8 @@ Example::
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator, Mapping
-from dataclasses import MISSING, dataclass, fields
+from collections.abc import Mapping
+from dataclasses import MISSING, dataclass, fields, is_dataclass
 from typing import (
     TYPE_CHECKING,
     ClassVar,
@@ -31,20 +31,25 @@ from .protocol import (
     _ALLOWED_PRIMITIVE_FEATURE_TYPES,
     _PRIMITIVE_ARROW_DTYPES,
     ZygoFeature,
-    _FeatureT,
+    _FeatureT,  # noqa: TC001 - Required by get_type_hints() on Features.
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator
+
     from PIL import Image as PILImage
+
 
 __all__ = ["ClassLabel", "Features", "Image", "features"]
 
 
 def _get_feature_fields(cls: type[Features]) -> Iterator[tuple[str, _FeatureT, object]]:
     """Yield each feature field's name, annotated class, and default configuration."""
+    if not is_dataclass(cls):
+        raise TypeError("Feature schemas must be decorated with @features")
     hints = get_type_hints(cls)
     for field in fields(cls):
-        annotation = hints[field.name]
+        annotation = cast("object", hints[field.name])
         if isinstance(annotation, type) and issubclass(annotation, ZygoFeature):
             yield field.name, annotation, field.default
         elif annotation in _ALLOWED_PRIMITIVE_FEATURE_TYPES:
@@ -106,7 +111,7 @@ class Features(metaclass=_FeaturesMeta):
                 if key in metadata and metadata[key] != value:
                     raise ValueError(
                         f"Arrow field {name!r} metadata {key!r} must match "
-                        f"{value!r}, got {metadata[key]!r}"
+                        + f"{value!r}, got {metadata[key]!r}"
                     )
 
     @classmethod
@@ -114,7 +119,7 @@ class Features(metaclass=_FeaturesMeta):
         """Validate a mapping or field-bearing object and encode it for Arrow."""
         names = {name for name, _, _ in cls._feature_fields}
         if isinstance(data, Mapping):
-            extra = set(data) - names
+            extra = set(cast("Mapping[object, object]", data)) - names
             if extra:
                 raise ValueError(f"Row has unexpected fields: {extra!r}")
             row = cast("Mapping[str, object]", data)
@@ -169,7 +174,7 @@ def _feature_to_pyarrow_field(
     name: str,
     typeclass: _FeatureT,
     default: object = MISSING,
-) -> pa.Field:
+) -> pa.Field[pa.DataType]:
     if issubclass(typeclass, ZygoFeature):
         return typeclass.to_arrow_field(name, default)
     try:
@@ -188,10 +193,10 @@ def _decode_feature(
     if issubclass(typeclass, ZygoFeature):
         return typeclass.decode_value(name, value, default)
     if typeclass is float:
-        if type(value) not in (int, float):
+        if type(value) not in {int, float}:
             raise TypeError(f"Field {name!r} requires a numeric value")
         return float(cast("int | float", value))
-    if typeclass in (int, bool):
+    if typeclass in {int, bool}:
         valid = type(value) is typeclass
     else:
         valid = isinstance(value, typeclass)

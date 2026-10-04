@@ -1,16 +1,26 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
+import re
 from typing import TYPE_CHECKING, Self
 
 import pyarrow as pa
-import pyarrow.parquet as pq
+
+from zygo.dataset.manifest import (
+    MANIFEST_FILENAME,
+    publish_manifest,
+    write_parquet,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
     from types import TracebackType
 
     from zygo.dataset.features import Features
+    from zygo.dataset.manifest import FileManifestEntry
+
+_logger = logging.getLogger(__name__)
 
 DEFAULT_SHARD_SIZE_MB = 512
 BYTES_PER_MB = 1_000_000
@@ -69,6 +79,7 @@ class DatasetBuilder:
         shard_size_mb: int = DEFAULT_SHARD_SIZE_MB,
         overwrite: bool = False,
     ) -> None:
+        super().__init__()
         self._max_shard_bytes = shard_size_bytes(shard_size_mb)
         self.schema = schema
         self.path = Path(path)
@@ -78,6 +89,7 @@ class DatasetBuilder:
         self._rows: list[dict[str, object]] = []
         self._rows_bytes = 0
         self._shard_index = 0
+        self._manifest_files: dict[str, FileManifestEntry] = {}
         self._active = False
         self._closed = False
 
@@ -91,6 +103,16 @@ class DatasetBuilder:
         if not self.overwrite and has_existing_files:
             raise FileExistsError(f"Output directory {self.path} must be empty")
 
+        if self.overwrite:
+            (self.path / MANIFEST_FILENAME).unlink(missing_ok=True)
+            # Only remove the numbered shard names owned by dataset writers.
+            for path in self.path.iterdir():
+                if (
+                    re.fullmatch(r"(?:[0-9]{4,}|part-[0-9]+)\.parquet", path.name)
+                    and path.is_file()
+                ):
+                    path.unlink()
+
         self._active = True
         return self
 
@@ -103,6 +125,8 @@ class DatasetBuilder:
         if exc_type is None:
             self.close()
         else:
+            # A context failure must not leave a manifest, even after explicit close.
+            (self.path / MANIFEST_FILENAME).unlink(missing_ok=True)
             self._rows.clear()
             self._active = False
             self._closed = True
@@ -133,6 +157,7 @@ class DatasetBuilder:
         try:
             if self._rows or self._shard_index == 0:
                 self._write_shard()
+            publish_manifest(self.path, self._manifest_files)
         finally:
             self._active = False
             self._closed = True
@@ -141,9 +166,8 @@ class DatasetBuilder:
         table = pa.Table.from_pylist(self._rows, schema=self._arrow_schema)
         path = self.path / f"{self._shard_index + 1:04d}.parquet"
 
-        mode = "wb" if self.overwrite else "xb"
-        with path.open(mode) as output:
-            pq.write_table(table, output)
+        entry = write_parquet(table, path, filename=path.name, overwrite=self.overwrite)
+        self._manifest_files[entry.filename] = entry
         self._rows.clear()
         self._rows_bytes = 0
         self._shard_index += 1
