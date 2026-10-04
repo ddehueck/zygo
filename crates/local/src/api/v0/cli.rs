@@ -3,8 +3,8 @@ use tokio::process::Command;
 
 use crate::api::error::{self, Result};
 use crate::api::v0::interface::{
-    RunCommandArgs, STDOUT_IPC_PREFIX, StdoutIPCMessage, WorkflowMetadata, WorkflowStoreConfig,
-    ZYGO_PKG_CLI_MODULE,
+    CliCommand, RunCommandArgs, STDOUT_IPC_PREFIX, StdoutIPCMessage, WorkflowMetadata,
+    WorkflowStoreConfig, ZYGO_PKG_CLI_MODULE,
 };
 use crate::models::{
     self, Channel, ChannelId, ChannelItemInsertedData, ContentHash, DataReferenceInsertedData,
@@ -73,6 +73,17 @@ impl PythonCli {
         args: RunCommandArgs,
         store_config: Option<WorkflowStoreConfig>,
     ) -> Command {
+        let (job_store_config, workflow_store_config, cache_store_config) = match store_config {
+            Some(config) => (Some(config.job), Some(config.workflow), Some(config.cache)),
+            None => (None, None, None),
+        };
+        let cli_command = CliCommand::WorkflowRun {
+            target: self.target.clone(),
+            args,
+            job_store_config,
+            workflow_store_config,
+            cache_store_config,
+        };
         let mut command = Command::new(self.python.clone());
         command
             // Keep logs and stdout IPC flowing through the shared pipe promptly.
@@ -82,19 +93,9 @@ impl PythonCli {
             .args(vec![
                 "-m".into(),
                 ZYGO_PKG_CLI_MODULE.into(),
-                "workflow".into(),
-                "run".into(),
-                self.target.clone(),
                 "--args".into(),
-                serde_json::to_string(&args).expect("failed to serialze RunCommandArgs"),
+                serde_json::to_string(&cli_command).expect("failed to serialize CliCommand"),
             ]);
-        if let Some(store_config) = store_config {
-            command.args([
-                "--store-config",
-                &serde_json::to_string(&store_config)
-                    .expect("failed to serialize WorkflowStoreConfig"),
-            ]);
-        }
         command
     }
 
@@ -107,13 +108,15 @@ impl PythonCli {
     }
 
     pub async fn run_metadata_command(&self) -> Result<WorkflowMetadata> {
+        let cli_command = CliCommand::WorkflowMetadata {
+            target: self.target.clone(),
+        };
         let mut command = Command::new(self.python.clone());
         command.current_dir(&self.cwd).args(vec![
             "-m".into(),
             ZYGO_PKG_CLI_MODULE.into(),
-            "workflow".into(),
-            "metadata".into(),
-            self.target.clone(),
+            "--args".into(),
+            serde_json::to_string(&cli_command)?,
         ]);
 
         let output = command

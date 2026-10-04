@@ -2,6 +2,8 @@
 
 from dataclasses import asdict
 import json
+import sys
+from types import ModuleType
 
 import pytest
 
@@ -56,11 +58,9 @@ def test_inspect_workflow_prints_json(
 ) -> None:
     workflow = _workflow()
 
-    def load_workflow(target: str) -> Workflow:
-        assert target == "module:workflow"
-        return workflow
-
-    monkeypatch.setattr(metadata_module, "load_workflow", load_workflow)
+    module = ModuleType("module")
+    vars(module)["workflow"] = workflow
+    monkeypatch.setitem(sys.modules, "module", module)
 
     metadata_module.inspect_workflow("module:workflow")
 

@@ -1,0 +1,187 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Workflow protocol definitions",
+  "description": "Workflow commands, their outputs, and job arguments.",
+  "definitions": {
+    "WorkflowRunJobCommand": {
+      "description": "Execute one job in the target workflow. Omit all three store configurations to use local defaults, or provide all three explicitly. Omitted or null http_config publishes over stdout.",
+      "type": "object",
+      "properties": {
+        "command": {
+          "const": "workflow_run_job"
+        },
+        "target": {
+          "type": "string",
+          "minLength": 1
+        },
+        "args": {
+          "$ref": "#/definitions/JobRunArgs"
+        },
+        "job_store_config": {
+          "$ref": "./store.json#/definitions/StoreConfig"
+        },
+        "workflow_store_config": {
+          "$ref": "./store.json#/definitions/StoreConfig"
+        },
+        "cache_store_config": {
+          "$ref": "./store.json#/definitions/StoreConfig"
+        },
+        "http_config": {
+          "anyOf": [
+            {
+              "$ref": "./ipc.json#/definitions/HttpConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "command",
+        "target",
+        "args"
+      ],
+      "dependencies": {
+        "job_store_config": [
+          "workflow_store_config",
+          "cache_store_config"
+        ],
+        "workflow_store_config": [
+          "job_store_config",
+          "cache_store_config"
+        ],
+        "cache_store_config": [
+          "job_store_config",
+          "workflow_store_config"
+        ]
+      },
+      "additionalProperties": false
+    },
+    "WorkflowGetMetadataCommand": {
+      "description": "Inspect the target workflow and return WorkflowGetMetadataOutput as a prefixed stdout line.",
+      "type": "object",
+      "properties": {
+        "command": {
+          "const": "workflow_get_metadata"
+        },
+        "target": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "command",
+        "target"
+      ],
+      "additionalProperties": false
+    },
+    "WorkflowGetMetadataOutput": {
+      "description": "Output of WorkflowGetMetadataCommand, emitted as a prefixed stdout line.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "content_hash": {
+          "type": "string"
+        },
+        "input_channel_id": {
+          "type": "string"
+        },
+        "output_channel_id": {
+          "type": "string"
+        },
+        "jobs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/JobMetadata"
+          }
+        },
+        "channels": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ChannelMetadata"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "content_hash",
+        "input_channel_id",
+        "output_channel_id",
+        "jobs",
+        "channels"
+      ],
+      "additionalProperties": false
+    },
+    "JobRunArgs": {
+      "description": "Job arguments nested inside WorkflowRunJobCommand.args. Run IDs are retained for workflow store path construction, not publication attribution.",
+      "type": "object",
+      "properties": {
+        "job_id": {
+          "type": "string"
+        },
+        "data_reference_uri": {
+          "type": "string"
+        },
+        "workflow_run_id": {
+          "type": "string"
+        },
+        "job_run_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "job_id",
+        "data_reference_uri",
+        "workflow_run_id",
+        "job_run_id"
+      ],
+      "additionalProperties": false
+    },
+    "JobMetadata": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "content_hash": {
+          "type": "string"
+        },
+        "input_channel_id": {
+          "type": "string"
+        },
+        "output_channel_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "content_hash",
+        "input_channel_id",
+        "output_channel_id"
+      ],
+      "additionalProperties": false
+    },
+    "ChannelMetadata": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "accepted_file_extensions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "accepted_file_extensions"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -4,10 +4,11 @@ from typing import TYPE_CHECKING, cast
 
 from zygo._internal.meta.injection import build_injected_job_fn
 from zygo._internal.meta.job_context import JobContextImpl
-from zygo.cli.importer import load_workflow_with_module
+from zygo.cli.importer import Importer
 from zygo.cli.v0.types import ChannelItemInserted, StoreConfig, WorkflowStoreConfig
 from zygo.cli.v0.workflow_config import local_store_options
 from zygo.store import DataUri
+from zygo.workflow import Workflow
 from zygo.workflow.store import WorkflowStore
 from zygo.workflow.types import JobId, JobRunContext, JobRunId, WorkflowRunId
 
@@ -44,7 +45,8 @@ def _execute_job(
     store_config: WorkflowStoreConfig | None,
     ipc_transport: IpcTransport,
 ) -> None:
-    workflow, module = load_workflow_with_module(target)
+    importer = Importer.from_target(target)
+    workflow = importer.load(Workflow)
 
     run_context = JobRunContext(
         workflow_run_id=WorkflowRunId(args.workflow_run_id),
@@ -58,7 +60,7 @@ def _execute_job(
 
     if store_config is None:
         # Use local store options + defaults when no configuration is provided
-        base = local_store_options(module).root_uri.uri.rstrip("/")
+        base = local_store_options(importer.module).root_uri.uri.rstrip("/")
         store_config = WorkflowStoreConfig(
             job=StoreConfig(root_uri=f"{base}/jobs/"),
             workflow=StoreConfig(root_uri=f"{base}/workflows/"),

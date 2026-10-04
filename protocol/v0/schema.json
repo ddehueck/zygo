@@ -1,173 +1,37 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-
-  "title": "Zygo provider protocol v0 payload",
-  "description": "JSON payloads for the CLI, python -m zygo.cli.v0.",
+  "title": "CliPayload",
+  "description": "CLI commands and their explicit outputs. Domain definitions, shared configurations, and side-effect publications are defined in sibling schema files.",
   "oneOf": [
-    { "$ref": "#/definitions/WorkflowMetadata" },
-    { "$ref": "#/definitions/JobRunArgs" },
-    { "$ref": "#/definitions/DatasetConfig" },
-    { "$ref": "#/definitions/WorkflowStoreConfig" },
-    { "$ref": "#/definitions/StoreConfig" },
-    { "$ref": "#/definitions/HttpConfig" },
-    { "$ref": "#/definitions/IpcMessage" },
-    { "$ref": "#/definitions/HttpIPCMessage" }
+    {
+      "$ref": "#/definitions/CliCommand"
+    },
+    {
+      "$ref": "#/definitions/CliOutput"
+    }
   ],
   "definitions": {
-    "ChannelMetadata": {
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "accepted_file_extensions": {
-          "type": "array",
-          "items": { "type": "string" }
-        }
-      },
-      "required": ["id", "accepted_file_extensions"],
-      "additionalProperties": false
-    },
-    "JobMetadata": {
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "content_hash": { "type": "string" },
-        "input_channel_id": { "type": "string" },
-        "output_channel_id": { "type": "string" }
-      },
-      "required": ["id", "content_hash", "input_channel_id", "output_channel_id"],
-      "additionalProperties": false
-    },
-    "WorkflowMetadata": {
-      "description": "JSON payload returned by python -m zygo.cli.v0 workflow metadata TARGET on stdout.",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "content_hash": { "type": "string" },
-        "input_channel_id": { "type": "string" },
-        "output_channel_id": { "type": "string" },
-        "jobs": {
-          "type": "array",
-          "items": { "$ref": "#/definitions/JobMetadata" }
-        },
-        "channels": {
-          "type": "array",
-          "items": { "$ref": "#/definitions/ChannelMetadata" }
-        }
-      },
-      "required": ["id", "content_hash", "input_channel_id", "output_channel_id", "jobs", "channels"],
-      "additionalProperties": false
-    },
-    "JobRunArgs": {
-      "description": "JSON supplied to python -m zygo.cli.v0 workflow run TARGET via --args. Run IDs are retained for workflow store path construction, not publication attribution.",
-      "type": "object",
-      "properties": {
-        "job_id": { "type": "string" },
-        "data_reference_uri": { "type": "string" },
-        "workflow_run_id": { "type": "string" },
-        "job_run_id": { "type": "string" }
-      },
-      "required": ["job_id", "data_reference_uri", "workflow_run_id", "job_run_id"],
-      "additionalProperties": false
-    },
-    "DatasetConfig": {
-      "description": "Reusable configuration for an existing Parquet file or sharded dataset directory. Supplied to ml train via --dataset-config.",
-      "type": "object",
-      "properties": {
-        "uri": { "type": "string", "minLength": 1, "description": "fsspec URI of the input dataset." },
-        "kwargs": { "type": "object", "additionalProperties": {}, "description": "JSON-valued backend options passed as dataset storage_options.", "default": {} }
-      },
-      "required": ["uri"],
-      "additionalProperties": false
-    },
-    "WorkflowStoreConfig": {
-      "description": "JSON supplied via --store-config to workflow run. Each scope has independent backend options and a base root. Zygo appends workflow-run and job-run partitions to the job root, a workflow-run partition to the workflow root, and no run partitions to the cache root. Cache data is reusable across executions using that configured root. Callers must tolerate missing entries and be able to reconstruct them. All three scopes are required when supplied. When omitted, local configuration derives jobs/, workflows/, and cache/ roots from tool.zygo.local.data_dir.",
-      "type": "object",
-      "properties": {
-        "job": { "$ref": "#/definitions/StoreConfig" },
-        "workflow": { "$ref": "#/definitions/StoreConfig" },
-        "cache": { "$ref": "#/definitions/StoreConfig" }
-      },
-      "required": ["job", "workflow", "cache"],
-      "additionalProperties": false
-    },
-    "StoreConfig": {
-      "description": "Reusable configuration for a writable fsspec directory or prefix. Supplied directly to ml train via --store-config and composed into WorkflowStoreConfig for workflow execution.",
-      "type": "object",
-      "properties": {
-        "root_uri": { "type": "string", "minLength": 1, "description": "fsspec URI for the store directory or prefix." },
-        "kwargs": { "type": "object", "additionalProperties": {}, "description": "Optional JSON-valued keyword arguments passed to fsspec.filesystem.", "default": {} }
-      },
-      "required": ["root_uri"],
-      "additionalProperties": false
-    },
-    "HttpConfig": {
-      "description": "JSON supplied via --http-config to python -m zygo.cli.v0 workflow run TARGET to send publications over HTTP. Also defines the transport contract for python -m zygo.cli.v0 ml train TARGET, which parses the training contract but whose stub training executor intentionally raises NotImplementedError. Optional settings use CLI defaults. The runtime binds the callback URL or configured headers to a specific execution attempt. The CLI forwards headers on every request without interpreting execution identity.",
-      "type": "object",
-      "properties": {
-        "url": { "type": "string", "pattern": "^https?://", "description": "Full POST URL, optionally scoped by the runtime to an execution attempt." },
-        "headers": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Headers forwarded on every publication and retry. The runtime may supply an opaque attempt handle or authorization here. Header names are not prescribed by the protocol.", "default": {} },
-        "timeout": { "type": "number", "exclusiveMinimum": 0, "default": 30.0 },
-        "max_retries": { "type": "integer", "minimum": 0, "default": 3 },
-        "retry_interval": { "type": "number", "exclusiveMinimum": 0, "default": 5.0 }
-      },
-      "required": ["url"],
-      "additionalProperties": false
-    },
-    "HttpIPCMessage": {
-      "description": "One HTTP publication of one or more IPC messages belonging to the same execution attempt. The runtime attributes and authorizes the publication through the configured callback URL or headers, not fields in the body. The id and body are generated once per publication and reused unchanged on retries. Receivers acknowledge only after durable acceptance, deduplicate retries, and handle late publications from cancelled or superseded attempts.",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string", "description": "Stable idempotency key for this publication, distinct from an execution ID." },
-        "messages": {
-          "type": "array",
-          "items": { "$ref": "#/definitions/IpcMessage" },
-          "minItems": 1
-        }
-      },
-      "required": ["id", "messages"],
-      "additionalProperties": false
-    },
-    "IpcMessage": {
-      "description": "One side-effect publication, emitted as a bare prefixed stdout line or nested inside an HTTP message batch. The runtime owns started, succeeded, failed, and cancelled execution states. Stdout receivers attribute events through the invoking process and must drain and accept its publications before declaring success. The runtime validates whether an event is permitted for the owning execution.",
+    "CliCommand": {
+      "description": "A single JSON command supplied to python -m zygo.cli.v0 --args JSON. The command field selects the request variant.",
       "oneOf": [
-        { "$ref": "#/definitions/DataReferenceInserted" },
-        { "$ref": "#/definitions/ChannelItemInserted" },
-        { "$ref": "#/definitions/TagInserted" }
+        {
+          "$ref": "./workflow.json#/definitions/WorkflowRunJobCommand"
+        },
+        {
+          "$ref": "./workflow.json#/definitions/WorkflowGetMetadataCommand"
+        },
+        {
+          "$ref": "./model.json#/definitions/ModelTrainCommand"
+        }
       ]
     },
-    "DataReferenceInserted": {
-      "description": "Emitted after an artifact write completes successfully, including writes through a writable store context manager. Does not indicate that training or the owning execution succeeded, or that a model artifact set is ready.",
-      "type": "object",
-      "properties": {
-        "type": { "const": "data_reference_inserted" },
-        "data_reference": { "type": "string" }
-      },
-      "required": ["type", "data_reference"],
-      "additionalProperties": false
-    },
-    "ChannelItemInserted": {
-      "type": "object",
-      "properties": {
-        "type": { "const": "channel_item_inserted" },
-        "channel_id": { "type": "string" },
-        "data_reference": { "type": "string" }
-      },
-      "required": ["type", "channel_id", "data_reference"],
-      "additionalProperties": false
-    },
-    "TagInserted": {
-      "description": "Associates a tag with the referenced artifact. If data_reference is absent or null, the tag applies to the execution attributed by the runtime through the invoking process, callback URL, or configured headers.",
-      "type": "object",
-      "properties": {
-        "type": { "const": "tag_inserted" },
-        "value": { "type": "string" },
-        "data_reference": {
-          "description": "Optional. The emitter serializes an absent reference as null.",
-          "type": ["string", "null"]
+    "CliOutput": {
+      "description": "Explicit command results, distinct from side-effect publications. Workflow execution and model training have no separate result payload. Their completion is reported by process exit status.",
+      "oneOf": [
+        {
+          "$ref": "./workflow.json#/definitions/WorkflowGetMetadataOutput"
         }
-      },
-      "required": ["type", "value"],
-      "additionalProperties": false
+      ]
     }
   }
 }

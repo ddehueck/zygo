@@ -1,6 +1,8 @@
 """Model command registration and the training executor boundary."""
 
 from __future__ import annotations
+from zygo.transport import LocalTransport
+from zygo import Model
 
 from typing import TYPE_CHECKING
 
@@ -11,6 +13,7 @@ from zygo.cli.v0.arguments import (
 )
 from zygo.cli.v0.transport import build_transport
 from zygo.cli.v0.types import DatasetConfig, StoreConfig
+from zygo.cli.importer import Importer
 
 if TYPE_CHECKING:
     import argparse
@@ -52,6 +55,7 @@ def execute(args: IpcArguments) -> None:
         raise TypeError("Model training requires DatasetConfig")
     if not isinstance(store_config, StoreConfig):
         raise TypeError("Model training requires StoreConfig")
+
     train(
         target=args.target,
         dataset_config=dataset_config,
@@ -68,5 +72,23 @@ def train(
     ipc_transport: IpcTransport,
 ) -> None:
     """Execute training once the model runtime is implemented."""
-    del target, dataset_config, store_config, ipc_transport
-    raise NotImplementedError("The model training executor is not implemented yet")
+    from zygo.ml.executor import train as executor_train
+    from zygo.cli.importer import Importer
+
+    # Load the model from the target import path
+    importer = Importer.from_target(target)
+    model = importer.load(Model)
+
+    # Initialize dataset and store
+    from zygo.dataset import Dataset
+    from zygo.ml.store import ModelStore
+    dataset = Dataset.open(dataset_config.uri, storage_options=dataset_config.kwargs)
+
+    ipc_transport = LocalTransport()
+    store = ModelStore(store_config.root_uri, ipc_transport, kwargs=store_config.kwargs)
+
+    executor_train(
+        model=model,
+        dataset=dataset,
+        store=store,
+    )

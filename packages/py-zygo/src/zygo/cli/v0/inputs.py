@@ -4,15 +4,25 @@ Input policy belongs here rather than in generated.py. Executors and response
 serializers continue to use the generated protocol types.
 """
 
-from typing import Annotated
+from typing import Annotated, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 
 from zygo.cli.v0.types import (
-    DatasetConfig,
+
     HttpConfig,
     JobRunArgs,
+    ModelTrainCommand,
     StoreConfig,
+    WorkflowMetadataCommand,
+    WorkflowRunCommand,
     WorkflowStoreConfig,
 )
 from zygo.store import DataUri
@@ -50,13 +60,6 @@ class JobRunInput(CliInput):
             job_run_id=self.job_run_id,
         )
 
-
-class DatasetConfigInput(CliInput):
-    uri: NonemptyString
-    kwargs: dict[str, JsonValue] = Field(default_factory=dict)
-
-    def to_protocol(self) -> DatasetConfig:
-        return DatasetConfig(uri=self.uri, kwargs=self.kwargs)
 
 
 class StoreConfigInput(CliInput):
@@ -108,3 +111,88 @@ class HttpConfigInput(CliInput):
             max_retries=self.max_retries,
             retry_interval=self.retry_interval,
         )
+
+
+class WorkflowRunCommandInput(CliInput):
+    command: Literal["workflow_run"]
+    target: NonemptyString
+    args: JobRunInput
+    job_store_config: StoreConfigInput | None = None
+    workflow_store_config: StoreConfigInput | None = None
+    cache_store_config: StoreConfigInput | None = None
+    http_config: HttpConfigInput | None = None
+
+    @field_validator(
+        "job_store_config", "workflow_store_config", "cache_store_config", mode="before"
+    )
+    @classmethod
+    def reject_null_store_config(cls, value: object) -> object:
+        if value is None:
+            raise ValueError("must be a store configuration object when supplied")
+        return value
+
+    @model_validator(mode="after")
+    def validate_store_configs(self) -> Self:
+        configs = (
+            self.job_store_config,
+            self.workflow_store_config,
+            self.cache_store_config,
+        )
+        if any(config is not None for config in configs) and not all(
+            config is not None for config in configs
+        ):
+            raise ValueError(
+                "job_store_config, workflow_store_config, and cache_store_config "
+                "must be supplied together"
+            )
+        return self
+
+    def to_protocol(self) -> WorkflowRunCommand:
+        return WorkflowRunCommand(
+            command=self.command,
+            target=self.target,
+            args=self.args.to_protocol(),
+            job_store_config=(
+                self.job_store_config.to_protocol() if self.job_store_config else None
+            ),
+            workflow_store_config=(
+                self.workflow_store_config.to_protocol()
+                if self.workflow_store_config
+                else None
+            ),
+            cache_store_config=(
+                self.cache_store_config.to_protocol() if self.cache_store_config else None
+            ),
+            http_config=self.http_config.to_protocol() if self.http_config else None,
+        )
+
+
+class WorkflowMetadataCommandInput(CliInput):
+    command: Literal["workflow_metadata"]
+    target: NonemptyString
+
+    def to_protocol(self) -> WorkflowMetadataCommand:
+        return WorkflowMetadataCommand(command=self.command, target=self.target)
+
+
+class ModelTrainCommandInput(CliInput):
+    command: Literal["model_train"]
+    target: NonemptyString
+    dataset_config: StoreConfigInput
+    store_config: StoreConfigInput
+    http_config: HttpConfigInput | None = None
+
+    def to_protocol(self) -> ModelTrainCommand:
+        return ModelTrainCommand(
+            command=self.command,
+            target=self.target,
+            dataset_config=self.dataset_config.to_protocol(),
+            store_config=self.store_config.to_protocol(),
+            http_config=self.http_config.to_protocol() if self.http_config else None,
+        )
+
+
+type CliCommandInput = Annotated[
+    WorkflowRunCommandInput | WorkflowMetadataCommandInput | ModelTrainCommandInput,
+    Field(discriminator="command"),
+]

@@ -3,7 +3,7 @@ import json
 import sys
 from typing import TypeVar
 
-from zygo.cli.importer import load_workflow
+from zygo.cli.importer import Importer
 from zygo.cli.v0.types import (
     STDOUT_IPC_PREFIX,
     ChannelMetadata,
@@ -35,7 +35,8 @@ def build_workflow_metadata(workflow: Workflow) -> WorkflowMetadata:
 
 
 def inspect_workflow(target: str) -> None:
-    metadata = build_workflow_metadata(load_workflow(target))
+    workflow = Importer.from_target(target).load(Workflow)
+    metadata = build_workflow_metadata(workflow)
     payload = json.dumps(asdict(metadata))
     sys.stdout.write(f"{STDOUT_IPC_PREFIX}{payload}\n")
     sys.stdout.flush()

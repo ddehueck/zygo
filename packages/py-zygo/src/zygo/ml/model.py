@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from inspect import Parameter, Signature, signature
-from typing import TYPE_CHECKING, cast, get_args, get_origin, get_type_hints
+from typing import TYPE_CHECKING, ClassVar, cast, get_args, get_origin, get_type_hints
 
 from zygo.dataset.dataset import Dataset
 from zygo.dataset.features import Features
@@ -15,15 +15,9 @@ if TYPE_CHECKING:
 
 
 class Model:
-    """Register framework-independent training, loading, and inference hooks.
+    """Register framework-independent training, loading, and inference hooks."""
 
-    Use ``Model(name)`` without declaring a model type. When inference is
-    registered, Zygo checks that its first parameter annotation matches the
-    load return annotation. This linkage is validated at runtime, not by type
-    checkers. Decorators retain the functions' individual static signatures.
-    Execution methods are entry points for a local caller or future runtime,
-    not an orchestrator, artifact publisher, or framework-specific trainer.
-    """
+    conventional_names: ClassVar[tuple[str, ...]] = ("model",)
 
     def __init__(self, name: str) -> None:
         super().__init__()

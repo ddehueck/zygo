@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Model protocol definitions",
+  "description": "Model commands.",
+  "definitions": {
+    "ModelTrainCommand": {
+      "description": "Train the target model using the dataset and output store configurations. Omitted or null http_config publishes over stdout.",
+      "type": "object",
+      "properties": {
+        "command": {
+          "const": "model_train"
+        },
+        "target": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dataset_config": {
+          "$ref": "./store.json#/definitions/StoreConfig",
+          "description": "Store containing the input dataset. Dataset loading enforces format and read invariants."
+        },
+        "store_config": {
+          "$ref": "./store.json#/definitions/StoreConfig"
+        },
+        "http_config": {
+          "anyOf": [
+            {
+              "$ref": "./ipc.json#/definitions/HttpConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "command",
+        "target",
+        "dataset_config",
+        "store_config"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

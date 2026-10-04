@@ -8,6 +8,12 @@ from typing import Any, Literal
 
 
 @dataclass
+class WorkflowMetadataCommand:
+    command: Literal["workflow_metadata"]
+    target: str
+
+
+@dataclass
 class ChannelMetadata:
     id: str
     accepted_file_extensions: list[str]
@@ -81,6 +87,15 @@ class TagInserted:
 
 
 @dataclass
+class ModelTrainCommand:
+    command: Literal["model_train"]
+    target: str
+    dataset_config: DatasetConfig
+    store_config: StoreConfig
+    http_config: HttpConfig | None = None
+
+
+@dataclass
 class WorkflowStoreConfig:
     job: StoreConfig
     workflow: StoreConfig
@@ -91,18 +106,18 @@ type IpcMessage = DataReferenceInserted | ChannelItemInserted | TagInserted
 
 
 @dataclass
+class WorkflowRunCommand:
+    command: Literal["workflow_run"]
+    target: str
+    args: JobRunArgs
+    store_config: WorkflowStoreConfig | None = None
+    http_config: HttpConfig | None = None
+
+
+@dataclass
 class HttpIPCMessage:
     id: str
     messages: list[IpcMessage]
 
 
-type ZygoProviderProtocolV0Payload = (
-    WorkflowMetadata
-    | JobRunArgs
-    | DatasetConfig
-    | WorkflowStoreConfig
-    | StoreConfig
-    | HttpConfig
-    | IpcMessage
-    | HttpIPCMessage
-)
+type CliCommand = WorkflowRunCommand | WorkflowMetadataCommand | ModelTrainCommand
