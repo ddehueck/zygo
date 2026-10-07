@@ -1,0 +1,142 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "IPC publication definitions",
+  "description": "Side-effect publications and their HTTP transport configuration.",
+  "definitions": {
+    "HttpConfig": {
+      "description": "Reusable HTTP publication configuration nested inside WorkflowRunJobCommand.http_config or ModelTrainCommand.http_config. Optional settings use CLI defaults. The runtime binds the callback URL or configured headers to a specific execution attempt. The CLI forwards headers on every request without interpreting execution identity.",
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "pattern": "^https?://",
+          "description": "Full POST URL, optionally scoped by the runtime to an execution attempt."
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Headers forwarded on every publication and retry. The runtime may supply an opaque attempt handle or authorization here. Header names are not prescribed by the protocol.",
+          "default": {}
+        },
+        "timeout": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 30.0
+        },
+        "max_retries": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 3
+        },
+        "retry_interval": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 5.0
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "additionalProperties": false
+    },
+    "HttpIPCMessage": {
+      "description": "One HTTP publication of one or more IPC messages belonging to the same execution attempt. The runtime attributes and authorizes the publication through the configured callback URL or headers, not fields in the body. The id and body are generated once per publication and reused unchanged on retries. Receivers acknowledge only after durable acceptance, deduplicate retries, and handle late publications from cancelled or superseded attempts.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Stable idempotency key for this publication, distinct from an execution ID."
+        },
+        "messages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/IpcMessage"
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "id",
+        "messages"
+      ],
+      "additionalProperties": false
+    },
+    "IpcMessage": {
+      "description": "One side-effect publication, emitted as a bare prefixed stdout line or nested inside an HTTP message batch. The runtime owns started, succeeded, failed, and cancelled execution states. Stdout receivers attribute events through the invoking process and must drain and accept its publications before declaring success. The runtime validates whether an event is permitted for the owning execution.",
+      "oneOf": [
+        {
+          "$ref": "#/definitions/DataReferenceInserted"
+        },
+        {
+          "$ref": "#/definitions/ChannelItemInserted"
+        },
+        {
+          "$ref": "#/definitions/TagInserted"
+        }
+      ]
+    },
+    "DataReferenceInserted": {
+      "description": "Emitted after an artifact write completes successfully, including writes through a writable store context manager. Does not indicate that training or the owning execution succeeded, or that a model artifact set is ready.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "data_reference_inserted"
+        },
+        "data_reference": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "data_reference"
+      ],
+      "additionalProperties": false
+    },
+    "ChannelItemInserted": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "channel_item_inserted"
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "data_reference": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "channel_id",
+        "data_reference"
+      ],
+      "additionalProperties": false
+    },
+    "TagInserted": {
+      "description": "Associates a tag with the referenced artifact. If data_reference is absent or null, the tag applies to the execution attributed by the runtime through the invoking process, callback URL, or configured headers.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "tag_inserted"
+        },
+        "value": {
+          "type": "string"
+        },
+        "data_reference": {
+          "description": "Optional. The emitter serializes an absent reference as null.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "value"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

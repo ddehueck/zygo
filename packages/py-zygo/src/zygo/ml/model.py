@@ -2,24 +2,22 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from inspect import Parameter, Signature, signature
-from typing import cast, get_args, get_origin, get_type_hints
+from typing import TYPE_CHECKING, ClassVar, cast, get_args, get_origin, get_type_hints
 
 from zygo.dataset.dataset import Dataset
 from zygo.dataset.features import Features
 from zygo.ml.context import TrainingContext
+from zygo.ml.hyperparams import HyperParams
 from zygo.ml.store import ModelStore
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 
 class Model:
-    """Register framework-independent training, loading, and inference hooks.
+    """Register framework-independent training, loading, and inference hooks."""
 
-    Use ``Model(name)`` without declaring a model type. When inference is
-    registered, Zygo checks that its first parameter annotation matches the
-    load return annotation. This linkage is validated at runtime, not by type
-    checkers. Decorators retain the functions' individual static signatures.
-    Execution methods are entry points for a local caller or future runtime,
-    not an orchestrator, artifact publisher, or framework-specific trainer.
-    """
+    conventional_names: ClassVar[tuple[str, ...]] = ("model",)
 
     def __init__(self, name: str) -> None:
         super().__init__()
@@ -30,21 +28,23 @@ class Model:
         self._load: Callable[[ModelStore], object] | None = None
         self._infer: Callable[..., object] | None = None
         self._features: type[Features] | None = None
+        self._params_type: type[HyperParams] | None = None
         self._model_type: type[object] | None = None
 
     def train[F: Callable[..., None]](self, fn: F) -> F:
-        """Register ``(dataset: Dataset[Features], *, ctx: TrainingContext) -> None``.
+        """Register a dataset, optional HyperParams, and TrainingContext hook.
 
-        The dataset location and training store are supplied at execution,
-        rather than captured in the model definition. Persist artifacts through
-        ctx.store without returning a bundle.
+        Declare hyperparameters as ``*, params: MyParams`` where MyParams
+        subclasses HyperParams. Omitted execution inputs use field defaults.
+        The dataset location and training store are supplied at execution.
+        Persist artifacts through ctx.store without returning a bundle.
         """
         if self._train is not None:
             raise ValueError("A training function is already registered")
         parameters, hints = _annotations(fn)
-        if len(parameters) != 2:
+        if len(parameters) not in {2, 3}:
             raise TypeError(
-                "Training requires a dataset and keyword-only TrainingContext"
+                "Training requires a dataset, keyword-only TrainingContext, and optionally keyword-only HyperParams"
             )
         dataset_parameter = parameters[0]
         _require_positional(dataset_parameter, role="Training dataset")
@@ -52,23 +52,64 @@ class Model:
         features = _dataset_features(annotation)
         if hints.get("return") is not type(None):
             raise TypeError("Training must return None")
-        _require_context(parameters[1], hints)
+        keyword_parameters = {parameter.name: parameter for parameter in parameters[1:]}
+        context_parameter = keyword_parameters.get("ctx")
+        if context_parameter is None:
+            raise TypeError(
+                "Training context must be declared as '*, ctx: TrainingContext'"
+            )
+        _require_context(context_parameter, hints)
+        params_type = None
+        if keyword_parameters.keys() != {"ctx"}:
+            params_type = _hyperparams_type(keyword_parameters.get("params"), hints)
+        self._params_type = params_type
         self._features = features
         self._train = fn
         return fn
 
-    def run_train[T](self, dataset: Dataset[T], *, ctx: TrainingContext) -> None:
-        """Validate the dataset and invoke the registered training hook."""
+    def run_train[T](
+        self,
+        dataset: Dataset[T],
+        *,
+        ctx: TrainingContext,
+        params: HyperParams | Mapping[str, object] | None = None,
+    ) -> None:
+        """Validate training inputs and invoke the registered training hook.
+
+        Parameters may be a declared HyperParams instance or a mapping.
+        When omitted, the declared type is constructed from field defaults.
+        """
         if self._train is None:
             raise ValueError("No training function is registered")
+        training_params = self._validate_params(params)
         training_dataset = (
             dataset.with_features(self._features)
             if self._features is not None
             else dataset
         )
-        result = cast("Callable[..., object]", self._train)(training_dataset, ctx=ctx)
+        kwargs: dict[str, object] = {"ctx": ctx}
+        if training_params is not None:
+            kwargs["params"] = training_params
+        result = cast("Callable[..., object]", self._train)(training_dataset, **kwargs)
         if result is not None:
             raise TypeError("Training returned a value that is not None")
+
+    def _validate_params(
+        self, params: HyperParams | Mapping[str, object] | None
+    ) -> HyperParams | None:
+        if self._params_type is None:
+            if params is not None:
+                raise TypeError("The training hook does not declare hyperparameters")
+            return None
+        if params is None:
+            return self._params_type()
+        if isinstance(params, HyperParams) and not isinstance(
+            params, self._params_type
+        ):
+            raise TypeError(
+                f"Training parameters must be an instance of {self._params_type.__name__} or a mapping"
+            )
+        return self._params_type.model_validate(params)
 
     def load[F: Callable[..., object]](self, fn: F) -> F:
         """Register ``(store: ModelStore)`` returning a live model for inference.
@@ -98,7 +139,9 @@ class Model:
             raise ValueError("No loading function is registered")
         model = self._load(store)
         if self._model_type is not None and not isinstance(model, self._model_type):
-            raise TypeError("Loading returned a model that does not match its annotation")
+            raise TypeError(
+                "Loading returned a model that does not match its annotation"
+            )
         return model
 
     def infer[F: Callable[..., object]](self, fn: F) -> F:
@@ -170,6 +213,23 @@ def _dataset_features(annotation: object) -> type[Features] | None:
             "The training dataset's type argument must be a Features subclass"
         )
     return features
+
+
+def _hyperparams_type(
+    parameter: Parameter | None, hints: dict[str, object]
+) -> type[HyperParams]:
+    if (
+        parameter is None
+        or parameter.kind is not Parameter.KEYWORD_ONLY
+        or cast("object", parameter.default) is not Signature.empty
+    ):
+        raise TypeError(
+            "Training hyperparameters must be declared as '*, params: HyperParamsSubclass'"
+        )
+    annotation = hints.get("params")
+    if not isinstance(annotation, type) or not issubclass(annotation, HyperParams):
+        raise TypeError("Training params must be annotated as a HyperParams subclass")
+    return annotation
 
 
 def _require_context(parameter: Parameter, hints: dict[str, object]) -> None:

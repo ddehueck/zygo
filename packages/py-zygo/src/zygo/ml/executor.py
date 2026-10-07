@@ -13,6 +13,9 @@ from zygo.store import DataUri
 from zygo.transport import LocalTransport
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from zygo.ml.hyperparams import HyperParams
     from zygo.ml.model import Model
 
 
@@ -22,11 +25,17 @@ class _TrainingContext:
 
 
 def train[T](
-    *, model: Model, dataset: str | Path | DataUri | Dataset[T]
+    *,
+    model: Model,
+    dataset: str | Path | DataUri | Dataset[T],
+    params: HyperParams | Mapping[str, object] | None = None,
+    store: ModelStore | None = None,
 ) -> ModelStore:
     """Run training synchronously and return its persistent artifact store.
 
-    Paths and URIs are opened as Parquet datasets. Each invocation uses a
+    Hyperparameters may be an instance or a mapping. Omitted parameters use
+    the declared type's field defaults. Paths and URIs are opened as Parquet
+    datasets. Each invocation uses a
     unique store under ``./zygo/models/`` and leaves artifacts in place,
     including partial artifacts if the training hook raises an exception.
     """
@@ -37,11 +46,12 @@ def train[T](
     else:
         training_dataset = dataset
 
-    root = Path.cwd() / "zygo" / "models" / uuid4().hex
-    store = ModelStore(
-        root=DataUri(root.as_uri() + "/"), ipc_transport=LocalTransport()
-    )
-    model.run_train(training_dataset, ctx=_TrainingContext(store=store))
+    if store is None:
+        root = Path.cwd() / "zygo" / "models" / uuid4().hex
+        store = ModelStore(
+            root=DataUri(root.as_uri() + "/"), ipc_transport=LocalTransport()
+        )
+    model.run_train(training_dataset, ctx=_TrainingContext(store=store), params=params)
     return store
 
 

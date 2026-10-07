@@ -4,16 +4,24 @@ Input policy belongs here rather than in generated.py. Executors and response
 serializers continue to use the generated protocol types.
 """
 
-from typing import Annotated
+from typing import Annotated, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 
 from zygo.cli.v0.types import (
-    DatasetConfig,
     HttpConfig,
     JobRunArgs,
+    ModelTrainCommand,
     StoreConfig,
-    WorkflowStoreConfig,
+    WorkflowGetMetadataCommand,
+    WorkflowRunJobCommand,
 )
 from zygo.store import DataUri
 
@@ -51,16 +59,8 @@ class JobRunInput(CliInput):
         )
 
 
-class DatasetConfigInput(CliInput):
-    uri: NonemptyString
-    kwargs: dict[str, JsonValue] = Field(default_factory=dict)
-
-    def to_protocol(self) -> DatasetConfig:
-        return DatasetConfig(uri=self.uri, kwargs=self.kwargs)
-
-
 class StoreConfigInput(CliInput):
-    root_uri: str
+    root_uri: NonemptyString
     kwargs: dict[str, JsonValue] = Field(default_factory=dict)
 
     @field_validator("root_uri")
@@ -71,19 +71,6 @@ class StoreConfigInput(CliInput):
 
     def to_protocol(self) -> StoreConfig:
         return StoreConfig(root_uri=self.root_uri, kwargs=self.kwargs)
-
-
-class WorkflowStoreConfigInput(CliInput):
-    job: StoreConfigInput
-    workflow: StoreConfigInput
-    cache: StoreConfigInput
-
-    def to_protocol(self) -> WorkflowStoreConfig:
-        return WorkflowStoreConfig(
-            job=self.job.to_protocol(),
-            workflow=self.workflow.to_protocol(),
-            cache=self.cache.to_protocol(),
-        )
 
 
 class HttpConfigInput(CliInput):
@@ -108,3 +95,101 @@ class HttpConfigInput(CliInput):
             max_retries=self.max_retries,
             retry_interval=self.retry_interval,
         )
+
+
+class WorkflowRunJobCommandInput(CliInput):
+    command: Literal["workflow_run_job"]
+    target: NonemptyString
+    args: JobRunInput
+    job_store_config: StoreConfigInput | None = None
+    workflow_store_config: StoreConfigInput | None = None
+    cache_store_config: StoreConfigInput | None = None
+    http_config: HttpConfigInput | None = None
+
+    @field_validator(
+        "job_store_config", "workflow_store_config", "cache_store_config", mode="before"
+    )
+    @classmethod
+    def reject_null_store_config(cls, value: object) -> object:
+        if value is None:
+            raise ValueError("must be a store configuration object when supplied")
+        return value
+
+    @model_validator(mode="after")
+    def validate_store_configs(self) -> Self:
+        configs = (
+            self.job_store_config,
+            self.workflow_store_config,
+            self.cache_store_config,
+        )
+        if any(config is not None for config in configs) and not all(
+            config is not None for config in configs
+        ):
+            raise ValueError(
+                "job_store_config, workflow_store_config, and cache_store_config "
+                "must be supplied together"
+            )
+        return self
+
+    def to_protocol(self) -> WorkflowRunJobCommand:
+        return WorkflowRunJobCommand(
+            command=self.command,
+            target=self.target,
+            args=self.args.to_protocol(),
+            job_store_config=(
+                self.job_store_config.to_protocol() if self.job_store_config else None
+            ),
+            workflow_store_config=(
+                self.workflow_store_config.to_protocol()
+                if self.workflow_store_config
+                else None
+            ),
+            cache_store_config=(
+                self.cache_store_config.to_protocol()
+                if self.cache_store_config
+                else None
+            ),
+            http_config=self.http_config.to_protocol() if self.http_config else None,
+        )
+
+
+class WorkflowGetMetadataCommandInput(CliInput):
+    command: Literal["workflow_get_metadata"]
+    target: NonemptyString
+
+    def to_protocol(self) -> WorkflowGetMetadataCommand:
+        return WorkflowGetMetadataCommand(command=self.command, target=self.target)
+
+
+class ModelTrainCommandInput(CliInput):
+    command: Literal["model_train"]
+    target: NonemptyString
+    dataset_config: StoreConfigInput
+    store_config: StoreConfigInput
+    params: dict[str, JsonValue] | None = None
+    http_config: HttpConfigInput | None = None
+
+    @field_validator("params", mode="before")
+    @classmethod
+    def reject_null_params(cls, value: object) -> object:
+        if value is None:
+            raise ValueError("must be a JSON object when supplied")
+        return value
+
+    def to_protocol(self) -> ModelTrainCommand:
+        return ModelTrainCommand(
+            command=self.command,
+            target=self.target,
+            dataset_config=self.dataset_config.to_protocol(),
+            store_config=self.store_config.to_protocol(),
+            params=self.params,
+            http_config=self.http_config.to_protocol() if self.http_config else None,
+        )
+
+
+type CliCommandInput = Annotated[
+    WorkflowRunJobCommandInput
+    | WorkflowGetMetadataCommandInput
+    | ModelTrainCommandInput,
+    Field(discriminator="command"),
+]

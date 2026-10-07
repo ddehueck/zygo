@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Shared store configuration",
+  "description": "Shared storage configuration consumed by workflows and models.",
+  "definitions": {
+    "StoreConfig": {
+      "description": "Reusable configuration for an fsspec directory, prefix, or file. Used for workflow stores, the model output store, and the input dataset. The consumer determines read or write requirements and enforces its own invariants.",
+      "type": "object",
+      "properties": {
+        "root_uri": {
+          "type": "string",
+          "minLength": 1,
+          "description": "fsspec URI for the store directory or prefix."
+        },
+        "kwargs": {
+          "type": "object",
+          "additionalProperties": {},
+          "description": "Optional JSON-valued keyword arguments passed to fsspec.filesystem.",
+          "default": {}
+        }
+      },
+      "required": [
+        "root_uri"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

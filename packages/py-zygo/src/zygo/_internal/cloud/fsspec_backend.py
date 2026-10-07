@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 from io import BytesIO
 import json
 import logging
@@ -68,6 +69,24 @@ class ZygoFileSystem(AbstractFileSystem):
             return path
         return f"{_PROTOCOL}://{path.lstrip('/')}"
 
+    @staticmethod
+    def _fs_path(uri: str) -> str:
+        """Strip zygo:// so fsspec/pyarrow paths match url_to_fs base dirs."""
+        prefix = f"{_PROTOCOL}://"
+        if uri.startswith(prefix):
+            return uri[len(prefix) :]
+        return uri
+
+    @classmethod
+    def _normalize_entry(cls, entry: dict[str, object]) -> dict[str, object]:
+        # Cloud store/ls returns Zygo URIs; fsspec paths are protocol-stripped.
+        # pyarrow FSSpecHandler also requires `size` on every detail entry.
+        return {
+            **entry,
+            "name": cls._fs_path(str(entry["name"])),
+            "size": entry["size"] if "size" in entry else 0,
+        }
+
     # fsspec infers AbstractBufferedFile, but this backend returns other binary streams.
     @override
     def _open(  # type: ignore[reportIncompatibleMethodOverride]
@@ -98,7 +117,7 @@ class ZygoFileSystem(AbstractFileSystem):
         self, path: str, detail: bool = True, **kwargs: object
     ) -> list[dict[str, object]] | list[str]:
         uri = self._ensure_uri(path)
-        entries = self._api.list(uri)
+        entries = [self._normalize_entry(entry) for entry in self._api.list(uri)]
         self._logger.info("Listed %d zygo objects under %s", len(entries), uri)
         if detail:
             return entries
@@ -143,11 +162,11 @@ class _UploadFile(BytesIO):
     def __exit__(
         self,
         exc_type: type[BaseException] | None,
-        exc_value: BaseException | None,
-        traceback: TracebackType | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
     ) -> None:
         self._discard = exc_type is not None
-        super().__exit__(exc_type, exc_value, traceback)
+        super().__exit__(exc_type, exc_val, exc_tb)
 
 
 class _ZygoApiClient:
@@ -193,11 +212,11 @@ class _ZygoApiClient:
         )
         return str(response["url"])
 
-    def list(self, uri: str) -> list[dict[str, object]]:
+    def list(self, uri: str) -> builtins.list[dict[str, object]]:
         if not uri.endswith("/"):
             uri += "/"
         response = self._request_json("POST", "store/ls", body={"uri": uri})
-        return cast("list[dict[str, object]]", response["entries"])
+        return cast("builtins.list[dict[str, object]]", response["entries"])
 
     def delete(self, uri: str) -> None:
         self._request("DELETE", "store", body={"uri": uri})
@@ -218,8 +237,17 @@ class _PresignedUrlClient:
         return cast("IO[bytes]", urlopen(request, timeout=120))  # ruff: ignore[suspicious-url-open-usage]
 
     def get(self, url: str) -> IO[bytes]:
-        return self._request(url, "GET")
+        # Buffer the object so readers that seek (pyarrow/parquet) work.
+        # HTTPResponse from urlopen is not seekable.
+        response = self._request(url, "GET")
+        try:
+            return BytesIO(response.read())
+        finally:
+            response.close()
 
     def put(self, url: str, data: bytes) -> None:
-        with self._request(url, "PUT", data):
-            pass
+        response = self._request(url, "PUT", data)
+        try:
+            response.read()
+        finally:
+            response.close()

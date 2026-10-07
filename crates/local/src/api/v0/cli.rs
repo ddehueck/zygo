@@ -2,14 +2,13 @@ use serde::{Deserialize, Serialize};
 use tokio::process::Command;
 
 use crate::api::error::{self, Result};
-use crate::api::v0::interface::{
-    RunCommandArgs, STDOUT_IPC_PREFIX, StdoutIPCMessage, WorkflowMetadata, WorkflowStoreConfig,
-    ZYGO_PKG_CLI_MODULE,
+use crate::api::v0::{
+    CliCommand, JobRunArgs, STDOUT_IPC_PREFIX, StdoutIPCMessage, WorkflowGetMetadataOutput,
+    WorkflowStoreConfig, ZYGO_PKG_CLI_MODULE,
 };
 use crate::models::{
     self, Channel, ChannelId, ChannelItemInsertedData, ContentHash, DataReferenceInsertedData,
-    Entrypoint, EventKind, FileExtension, Job, JobFailedData, JobId, JobStartedData,
-    JobSucceededData, TagInsertedData, WorkflowId, WorkflowSchema,
+    Entrypoint, EventKind, FileExtension, Job, JobId, TagInsertedData, WorkflowId, WorkflowSchema,
 };
 
 type PythonExecPath = String;
@@ -70,9 +69,20 @@ impl PythonCli {
 
     pub fn build_run_job_command(
         &self,
-        args: RunCommandArgs,
+        args: JobRunArgs,
         store_config: Option<WorkflowStoreConfig>,
     ) -> Command {
+        let (job_store_config, workflow_store_config, cache_store_config) = match store_config {
+            Some(config) => (Some(config.job), Some(config.workflow), Some(config.cache)),
+            None => (None, None, None),
+        };
+        let cli_command = CliCommand::WorkflowRunJob {
+            target: self.target.clone(),
+            args,
+            job_store_config,
+            workflow_store_config,
+            cache_store_config,
+        };
         let mut command = Command::new(self.python.clone());
         command
             // Keep logs and stdout IPC flowing through the shared pipe promptly.
@@ -82,19 +92,9 @@ impl PythonCli {
             .args(vec![
                 "-m".into(),
                 ZYGO_PKG_CLI_MODULE.into(),
-                "workflow".into(),
-                "run".into(),
-                self.target.clone(),
                 "--args".into(),
-                serde_json::to_string(&args).expect("failed to serialze RunCommandArgs"),
+                serde_json::to_string(&cli_command).expect("failed to serialize CliCommand"),
             ]);
-        if let Some(store_config) = store_config {
-            command.args([
-                "--store-config",
-                &serde_json::to_string(&store_config)
-                    .expect("failed to serialize WorkflowStoreConfig"),
-            ]);
-        }
         command
     }
 
@@ -106,14 +106,16 @@ impl PythonCli {
         Ok(None)
     }
 
-    pub async fn run_metadata_command(&self) -> Result<WorkflowMetadata> {
+    pub async fn run_metadata_command(&self) -> Result<WorkflowGetMetadataOutput> {
+        let cli_command = CliCommand::WorkflowGetMetadata {
+            target: self.target.clone(),
+        };
         let mut command = Command::new(self.python.clone());
         command.current_dir(&self.cwd).args(vec![
             "-m".into(),
             ZYGO_PKG_CLI_MODULE.into(),
-            "workflow".into(),
-            "metadata".into(),
-            self.target.clone(),
+            "--args".into(),
+            serde_json::to_string(&cli_command)?,
         ]);
 
         let output = command
@@ -129,19 +131,19 @@ impl PythonCli {
         Self::parse_metadata_response(&response)
     }
 
-    fn parse_metadata_response(response: &str) -> Result<WorkflowMetadata> {
+    fn parse_metadata_response(response: &str) -> Result<WorkflowGetMetadataOutput> {
         let payload = response
             .lines()
             .find_map(|line| line.strip_prefix(STDOUT_IPC_PREFIX))
             .ok_or_else(|| crate::api::error::Error::other("metadata IPC response not found"))?;
-        let metadata: WorkflowMetadata = serde_json::from_str(payload)?;
+        let metadata: WorkflowGetMetadataOutput = serde_json::from_str(payload)?;
         Ok(metadata)
     }
 
     /// Builds the runtime schema returned by this entrypoint's metadata command.
     pub fn workflow_schema_from_metadata(
         &self,
-        metadata: WorkflowMetadata,
+        metadata: WorkflowGetMetadataOutput,
     ) -> Result<WorkflowSchema> {
         let content_hash = ContentHash::try_from(metadata.content_hash)
             .map_err(|error| anyhow::anyhow!(error.to_string()))?;
@@ -218,16 +220,6 @@ impl StdoutIPCMessage {
                 data_reference: data_reference
                     .map(models::DataReferenceUri::try_from)
                     .transpose()?,
-            }),
-            Self::JobStarted { job_run_id } => EventKind::JobStarted(JobStartedData {
-                job_run_id: models::JobRunId::try_from(job_run_id)?,
-            }),
-            Self::JobSucceeded { job_run_id } => EventKind::JobSucceeded(JobSucceededData {
-                job_run_id: models::JobRunId::try_from(job_run_id)?,
-            }),
-            Self::JobFailed { job_run_id, error } => EventKind::JobFailed(JobFailedData {
-                job_run_id: models::JobRunId::try_from(job_run_id)?,
-                error,
             }),
         })
     }

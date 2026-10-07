@@ -5,6 +5,6 @@ commands through ``python -m zygo.cli.v0 ml``. Both command groups share the
 publication protocol and transport infrastructure.
 """
 
-from zygo.cli.importer import load_workflow
+from zygo.cli.importer import Importer
 
-__all__ = ["load_workflow"]
+__all__ = ["Importer"]

@@ -1,93 +1,108 @@
-# pyright: reportAny=false, reportExplicitAny=false
-# ruff: file-ignore[any-type]
-
 import importlib
 from types import ModuleType
-from typing import Any
-
-from zygo.workflow import Workflow
-
-CONVENTIONAL_NAMES = ("workflow", "wf")
+from typing import Self, cast
 
 
-def import_module(module_name: str) -> ModuleType:
-    try:
-        return importlib.import_module(module_name)
-    except Exception as exc:
-        raise RuntimeError(f"Could not import module {module_name!r}: {exc}") from exc
+class Importer:
+    """Load typed instances from a module or a ``module:attribute.path`` target.
 
+    Types may define ``conventional_names`` as an ordered tuple of module
+    attribute names. These take priority over discovery of unnamed instances.
+    """
 
-def resolve_attribute(
-    module: ModuleType,
-    attribute_path: str,
-) -> Any:
-    value: Any = module
+    def __init__(
+        self,
+        module: ModuleType,
+        attribute_path: str | None = None,
+    ) -> None:
+        super().__init__()
+        self.module = module
+        self._attribute_path = attribute_path
 
-    for part in attribute_path.split("."):
+    @classmethod
+    def from_target(cls, target: str) -> Self:
+        module_name, separator, attribute_path = target.partition(":")
+
+        if not module_name:
+            raise RuntimeError("A Python module is required")
+        if separator and not attribute_path:
+            raise RuntimeError(f"Expected {module_name}:<instance-name>")
+
         try:
-            value = getattr(value, part)
-        except AttributeError as exc:
+            module = importlib.import_module(module_name)
+        except Exception as exc:
             raise RuntimeError(
-                f"{module.__name__!r} has no attribute {attribute_path!r}"
+                f"Could not import module {module_name!r}: {exc}"
             ) from exc
 
-    return value
+        return cls(module, attribute_path if separator else None)
 
+    def has_instance[T](self, instance_type: type[T]) -> bool:
+        """Check for a matching instance, even if discovery is ambiguous.
 
-def discover_workflow(module: ModuleType) -> Workflow:
-    namespace = vars(module)
+        Explicit targets only check the selected attribute. Missing attributes
+        and mismatched types return False, while import failures still raise.
+        """
+        if self._attribute_path is not None:
+            try:
+                value = self._resolve_attribute()
+            except AttributeError:
+                return False
+            return isinstance(value, instance_type)
 
-    # Conventional names get priority.
-    for preferred_name in CONVENTIONAL_NAMES:
-        value = namespace.get(preferred_name)
+        return any(
+            isinstance(value, instance_type)
+            for value in cast("dict[str, object]", vars(self.module)).values()
+        )
 
-        if isinstance(value, Workflow):
+    def load[T](self, instance_type: type[T]) -> T:
+        """Load an instance, rejecting missing, mismatched, or ambiguous targets."""
+        if self._attribute_path is not None:
+            try:
+                value = self._resolve_attribute()
+            except AttributeError as exc:
+                raise RuntimeError(
+                    f"{self.module.__name__!r} has no attribute {self._attribute_path!r}"
+                ) from exc
+
+            if not isinstance(value, instance_type):
+                target = f"{self.module.__name__}:{self._attribute_path}"
+                raise RuntimeError(
+                    f"{target!r} resolved to {type(value).__name__}, not a {instance_type.__module__}.{instance_type.__qualname__}"
+                )
             return value
 
-    # Fallback to the first Workflow instance found in the module.
-    matches = [
-        (name, value)
-        for name, value in namespace.items()
-        if isinstance(value, Workflow)
-    ]
+        return self._discover(instance_type)
 
-    if not matches:
-        raise RuntimeError(f"No Workflow instance found in {module.__name__!r}")
+    def _resolve_attribute(self) -> object:
+        value: object = self.module
+        for part in (self._attribute_path or "").split("."):
+            value = cast("object", getattr(value, part))
+        return value
 
-    if len(matches) > 1:
-        names = ", ".join(name for name, _ in matches)
-
-        raise RuntimeError(
-            f"Multiple Workflow instances found in {module.__name__!r}: {names}. Select one with {module.__name__}:<name>."
+    def _discover[T](self, instance_type: type[T]) -> T:
+        namespace = cast("dict[str, object]", vars(self.module))
+        conventional_names = cast(
+            "tuple[str, ...]", getattr(instance_type, "conventional_names", ())
         )
+        for name in conventional_names:
+            value = namespace.get(name)
+            if isinstance(value, instance_type):
+                return value
 
-    return matches[0][1]
+        matches = [
+            (name, value)
+            for name, value in namespace.items()
+            if isinstance(value, instance_type)
+        ]
+        if not matches:
+            raise RuntimeError(
+                f"No {instance_type.__name__} instance found in {self.module.__name__!r}"
+            )
+        if len(matches) > 1:
+            names = ", ".join(name for name, _ in matches)
+            raise RuntimeError(
+                f"Multiple {instance_type.__name__} instances found in {self.module.__name__!r}: {names}. Select one with {self.module.__name__}:<name>."
+            )
 
-
-def load_workflow(target: str) -> Workflow:
-    workflow, _ = load_workflow_with_module(target)
-    return workflow
-
-
-def load_workflow_with_module(target: str) -> tuple[Workflow, ModuleType]:
-    module_name, separator, attribute_path = target.partition(":")
-
-    if not module_name:
-        raise RuntimeError("A Python module is required")
-
-    module = import_module(module_name)
-
-    if not separator:
-        return discover_workflow(module), module
-
-    if not attribute_path:
-        raise RuntimeError(f"Expected {module_name}:<workflow-name>")
-
-    value = resolve_attribute(module, attribute_path)
-
-    if not isinstance(value, Workflow):
-        raise RuntimeError(
-            f"{target!r} resolved to {type(value).__name__}, not a zygo.Workflow"
-        )
-
-    return value, module
+        return matches[0][1]

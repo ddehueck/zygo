@@ -253,11 +253,7 @@ impl LocalRuntime {
         let enqueue_result = self.worker_pool.enqueue(
             async move {
                 let result = match worker.worker(args.clone(), cancellation).await {
-                    Ok(
-                        WorkerOutcome::Succeeded
-                        | WorkerOutcome::FailedByClient
-                        | WorkerOutcome::Cancelled,
-                    ) => Ok(()),
+                    Ok(WorkerOutcome::Succeeded | WorkerOutcome::Cancelled) => Ok(()),
                     Err(error) => {
                         let jobs = worker.state.jobs.lock().await;
                         let result =

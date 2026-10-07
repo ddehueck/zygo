@@ -2,33 +2,41 @@ import argparse
 from collections.abc import Sequence
 
 from zygo.cli.v0 import ml, workflow
-from zygo.cli.v0.arguments import IpcArguments
+from zygo.cli.v0.arguments import parse_command
+from zygo.cli.v0.types import (
+    ModelTrainCommand,
+    WorkflowGetMetadataCommand,
+    WorkflowRunJobCommand,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m zygo.cli.v0",
         description="Execute workflow and model commands for the Zygo runtime.",
+        allow_abbrev=False,
     )
-    domains = parser.add_subparsers(dest="domain", required=True)
-    workflow.configure_parser(
-        domains.add_parser("workflow", help="Inspect workflows and run jobs")
+    parser.add_argument(
+        "--args",
+        required=True,
+        type=parse_command,
+        metavar="JSON",
+        help="One JSON command object containing command, target, and command inputs",
     )
-    ml.configure_parser(domains.add_parser("ml", help="Model commands"))
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
-    args = parser.parse_args(argv, namespace=IpcArguments())
+    command = parser.parse_args(argv).args
 
-    match args.domain:
-        case "workflow":
-            workflow.execute(args)
-        case "ml":
-            ml.execute(args)
+    match command:
+        case WorkflowRunJobCommand() | WorkflowGetMetadataCommand():
+            workflow.execute(command)
+        case ModelTrainCommand():
+            ml.execute(command)
         case _:
-            parser.error(f"Unsupported command group: {args.domain}")
+            parser.error("Unsupported command")
 
     return 0
 

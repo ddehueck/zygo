@@ -1,6 +1,7 @@
 from collections.abc import Callable
 from typing import (
     TYPE_CHECKING,
+    ClassVar,
     Protocol,
     TypeVar,
     cast,
@@ -59,6 +60,8 @@ class Workflow:
     """
     The Zygo Python API for defining and running workflows.
     """
+
+    conventional_names: ClassVar[tuple[str, ...]] = ("workflow", "wf")
 
     def __init__(
         self,
