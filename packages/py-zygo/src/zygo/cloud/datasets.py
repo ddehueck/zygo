@@ -16,15 +16,15 @@ from urllib.request import Request, urlopen
 from pydantic import TypeAdapter
 
 from zygo import Dataset, DataUri
-from zygo._internal.cloud.api import (
+from zygo.cloud.api import (
     ConfirmUploadDatasetSuccessRequest,
     CreateDatasetUploadSessionRequest,
     CreateDatasetUploadSessionResponse,
     UploadDatasetManifestItem,
     build_headers,
 )
-from zygo._internal.cloud.api_key import load_api_key
-from zygo._internal.cloud.upload_progress import UploadProgressLogger
+from zygo.cloud.api_key import load_api_key
+from zygo.cloud.upload_progress import UploadProgressLogger
 from zygo.dataset.manifest import FileManifestEntry
 
 if TYPE_CHECKING:
@@ -41,7 +41,7 @@ def push_dataset[T](
     dataset_id: str,
     api_key: str | None = None,
     concurrency: int = 4,
-) -> None:
+) -> str:
     """
     Pushes dataset to a Zygo Cloud workspace.
 
@@ -50,6 +50,9 @@ def push_dataset[T](
         dataset_id: A user-defined identifier e.g. "my-dataset-xyz". Uploads to the same id follows last write wins behavior.
         api_key: The API key for authentication. If omitted, tries to load from environment variable.
         concurrency: Number of parallel upload operations to use.
+
+    Returns:
+        The confirmed dataset version id.
     """
     if concurrency < 1:
         raise ValueError("concurrency must be at least 1")
@@ -70,12 +73,12 @@ def push_dataset[T](
     manifest, total_size = _build_upload_manifest(metadata)
     local_paths = {entry.filename: path for path, entry in metadata.items()}
     client = _UploadHttpClient(api_key, concurrency)
-    client.upload(dataset_id, manifest, total_size, local_paths=local_paths)
+    return client.upload(dataset_id, manifest, total_size, local_paths=local_paths)
 
 
-def _resolve_dataset(dataset: object) -> Dataset:
+def _resolve_dataset(dataset: object) -> Dataset[object]:
     if isinstance(dataset, (str, DataUri)):
-        return Dataset.open(dataset)
+        return cast("Dataset[object]", Dataset.open(dataset))
     if not isinstance(dataset, Dataset):
         raise TypeError(
             f"dataset must be a Dataset instance, got {type(dataset).__name__}"
@@ -114,7 +117,7 @@ class _UploadHttpClient:
         total_size: int,
         *,
         local_paths: dict[str, Path],
-    ) -> None:
+    ) -> str:
         """Create a dataset version, upload its files, and confirm success."""
         progress = UploadProgressLogger(_logger, total_size)
         progress.start(dataset_id, len(manifest))
@@ -130,13 +133,13 @@ class _UploadHttpClient:
 
         def upload_file(item: UploadDatasetManifestItem) -> None:
             # Content-Length avoids chunked transfer encoding, which S3 PUTs may reject.
-            request = Request(  # noqa: S310 - Presigned URLs validated by _validate_session.
+            request = Request(  # ruff: ignore[suspicious-url-open-usage] - Presigned URLs validated by _validate_session.
                 session.presigned_urls[item.filename],
                 data=chunks(item),
                 headers={"Content-Length": str(item.file_size_bytes)},
                 method="PUT",
             )
-            with cast("IO[bytes]", urlopen(request, timeout=120)):  # noqa: S310 - Validated HTTPS or loopback HTTP.
+            with cast("IO[bytes]", urlopen(request, timeout=120)):  # ruff: ignore[suspicious-url-open-usage] - Validated HTTPS or loopback HTTP.
                 pass
             progress.file_uploaded(item.filename, item.file_size_bytes)
 
@@ -149,6 +152,7 @@ class _UploadHttpClient:
         progress.confirming(session.dataset_version_id)
         self._confirm_upload(session.dataset_version_id)
         progress.complete(session.dataset_version_id)
+        return session.dataset_version_id
 
     def _create_session(
         self, dataset_id: str, manifest: list[UploadDatasetManifestItem]
@@ -156,13 +160,13 @@ class _UploadHttpClient:
         session_request = CreateDatasetUploadSessionRequest(
             dataset_id=dataset_id, manifest=manifest
         )
-        request = Request(  # noqa: S310 - URL uses the fixed Zygo Cloud API host.
+        request = Request(  # ruff: ignore[suspicious-url-open-usage] - URL uses the fixed Zygo Cloud API host.
             session_request.url(),
             data=json.dumps(asdict(session_request)).encode(),
             headers=build_headers(self.api_key),
             method=session_request.method(),
         )
-        with cast("IO[bytes]", urlopen(request, timeout=30)) as response:  # noqa: S310 - Fixed API host.
+        with cast("IO[bytes]", urlopen(request, timeout=30)) as response:  # ruff: ignore[suspicious-url-open-usage] - Fixed API host.
             return TypeAdapter(CreateDatasetUploadSessionResponse).validate_json(
                 response.read()
             )
@@ -172,14 +176,14 @@ class _UploadHttpClient:
             dataset_version_id=dataset_version_id
         )
 
-        request = Request(  # noqa: S310 - URL uses the fixed Zygo Cloud API host.
+        request = Request(  # ruff: ignore[suspicious-url-open-usage] - URL uses the fixed Zygo Cloud API host.
             confirmation.url(),
             data=json.dumps(asdict(confirmation)).encode(),
             headers=build_headers(self.api_key),
             method=confirmation.method(),
         )
         try:
-            with cast("IO[bytes]", urlopen(request, timeout=30)):  # noqa: S310 - Fixed API host.
+            with cast("IO[bytes]", urlopen(request, timeout=30)):  # ruff: ignore[suspicious-url-open-usage] - Fixed API host.
                 pass
         except OSError as error:
             raise RuntimeError(

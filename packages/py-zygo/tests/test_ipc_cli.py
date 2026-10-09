@@ -17,23 +17,20 @@ if TYPE_CHECKING:
     from types import TracebackType
 
     from zygo.cli.v0.transport import IpcTransport
-    from zygo.cli.v0.types import WorkflowStoreConfig
+    from zygo.workflow.store import WorkflowStoreConfig
 
 import zygo.cli.v0.__main__ as cli_module
 from zygo.cli.v0.__main__ import build_parser
-from zygo.cli.v0.arguments import (
-    IpcArguments,
-    parse_http_config,
-    parse_job_args,
-    parse_store_config,
-    parse_workflow_store_config,
-)
+from zygo.cli.v0.arguments import parse_command
 from zygo.cli.v0.transport import HttpTransport, StdioTransport
 from zygo.cli.v0.types import (
     ChannelItemInserted,
     DataReferenceInserted,
     JobRunArgs,
+    ModelTrainCommand,
+    StoreConfig,
     TagInserted,
+    WorkflowRunJobCommand,
     serialize_ipc_message,
 )
 from zygo.store import DataUri
@@ -85,17 +82,52 @@ def test_generated_protocol_models_keep_wire_format() -> None:
         assert json.loads(serialize_ipc_message(message)) == expected
 
 
-_JOB_ARGS = '{"job_id":"job","data_reference_uri":"file:///input","workflow_run_id":"wr-1","job_run_id":"jr-1"}'
+_JOB = {
+    "job_id": "job",
+    "data_reference_uri": "file:///input",
+    "workflow_run_id": "wr-1",
+    "job_run_id": "jr-1",
+}
+
+
+def _run_command(**fields: object) -> str:
+    return json.dumps({
+        "command": "workflow_run_job",
+        "target": "pkg.mod:workflow",
+        "args": _JOB,
+        **fields,
+    })
+
+
+def _train_command(**fields: object) -> str:
+    body: dict[str, object] = {
+        "command": "model_train",
+        "target": "pkg:model",
+        "dataset_config": {"root_uri": "memory:///dataset"},
+        "store_config": {"root_uri": "memory:///store"},
+    }
+    body.update(fields)
+    return json.dumps(body)
 
 
 def test_parse_store_config() -> None:
-    raw = '{"root_uri":"file:///custom-results","kwargs":{"auto_mkdir":true}}'
-    config = parse_store_config(raw)
+    parsed = parse_command(
+        _train_command(
+            store_config={
+                "root_uri": "file:///custom-results",
+                "kwargs": {"auto_mkdir": True},
+            }
+        )
+    )
+    assert isinstance(parsed, ModelTrainCommand)
+    assert parsed.store_config.root_uri == "file:///custom-results"
+    assert parsed.store_config.kwargs == {"auto_mkdir": True}
 
-    assert config.root_uri == "file:///custom-results"
-    assert config.kwargs == {"auto_mkdir": True}
-
-    assert parse_store_config('{"root_uri":"memory://results"}').kwargs == {}
+    defaults = parse_command(
+        _train_command(store_config={"root_uri": "memory:///results"})
+    )
+    assert isinstance(defaults, ModelTrainCommand)
+    assert defaults.store_config.kwargs == {}
 
 
 @pytest.mark.parametrize("root_uri", ["results", "absolute"])
@@ -104,26 +136,43 @@ def test_parse_store_config_assumes_local_path(
 ) -> None:
     monkeypatch.chdir(tmp_path)
     path = str(tmp_path / root_uri) if root_uri == "absolute" else root_uri
-    config = parse_store_config(json.dumps({"root_uri": path}))
-
-    assert config.root_uri == f"file://{tmp_path / root_uri}"
-    assert config.kwargs == {}
+    parsed = parse_command(_train_command(store_config={"root_uri": path}))
+    assert isinstance(parsed, ModelTrainCommand)
+    assert parsed.store_config.root_uri == f"file://{tmp_path / root_uri}"
+    assert parsed.store_config.kwargs == {}
 
 
 def test_parse_zygo_store_and_input_uris_without_backend_credentials() -> None:
-    config = parse_store_config(
-        '{"root_uri":"zygo://runs","kwargs":{"api_host":"https://api.example.com","api_bearer_auth":"secret"}}'
+    parsed = parse_command(
+        json.dumps({
+            "command": "workflow_run_job",
+            "target": "pkg.mod:workflow",
+            "args": {
+                "job_id": "job",
+                "data_reference_uri": "zygo://runs/input.json",
+                "workflow_run_id": "wr-1",
+                "job_run_id": "jr-1",
+            },
+            "job_store_config": {
+                "root_uri": "zygo://runs",
+                "kwargs": {
+                    "api_host": "https://api.example.com",
+                    "api_bearer_auth": "secret",
+                },
+            },
+            "workflow_store_config": {"root_uri": "zygo://workflows"},
+            "cache_store_config": {"root_uri": "zygo://cache"},
+        })
     )
-    args = parse_job_args(
-        '{"job_id":"job","data_reference_uri":"zygo://runs/input.json","workflow_run_id":"wr-1","job_run_id":"jr-1"}'
-    )
-
+    assert isinstance(parsed, WorkflowRunJobCommand)
+    config = parsed.job_store_config
+    assert isinstance(config, StoreConfig)
     assert DataUri(config.root_uri).protocol == "zygo"
     assert config.kwargs == {
         "api_host": "https://api.example.com",
         "api_bearer_auth": "secret",
     }
-    assert DataUri(args.data_reference_uri).path == "runs/input.json"
+    assert DataUri(parsed.args.data_reference_uri).path == "runs/input.json"
 
 
 @pytest.mark.parametrize(
@@ -131,18 +180,34 @@ def test_parse_zygo_store_and_input_uris_without_backend_credentials() -> None:
     [
         ("{", "valid JSON"),
         ("[]", "JSON object"),
-        ("{}", "root_uri"),
-        ('{"root_uri":""}', "root_uri"),
-        ('{"root_uri":"unknown-protocol://results"}', "root_uri"),
-        ('{"root_uri":"file:///tmp","extra":1}', "unknown fields"),
-        ('{"root_uri":"file:///tmp","kwargs":[]}', "kwargs"),
-        ('{"root_uri":"file:///tmp","kwargs":{"token":NaN}}', "kwargs"),
-        ('{"root_uri":"file:///tmp","kwargs":null}', "kwargs"),
+        (_train_command(store_config={"root_uri": ""}), "store_config.root_uri"),
+        (
+            _train_command(store_config={"root_uri": "unknown-protocol://results"}),
+            "store_config.root_uri",
+        ),
+        (
+            _train_command(store_config={"root_uri": "file:///tmp", "extra": 1}),
+            "unknown fields",
+        ),
+        (
+            _train_command(store_config={"root_uri": "file:///tmp", "kwargs": []}),
+            "store_config.kwargs",
+        ),
+        (
+            _train_command(
+                store_config={"root_uri": "file:///tmp", "kwargs": {"token": None}}
+            ).replace('"token": null', '"token": NaN'),
+            "store_config.kwargs",
+        ),
+        (
+            _train_command(store_config={"root_uri": "file:///tmp", "kwargs": None}),
+            "store_config.kwargs",
+        ),
     ],
 )
 def test_parse_store_config_rejects_invalid(raw: str, error: str) -> None:
     with pytest.raises(argparse.ArgumentTypeError, match=error):
-        parse_store_config(raw)
+        parse_command(raw)
 
 
 def _transport_from_cli(
@@ -167,9 +232,7 @@ def _transport_from_cli(
 
 
 def test_build_transport_defaults_to_stdio(monkeypatch: pytest.MonkeyPatch) -> None:
-    transport = _transport_from_cli(
-        monkeypatch, ["workflow", "run", "pkg.mod:workflow", "--args", _JOB_ARGS]
-    )
+    transport = _transport_from_cli(monkeypatch, ["--args", _run_command()])
     assert isinstance(transport, StdioTransport)
 
 
@@ -187,15 +250,7 @@ def test_build_transport_http_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
     transport = _transport_from_cli(
         monkeypatch,
-        [
-            "workflow",
-            "run",
-            "pkg.mod:workflow",
-            "--args",
-            _JOB_ARGS,
-            "--http-config",
-            '{"url":"https://example.com/events"}',
-        ],
+        ["--args", _run_command(http_config={"url": "https://example.com/events"})],
     )
     assert isinstance(transport, HttpTransport)
     transport.emit(ChannelItemInserted("channel_item_inserted", "out", "file:///one"))
@@ -230,15 +285,7 @@ def test_build_transport_http_configures_request(
     })
     transport = _transport_from_cli(
         monkeypatch,
-        [
-            "workflow",
-            "run",
-            "pkg.mod:workflow",
-            "--args",
-            _JOB_ARGS,
-            "--http-config",
-            raw_config,
-        ],
+        ["--args", _run_command(http_config=json.loads(raw_config))],
     )
     assert isinstance(transport, HttpTransport)
     transport.emit(ChannelItemInserted("channel_item_inserted", "out", "file:///one"))
@@ -254,34 +301,94 @@ def test_build_transport_http_configures_request(
     [
         ("{", "valid JSON"),
         ("[]", "JSON object"),
-        ("{}", "url"),
-        ('{"url":"ftp://example.com"}', "url"),
-        ('{"url":"https://example.com","extra":1}', "unknown fields"),
-        ('{"url":"https://example.com","headers":[]}', "headers"),
-        ('{"url":"https://example.com","headers":{"  ":"value"}}', "headers"),
-        ('{"url":"https://example.com","headers":{"X-Test":1}}', "headers"),
-        ('{"url":"https://example.com","timeout":0}', "timeout"),
-        ('{"url":"https://example.com","timeout":null}', "timeout"),
-        ('{"url":"https://example.com","timeout":true}', "timeout"),
-        ('{"url":"https://example.com","max_retries":-1}', "max_retries"),
-        ('{"url":"https://example.com","max_retries":1.5}', "max_retries"),
-        ('{"url":"https://example.com","max_retries":true}', "max_retries"),
-        ('{"url":"https://example.com","retry_interval":-1}', "retry_interval"),
-        ('{"url":"https://example.com","retry_interval":0}', "retry_interval"),
-        ('{"url":"https://example.com","retry_interval":null}', "retry_interval"),
-        ('{"url":"https://example.com","retry_interval":true}', "retry_interval"),
+        (_run_command(http_config={}), "http_config.url"),
+        (_run_command(http_config={"url": "ftp://example.com"}), "http_config.url"),
+        (
+            _run_command(http_config={"url": "https://example.com", "extra": 1}),
+            "unknown fields",
+        ),
+        (
+            _run_command(http_config={"url": "https://example.com", "headers": []}),
+            "http_config.headers",
+        ),
+        (
+            _run_command(
+                http_config={"url": "https://example.com", "headers": {"  ": "value"}}
+            ),
+            "http_config.headers",
+        ),
+        (
+            _run_command(
+                http_config={"url": "https://example.com", "headers": {"X-Test": 1}}
+            ),
+            "http_config.headers",
+        ),
+        (
+            _run_command(http_config={"url": "https://example.com", "timeout": 0}),
+            "http_config.timeout",
+        ),
+        (
+            _run_command(http_config={"url": "https://example.com", "timeout": None}),
+            "http_config.timeout",
+        ),
+        (
+            _run_command(http_config={"url": "https://example.com", "timeout": True}),
+            "http_config.timeout",
+        ),
+        (
+            _run_command(http_config={"url": "https://example.com", "max_retries": -1}),
+            "http_config.max_retries",
+        ),
+        (
+            _run_command(
+                http_config={"url": "https://example.com", "max_retries": 1.5}
+            ),
+            "http_config.max_retries",
+        ),
+        (
+            _run_command(
+                http_config={"url": "https://example.com", "max_retries": True}
+            ),
+            "http_config.max_retries",
+        ),
+        (
+            _run_command(
+                http_config={"url": "https://example.com", "retry_interval": -1}
+            ),
+            "http_config.retry_interval",
+        ),
+        (
+            _run_command(
+                http_config={"url": "https://example.com", "retry_interval": 0}
+            ),
+            "http_config.retry_interval",
+        ),
+        (
+            _run_command(
+                http_config={"url": "https://example.com", "retry_interval": None}
+            ),
+            "http_config.retry_interval",
+        ),
+        (
+            _run_command(
+                http_config={"url": "https://example.com", "retry_interval": True}
+            ),
+            "http_config.retry_interval",
+        ),
     ],
 )
 def test_parse_http_config_rejects_invalid(raw: str, error: str) -> None:
     with pytest.raises(argparse.ArgumentTypeError, match=error):
-        parse_http_config(raw)
+        parse_command(raw)
 
 
 @pytest.mark.parametrize("field", ["timeout", "retry_interval"])
 def test_parse_http_config_rejects_nonfinite(field: str) -> None:
     for value in (float("inf"), float("nan")):
         with pytest.raises(argparse.ArgumentTypeError, match=field):
-            parse_http_config(json.dumps({"url": "https://example.com", field: value}))
+            parse_command(
+                _run_command(http_config={"url": "https://example.com", field: value})
+            )
 
 
 @pytest.mark.parametrize(
@@ -289,38 +396,43 @@ def test_parse_http_config_rejects_nonfinite(field: str) -> None:
     [
         ("{", "valid JSON"),
         ("[]", "JSON object"),
-        ("{}", "job_id"),
-        ('{"job_id":1}', "job_id"),
-        ('{"job_id":"job","unexpected":1}', "unknown fields"),
-        ('{"job_id":"job","store_root_uri":"file:///tmp"}', "unknown fields"),
+        (_run_command(args={}), "args.job_id"),
+        (_run_command(args={"job_id": 1}), "args.job_id"),
+        (
+            _run_command(args={"job_id": "job", "unexpected": 1}),
+            "unknown fields",
+        ),
+        (
+            _run_command(args={"job_id": "job", "store_root_uri": "file:///tmp"}),
+            "unknown fields",
+        ),
     ],
 )
 def test_parse_job_args_rejects_invalid(raw: str, error: str) -> None:
     with pytest.raises(argparse.ArgumentTypeError, match=error):
-        parse_job_args(raw)
+        parse_command(raw)
 
 
 @pytest.mark.parametrize(
-    ("option", "raw", "error"),
+    ("raw", "error"),
     [
-        ("--args", "{", "--args must be valid JSON"),
-        ("--args", "{}", "--args.job_id"),
-        ("--store-config", "{", "--store-config must be valid JSON"),
-        ("--store-config", "{}", "--store-config.job"),
-        ("--http-config", "{", "--http-config must be valid JSON"),
-        ("--http-config", "{}", "--http-config.url"),
+        ("{", "--args must be valid JSON"),
+        ("{}", "--args requires a command field"),
+        (
+            json.dumps({
+                "command": "workflow_run_job",
+                "target": "pkg.mod:workflow",
+            }),
+            "--args.workflow_run_job.args",
+        ),
+        (_run_command(http_config={}), "--args.workflow_run_job.http_config.url"),
     ],
 )
 def test_parser_reports_invalid_json_arguments(
-    option: str, raw: str, error: str, capsys: pytest.CaptureFixture[str]
+    raw: str, error: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    argv = ["workflow", "run", "pkg.mod:workflow", "--args", _JOB_ARGS]
-    if option == "--args":
-        argv[-1] = raw
-    else:
-        argv.extend([option, raw])
     with pytest.raises(SystemExit) as caught:
-        build_parser().parse_args(argv)
+        build_parser().parse_args(["--args", raw])
     exit_error = caught.value
     assert isinstance(exit_error, SystemExit)
     assert exit_error.code == 2
@@ -328,53 +440,47 @@ def test_parser_reports_invalid_json_arguments(
 
 
 def test_parser_run_stdio_defaults() -> None:
-    args = build_parser().parse_args(
-        ["workflow", "run", "pkg.mod:workflow", "--args", _JOB_ARGS],
-        namespace=IpcArguments(),
-    )
-    assert args.command == "run"
-    assert args.target == "pkg.mod:workflow"
-    assert args.args == parse_job_args(_JOB_ARGS)
-    assert args.http_config is None
-    assert args.store_config is None
+    parsed = build_parser().parse_args(["--args", _run_command()])
+    command = parsed.args
+    assert isinstance(command, WorkflowRunJobCommand)
+    assert command.command == "workflow_run_job"
+    assert command.target == "pkg.mod:workflow"
+    assert command.args == JobRunArgs(**_JOB)
+    assert command.http_config is None
+    assert command.job_store_config is None
 
 
 def test_parser_run_store_config() -> None:
-    raw = json.dumps({
-        "job": {"root_uri": "memory://jobs", "kwargs": {"token": "secret"}},
-        "workflow": {"root_uri": "memory://workflows"},
-        "cache": {"root_uri": "memory://cache"},
-    })
-    args = build_parser().parse_args(
-        [
-            "workflow",
-            "run",
-            "pkg.mod:workflow",
-            "--args",
-            _JOB_ARGS,
-            "--store-config",
-            raw,
-        ],
-        namespace=IpcArguments(),
+    parsed = build_parser().parse_args([
+        "--args",
+        _run_command(
+            job_store_config={
+                "root_uri": "memory:///jobs",
+                "kwargs": {"token": "secret"},
+            },
+            workflow_store_config={"root_uri": "memory:///workflows"},
+            cache_store_config={"root_uri": "memory:///cache"},
+        ),
+    ])
+    command = parsed.args
+    assert isinstance(command, WorkflowRunJobCommand)
+    assert command.job_store_config == StoreConfig(
+        root_uri="memory:///jobs", kwargs={"token": "secret"}
     )
-    assert args.store_config == parse_workflow_store_config(raw)
 
 
 def test_parser_run_http_config() -> None:
-    raw = '{"url":"http://myservice.com/api/events","timeout":5.5}'
-    args = build_parser().parse_args(
-        [
-            "workflow",
-            "run",
-            "pkg.mod:workflow",
-            "--args",
-            _JOB_ARGS,
-            "--http-config",
-            raw,
-        ],
-        namespace=IpcArguments(),
-    )
-    assert args.http_config == parse_http_config(raw)
+    parsed = build_parser().parse_args([
+        "--args",
+        _run_command(
+            http_config={"url": "http://myservice.com/api/events", "timeout": 5.5}
+        ),
+    ])
+    command = parsed.args
+    assert isinstance(command, WorkflowRunJobCommand)
+    assert command.http_config is not None
+    assert command.http_config.url == "http://myservice.com/api/events"
+    assert command.http_config.timeout == pytest.approx(5.5)
 
 
 @pytest.mark.parametrize(

@@ -34,7 +34,9 @@ def train(
     ctx: zygo.TrainingContext,
 ) -> None:
     label = next(iter(dataset)).label
-    print(f"training with label {label} and params {params.model_dump(mode='json')}")
+    print(  # ruff: ignore[print]
+        f"training with label {label} and params {params.model_dump(mode='json')}"
+    )
     ctx.store.put("label.txt", str(label).encode())
 
 
@@ -44,7 +46,7 @@ def load(store: zygo.ModelStore) -> ConstantClassifier:
 
 
 @app.infer
-def infer(model: ConstantClassifier, image: zygo.Image) -> Prediction:
+def infer(model: ConstantClassifier, _image: zygo.Image) -> Prediction:
     """Ignore the image and always predict the learned label."""
     return Prediction(label=model.label)
 
@@ -53,4 +55,4 @@ if __name__ == "__main__":
     store = zygo.train(model=app, dataset=DATASET_PATH, params=TrainParams(epochs=5))
     dataset = zygo.Dataset.open(DATASET_PATH, features=BlackWhiteFeatures)
     prediction = zygo.infer(model=app, store=store, data=next(iter(dataset)).image)
-    print(prediction)
+    print(prediction)  # ruff: ignore[print]

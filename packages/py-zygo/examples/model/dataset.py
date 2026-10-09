@@ -20,8 +20,8 @@ if __name__ == "__main__":
         builder.add({"image": Image.new("RGB", (1, 1)), "label": 0})
 
     ds = zygo.Dataset.open(DATASET_PATH, features=BlackWhiteFeatures)
-    print(f"Arrow schema:\n-----\n{ds.arrow_schema}\n-----\n")
-    print(f"Features: {ds.features}")
-    print(f"Dataset length: {len(ds)}")
+    print(f"Arrow schema:\n-----\n{ds.arrow_schema}\n-----\n")  # ruff: ignore[print]
+    print(f"Features: {ds.features}")  # ruff: ignore[print]
+    print(f"Dataset length: {len(ds)}")  # ruff: ignore[print]
     for row in ds:
-        print(row)
+        print(row)  # ruff: ignore[print]

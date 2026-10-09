@@ -13,5 +13,5 @@ if TYPE_CHECKING:
 class LocalTransport:
     """Discard IPC events when running without an orchestrator."""
 
-    def emit(self, messages: IpcMessage | Sequence[IpcMessage]) -> None:
+    def emit(self, messages: IpcMessage | Sequence[IpcMessage]) -> None:  # ruff: ignore[no-self-use]
         del messages

@@ -6,13 +6,13 @@ from dataclasses import dataclass
 import posixpath
 from typing import TYPE_CHECKING, assert_never
 
-from zygo.cli.v0.types import StoreConfig
 from zygo.store._internal.base import BaseStore
 from zygo.store._internal.util import partition
 from zygo.store.types import DataUri
 
 if TYPE_CHECKING:
     from zygo.cli.v0.transport import IpcTransport
+    from zygo.cli.v0.types import StoreConfig
     from zygo.store.types import Scope
     from zygo.workflow.types import JobRunContext
 

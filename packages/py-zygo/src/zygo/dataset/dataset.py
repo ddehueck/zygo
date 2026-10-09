@@ -292,7 +292,7 @@ class Dataset[T]:
     def _sample_positions(
         self, columns: tuple[str, ...], per_group: int, seed: int | None
     ) -> list[int]:
-        rng = random.Random(seed)  # noqa: S311 - Reproducible sampling, not security.
+        rng = random.Random(seed)  # ruff: ignore[suspicious-non-cryptographic-random-usage] - Reproducible sampling, not security.
         reservoirs: dict[tuple[object, ...], list[int]] = {}
         counts: dict[tuple[object, ...], int] = {}
         position = 0

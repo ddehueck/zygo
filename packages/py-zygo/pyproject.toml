@@ -6,16 +6,16 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "fsspec>=2026.7.0",
+    "pathspec>=1.1.1",
     "pyarrow>=25.0.1",
-
     "pydantic>=2.13.5",
+    "rich>=15.0.0",
 ]
 
 
 [dependency-groups]
 dev = [
     "pillow>=11.0.0",
-    "basedpyright>=1.34.0",
     "datamodel-code-generator>=0.82.0,<0.83.0",
     "pytest>=9.0.2",
     "python-dotenv>=1.2.1",
@@ -106,7 +106,7 @@ max-nested-blocks = 3  # Maximum nested block depth (PLR1702)
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["your_package_name"]  # CHANGE THIS
+known-first-party = ["zygo"]
 combine-as-imports = true
 force-sort-within-sections = true
 
@@ -123,135 +123,23 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 
 # ============================================================
-# Basedpyright CONFIGURATION - MAXIMUM STRICTNESS
-# TypeScript strict mode equivalent
+# TY CONFIGURATION
+# ty has no strict-mode switch. Its defaults already cover most of
+# the old basedpyright errors (bad overrides, missing imports,
+# optional misuse). Rules below are the ones that map onto checks
+# that preset turned up past ty's defaults.
 # ============================================================
-[tool.basedpyright]
-pythonVersion = "3.12"
-typeCheckingMode = "strict"
+[tool.ty.environment]
+python-version = "3.12"
+# src is the import root so checks match the published package.
+# "." keeps project-level modules (tests, examples) resolvable.
+root = ["src", "."]
 
-# Basedpyright configuration so the src dir is treated as a top-level package.
-# This ensures that imports reflect the published package structure.
-executionEnvironments = [
-    { root = "src" },
-    { root = ".", extraPaths = ["src"] }
-]
-
-# ============================================================
-# IMPORT AND MODULE CHECKS
-# ============================================================
-reportMissingImports = true
-reportMissingTypeStubs = true  # Stricter: require type stubs
-reportUndefinedVariable = true
-reportAssertAlwaysTrue = true
-reportInvalidStringEscapeSequence = true
-
-# ============================================================
-# STRICT NULL SAFETY (like TS strictNullChecks)
-# ============================================================
-reportOptionalSubscript = true
-reportOptionalMemberAccess = true
-reportOptionalCall = true
-reportOptionalIterable = true
-reportOptionalContextManager = true
-reportOptionalOperand = true
-reportAny = true  # Prohibir Any completamente
-reportExplicitAny = true
-reportIgnoreCommentWithoutRule = false  # No permitir # type: ignore sin código
-reportPrivateLocalImportUsage = true
-
-# ============================================================
-# TYPE COMPLETENESS (like TS noImplicitAny + strictFunctionTypes)
-# ============================================================
-reportMissingParameterType = true
-reportMissingTypeArgument = true
-reportUnknownParameterType = true
-reportUnknownLambdaType = true
-reportUnknownArgumentType = true   # STRICT: Enable (can be noisy)
-reportUnknownVariableType = true   # STRICT: Enable (can be noisy)
-reportUnknownMemberType = true     # STRICT: Enable (can be noisy)
-reportUntypedFunctionDecorator = true
-reportUntypedClassDecorator = true
-reportUntypedBaseClass = true
-reportUntypedNamedTuple = true
-
-# ============================================================
-# CLASS AND INHERITANCE CHECKS
-# ============================================================
-reportIncompatibleMethodOverride = true
-reportIncompatibleVariableOverride = true
-reportInconsistentConstructor = true
-reportUninitializedInstanceVariable = true
-reportOverlappingOverload = true
-reportMissingSuperCall = true  # STRICT: Enable
-
-# ============================================================
-# CODE QUALITY (like TS noUnusedLocals + noUnusedParameters)
-# ============================================================
-reportPrivateUsage = true
-reportConstantRedefinition = true
-reportInvalidStubStatement = true
-reportIncompleteStub = true
-reportUnsupportedDunderAll = true
-reportUnusedClass = "error"        # STRICT: Error instead of warning
-reportUnusedFunction = "error"     # STRICT: Error instead of warning
-reportUnusedVariable = "error"     # STRICT: Error instead of warning
-reportUnusedImport = "error"       # STRICT: Error instead of warning
-reportDuplicateImport = "error"    # STRICT: Error instead of warning
-
-# ============================================================
-# UNNECESSARY CODE DETECTION
-# ============================================================
-reportUnnecessaryIsInstance = "error"         # STRICT: Error
-reportUnnecessaryCast = "error"               # STRICT: Error
-reportUnnecessaryComparison = "error"         # STRICT: Error
-reportUnnecessaryContains = "error"           # STRICT: Error
-reportUnnecessaryTypeIgnoreComment = "error"  # STRICT: Error
-
-# ============================================================
-# FUNCTION/METHOD SIGNATURE STRICTNESS
-# ============================================================
-reportGeneralTypeIssues = true
-reportPropertyTypeMismatch = true
-reportFunctionMemberAccess = true
-# Turned reportCallInDefaultInitializer off because we can't allowlist the Channel helpers designed to be in defaults.
-# We instead, allowlist in ruff and will use ruff for other default checks.
-reportCallInDefaultInitializer = false
-reportImplicitStringConcatenation = true  # STRICT: Enable
-
-# ============================================================
-# ADDITIONAL STRICT CHECKS (Progressive Enhancement)
-# ============================================================
-reportImplicitOverride = true    # STRICT: Require @override decorator (Python 3.12+)
-reportDeprecated = "warning"     # Warn on deprecated usage
-
-# ============================================================
-# ADDITIONAL TYPE CHECKS
-# ============================================================
-reportImportCycles = "warning"
-
-# ============================================================
-# EXCLUSIONS
-# ============================================================
-exclude = [
-    "**/__pycache__",
-    "**/.venv/**",
-    "**/node_modules",
-    ".git",
-    ".mypy_cache",
-    ".pyright_cache",
-    ".ruff_cache",
-    ".pytest_cache",
-    ".venv",
-    "venv",
-    "env",
-    "logs",
-    "output",
-    "data",
-    "build",
-    "dist",
-    "*.egg-info",
-]
-
-venvPath = "."
-venv = ".venv"
+[tool.ty.rules]
+deprecated = "warn"
+missing-override-decorator = "error"
+missing-type-argument = "error"
+redundant-cast = "error"
+redundant-condition = "error"
+unused-ignore-comment = "error"
+unused-type-ignore-comment = "error"

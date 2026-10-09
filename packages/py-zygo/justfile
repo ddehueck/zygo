@@ -55,10 +55,10 @@ lint:
 lint-fix:
     uvx ruff check --fix {{ src_dirs }}
 
-# Type-check with basedpyright
+# Type-check with ty
 [group('lint')]
 typecheck:
-    uvx basedpyright {{ src_dirs }}
+    uv run ty check {{ src_dirs }}
 
 # Format and auto-fix all issues
 [group('lint')]
@@ -92,7 +92,7 @@ test:
 [group('housekeeping')]
 clean:
     find . -type d -name __pycache__ -exec rm -rf {} +  2>/dev/null || true
-    rm -rf .ruff_cache .pyright .ty_cache .mypy_cache .pytest_cache
+    rm -rf .ruff_cache .ty_cache .mypy_cache .pytest_cache
 
 # ---- Build ------------------------------------------------------------------
 

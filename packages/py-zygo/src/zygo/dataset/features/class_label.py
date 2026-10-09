@@ -22,7 +22,7 @@ class ClassLabel:
         object.__setattr__(self, "names", names)
 
     @classmethod
-    def to_arrow_field(cls, name: str, default: object) -> pa.Field:
+    def to_arrow_field(cls, name: str, default: object) -> pa.Field[pa.DataType]:
         if not isinstance(default, cls):
             raise TypeError(f"ClassLabel field {name!r} requires a ClassLabel default")
         return pa.field(

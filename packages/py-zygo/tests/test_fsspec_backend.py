@@ -9,10 +9,10 @@ from urllib.request import Request
 
 import pytest
 
-from zygo._internal.cloud import fsspec_backend
-from zygo.cli.v0.types import IpcMessage, StoreConfig, WorkflowStoreConfig
+from zygo.cli.v0.types import IpcMessage, StoreConfig
+from zygo.cloud import fsspec_backend
 from zygo.store import DataUri
-from zygo.workflow.store import WorkflowStore
+from zygo.workflow.store import WorkflowStore, WorkflowStoreConfig
 from zygo.workflow.types import JobRunContext, JobRunId, WorkflowRunId
 
 
@@ -142,21 +142,19 @@ def test_ls_strips_protocol_and_defaults_size(
         assert request.full_url.endswith("/store/ls")
         assert timeout == 30
         return BytesIO(
-            json.dumps(
-                {
-                    "entries": [
-                        {
-                            "name": "zygo://wsp_1/dsv/dsv_1/part-0.parquet",
-                            "type": "file",
-                            "size": 12,
-                        },
-                        {
-                            "name": "zygo://wsp_1/dsv/dsv_1/nested",
-                            "type": "directory",
-                        },
-                    ]
-                }
-            ).encode()
+            json.dumps({
+                "entries": [
+                    {
+                        "name": "zygo://wsp_1/dsv/dsv_1/part-0.parquet",
+                        "type": "file",
+                        "size": 12,
+                    },
+                    {
+                        "name": "zygo://wsp_1/dsv/dsv_1/nested",
+                        "type": "directory",
+                    },
+                ]
+            }).encode()
         )
 
     monkeypatch.setattr(fsspec_backend, "urlopen", urlopen)

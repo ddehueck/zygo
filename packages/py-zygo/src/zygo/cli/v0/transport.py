@@ -84,7 +84,7 @@ class StdioTransport:
 class HttpTransport:
     """POST a batch of IPC messages as JSON to a configured endpoint with fixed retry delays."""
 
-    def __init__(  # ruff: ignore[too-many-arguments]
+    def __init__(
         self,
         *,
         url: str,

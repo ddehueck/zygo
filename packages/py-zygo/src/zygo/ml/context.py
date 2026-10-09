@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
-from zygo.ml.store import ModelStore
+if TYPE_CHECKING:
+    from zygo.ml.store import ModelStore
 
 
 class TrainingContext(Protocol):

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import builtins
 from io import BytesIO
 import json
 import logging
@@ -9,9 +8,10 @@ from urllib.error import HTTPError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
-from fsspec.spec import AbstractFileSystem  # type: ignore
+from fsspec.spec import AbstractFileSystem
 
 if TYPE_CHECKING:
+    import builtins
     from types import TracebackType
 
 _NOT_FOUND = 404
@@ -84,7 +84,7 @@ class ZygoFileSystem(AbstractFileSystem):
         return {
             **entry,
             "name": cls._fs_path(str(entry["name"])),
-            "size": entry["size"] if "size" in entry else 0,
+            "size": entry.get("size", 0),
         }
 
     # fsspec infers AbstractBufferedFile, but this backend returns other binary streams.

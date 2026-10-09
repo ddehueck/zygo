@@ -4,31 +4,40 @@ from __future__ import annotations
 
 from dataclasses import MISSING
 from io import BytesIO
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import pyarrow as pa
 
 if TYPE_CHECKING:
+    from typing import Protocol
+
     from PIL import Image as PILImage
 
+    class _Pillow(Protocol):
+        Image: type[PILImage.Image]
 
-def _load_pillow():
+        def open(self, fp: BytesIO) -> PILImage.Image: ...
+
+
+def _load_pillow() -> _Pillow:
     try:
-        from PIL import Image as PILImage
+        from PIL import Image as PILImage  # ruff: ignore[import-outside-top-level]
     except ModuleNotFoundError as exc:
         if exc.name != "PIL":
             raise
         raise ImportError(
             "Image encoding and decoding require Pillow. Install it with `pip install pillow`."
         ) from exc
-    return PILImage
+    return cast("_Pillow", PILImage)
 
 
 class Image:
     """An image feature decoded to a Pillow image, with PNG encoding by default."""
 
     @classmethod
-    def to_arrow_field(cls, name: str, default: object = MISSING) -> pa.Field:
+    def to_arrow_field(
+        cls, name: str, _default: object = MISSING
+    ) -> pa.Field[pa.DataType]:
         return pa.field(name, pa.binary())
 
     @classmethod
@@ -36,7 +45,7 @@ class Image:
         cls,
         name: str,
         value: object,
-        default: object = MISSING,
+        _default: object = MISSING,
     ) -> PILImage.Image:
         if not isinstance(value, bytes):
             raise TypeError(
