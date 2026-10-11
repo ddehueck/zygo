@@ -1,9 +1,8 @@
-"""Cloud API configuration constants."""
+"""Cloud API request and response types."""
 
 from dataclasses import dataclass
-import os
 
-ZYGO_CLOUD_HOST = os.environ.get("ZYGO_CLOUD_HOST", "https://zygocloud.com").rstrip("/")
+from zygo.cloud.env import api_host
 
 
 @dataclass
@@ -24,7 +23,7 @@ class CreateDatasetUploadSessionRequest:
 
     @staticmethod
     def url() -> str:
-        return f"{ZYGO_CLOUD_HOST}/api/v1/datasets/upload"
+        return f"{api_host()}/api/v1/datasets/upload"
 
     @staticmethod
     def method() -> str:
@@ -55,7 +54,7 @@ class ConfirmUploadDatasetSuccessRequest:
 
     @staticmethod
     def url() -> str:
-        return f"{ZYGO_CLOUD_HOST}/api/v1/datasets/confirm-upload"
+        return f"{api_host()}/api/v1/datasets/confirm-upload"
 
     @staticmethod
     def method() -> str:

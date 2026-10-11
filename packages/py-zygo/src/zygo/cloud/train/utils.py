@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 from typing import TYPE_CHECKING, cast
 
-from zygo.cloud.api_key import load_api_key
+from zygo.cloud import env
 from zygo.cloud.train.api import ImageDefinition
 from zygo.cloud.train.paths import file_in_source, resolve_image_files
 from zygo.cloud.train.source import SourcePackage
@@ -47,10 +47,11 @@ def require_api_key(api_key: str | None) -> str:
     """Use the explicit key, or the ZYGO_CLOUD_API_KEY environment variable."""
     if api_key is not None:
         return api_key
-    loaded = load_api_key()
+    loaded = env.api_key()
     if loaded is None:
         raise ValueError(
-            "API key must be provided via 'api_key' or the ZYGO_CLOUD_API_KEY environment variable"
+            "API key must be provided via 'api_key' or the "
+            f"{env.API_KEY_ENV_VAR} environment variable"
         )
     return loaded
 

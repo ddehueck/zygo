@@ -13,7 +13,7 @@ from pydantic import (
     model_serializer,
 )
 
-from zygo.cloud.api import ZYGO_CLOUD_HOST
+from zygo.cloud.env import api_host
 
 _CONFIG = ConfigDict(extra="forbid", protected_namespaces=())
 _RELATIVE_PATH = re.compile(
@@ -43,7 +43,7 @@ class DeclareSourceRequest(CloudRequest):
 
     @classmethod
     def url(cls) -> str:
-        return f"{ZYGO_CLOUD_HOST}/api/v1/source"
+        return f"{api_host()}/api/v1/source"
 
 
 class SourceAwaitingUpload(CloudModel):
@@ -121,7 +121,7 @@ class StartModelTrainingRunRequest(CloudRequest):
 
     @classmethod
     def url(cls) -> str:
-        return f"{ZYGO_CLOUD_HOST}/api/v1/runs"
+        return f"{api_host()}/api/v1/runs"
 
 
 class ModelTrainingRun(CloudModel):
@@ -148,14 +148,14 @@ class RunLogLine(CloudModel):
 
 def run_status_url(run_id: str) -> str:
     """URL for the current status of a workflow or model training run."""
-    return f"{ZYGO_CLOUD_HOST}/api/v1/runs/{quote(run_id, safe='')}/status"
+    return f"{api_host()}/api/v1/runs/{quote(run_id, safe='')}/status"
 
 
 def run_logs_url(run_id: str) -> str:
     """URL for the server-sent stdout and stderr of a run."""
-    return f"{ZYGO_CLOUD_HOST}/api/v1/runs/{quote(run_id, safe='')}/logs"
+    return f"{api_host()}/api/v1/runs/{quote(run_id, safe='')}/logs"
 
 
 def run_build_logs_url(run_id: str) -> str:
     """URL for the server-sent image build log of a run."""
-    return f"{ZYGO_CLOUD_HOST}/api/v1/runs/{quote(run_id, safe='')}/build/logs"
+    return f"{api_host()}/api/v1/runs/{quote(run_id, safe='')}/build/logs"

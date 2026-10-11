@@ -16,6 +16,7 @@ from urllib.request import Request, urlopen
 from pydantic import TypeAdapter
 
 from zygo import Dataset, DataUri
+from zygo.cloud import env
 from zygo.cloud.api import (
     ConfirmUploadDatasetSuccessRequest,
     CreateDatasetUploadSessionRequest,
@@ -23,7 +24,6 @@ from zygo.cloud.api import (
     UploadDatasetManifestItem,
     build_headers,
 )
-from zygo.cloud.api_key import load_api_key
 from zygo.cloud.upload_progress import UploadProgressLogger
 from zygo.dataset.manifest import FileManifestEntry
 
@@ -58,10 +58,11 @@ def push_dataset[T](
         raise ValueError("concurrency must be at least 1")
 
     if api_key is None:
-        api_key = load_api_key()
+        api_key = env.api_key()
         if api_key is None:
             raise ValueError(
-                "API key must be provided via 'api_key' parameter or ZYGO_CLOUD_API_KEY environment variable"
+                "API key must be provided via 'api_key' parameter or "
+                f"{env.API_KEY_ENV_VAR} environment variable"
             )
 
     resolved_dataset = _resolve_dataset(dataset)
