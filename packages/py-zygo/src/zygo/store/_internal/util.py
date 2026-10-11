@@ -12,7 +12,7 @@ from typing import (
     overload,
 )
 
-import fsspec  # type: ignore
+import fsspec
 
 if TYPE_CHECKING:
     from zygo.store._internal.types import PartitionKey
@@ -63,5 +63,5 @@ def build_fs(
     root: DataUri,
     kwargs: dict[str, object] | None = None,
 ) -> StoreFileSystem:
-    fs = fsspec.filesystem(root.protocol, **(kwargs or {}))  # type: ignore
+    fs = fsspec.filesystem(root.protocol, **(kwargs or {}))
     return cast("StoreFileSystem", fs)

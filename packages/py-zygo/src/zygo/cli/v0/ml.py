@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
+from time import perf_counter
 from typing import TYPE_CHECKING
 
 from zygo.cli.importer import Importer
+from zygo.cli.log import _zygo_logger
 from zygo.cli.v0.transport import build_transport
-from zygo.cli.v0.types import ModelTrainCommand
 from zygo.dataset import Dataset
 from zygo.ml.executor import train as executor_train
 from zygo.ml.model import Model
@@ -12,10 +14,20 @@ from zygo.ml.store import ModelStore
 from zygo.store import DataUri
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Generator, Mapping
 
     from zygo.cli.v0.transport import IpcTransport
-    from zygo.cli.v0.types import StoreConfig
+    from zygo.cli.v0.types import ModelTrainCommand, StoreConfig
+
+
+@contextmanager
+def _timed(start: str, done: str) -> Generator[None, None, None]:
+    _zygo_logger.info("%s", start)
+    started = perf_counter()
+    try:
+        yield
+    finally:
+        _zygo_logger.info("%s in %.1fs", done, perf_counter() - started)
 
 
 def execute(command: ModelTrainCommand) -> None:
@@ -36,13 +48,17 @@ def train(
     ipc_transport: IpcTransport,
     params: Mapping[str, object] | None = None,
 ) -> None:
-    model = Importer.from_target(target).load(Model)
-    dataset = Dataset.open(
-        dataset_config.root_uri, storage_options=dataset_config.kwargs
-    )
+    with _timed("Loading model for training...", "Loaded model"):
+        model = Importer.from_target(target).load(Model)
+
+    with _timed("Loading dataset for training...", "Loaded dataset"):
+        dataset = Dataset.open(
+            dataset_config.root_uri, storage_options=dataset_config.kwargs
+        )
     store = ModelStore(
         root=DataUri(store_config.root_uri),
         ipc_transport=ipc_transport,
         kwargs=store_config.kwargs,
     )
-    executor_train(model=model, dataset=dataset, store=store, params=params)
+    with _timed("Starting model training...", "Finished model training"):
+        executor_train(model=model, dataset=dataset, store=store, params=params)

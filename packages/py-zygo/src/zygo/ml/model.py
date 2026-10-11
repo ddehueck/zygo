@@ -129,7 +129,7 @@ class Model:
         model_type = hints.get("return")
         if not isinstance(model_type, type):
             raise TypeError("Loading must declare a concrete model return type")
-        self._model_type = cast("type[object]", model_type)
+        self._model_type = model_type
         self._load = fn
         return fn
 
@@ -208,6 +208,8 @@ def _dataset_features(annotation: object) -> type[Features] | None:
     if len(arguments) != 1:
         raise TypeError("Dataset requires one feature type")
     features = arguments[0]
+    if features is object:
+        return None
     if not isinstance(features, type) or not issubclass(features, Features):
         raise TypeError(
             "The training dataset's type argument must be a Features subclass"

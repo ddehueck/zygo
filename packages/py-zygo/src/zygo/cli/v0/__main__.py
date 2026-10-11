@@ -1,6 +1,7 @@
 import argparse
 from collections.abc import Sequence
 
+from zygo.cli.log import configure_cli_logging
 from zygo.cli.v0 import ml, workflow
 from zygo.cli.v0.arguments import parse_command
 from zygo.cli.v0.types import (
@@ -27,6 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    configure_cli_logging()
     parser = build_parser()
     command = parser.parse_args(argv).args
 

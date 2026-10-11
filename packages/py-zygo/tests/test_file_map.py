@@ -1,3 +1,5 @@
+from typing import cast
+
 import pytest
 
 from zygo import Channel
@@ -41,7 +43,7 @@ def test_file_map_normalizes_uri_strings():
 )
 def test_file_map_rejects_invalid_values(value: object):
     with pytest.raises(CodecEncodeError):
-        FileMap.encode(value)  # pyright: ignore[reportArgumentType]
+        FileMap.encode(cast("dict[str, str | DataUri]", value))
 
 
 @pytest.mark.parametrize(

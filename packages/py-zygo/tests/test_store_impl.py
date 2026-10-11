@@ -4,20 +4,20 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast, override
 
-import fsspec  # type: ignore
+import fsspec
 import pytest
 
-from zygo.cli.v0.types import DataReferenceInserted, StoreConfig, WorkflowStoreConfig
+from zygo.cli.v0.types import DataReferenceInserted, StoreConfig
 from zygo.store import DataUri
 from zygo.store._internal.base import BaseStore
-from zygo.workflow.store import WorkflowStore
+from zygo.workflow.store import WorkflowStore, WorkflowStoreConfig
 from zygo.workflow.types import JobRunContext, JobRunId, WorkflowRunId
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
     from pathlib import Path
 
-    from fsspec.spec import AbstractFileSystem  # type: ignore
+    from fsspec.spec import AbstractFileSystem
 
     from zygo.cli.v0.types import IpcMessage
 

@@ -2,8 +2,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import override
 
-from fsspec.core import split_protocol  # type: ignore
-from fsspec.registry import get_filesystem_class  # type: ignore
+from fsspec.core import split_protocol
+from fsspec.registry import get_filesystem_class
 
 
 @dataclass(frozen=True)
