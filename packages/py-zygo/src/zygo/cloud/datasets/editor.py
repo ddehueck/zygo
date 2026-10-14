@@ -5,15 +5,19 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 from pathlib import Path
-from types import TracebackType
-from typing import Self
+from typing import TYPE_CHECKING, Self
 
 from zygo.cloud.datasets.operations import (
     AddFileOperation,
-    Operation,
     RemoveDirOperation,
     RemoveFileOperation,
 )
+
+if TYPE_CHECKING:
+    from types import TracebackType
+
+    from zygo.cloud.datasets.api import CommitResponse, DataRepositoryApiClient
+    from zygo.cloud.datasets.operations import Operation
 
 __all__ = ["DatasetEditor"]
 
@@ -27,9 +31,19 @@ class _PendingAdd:
 class DatasetEditor:
     """Collect dataset changes and prepare their operation records."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        repo_slug: str | None = None,
+        client: DataRepositoryApiClient | None = None,
+    ) -> None:
+        if client is not None and repo_slug is None:
+            raise ValueError("repo_slug is required when a data repository client is set")
+        self._repo_slug = repo_slug
+        self._client = client
         self._pending_operations: list[Operation | _PendingAdd] = []
         self._operations: tuple[Operation, ...] = ()
+        self._commit_result: CommitResponse | None = None
         self._entered = False
         self._finished = False
 
@@ -60,6 +74,14 @@ class DatasetEditor:
         if not self._finished:
             raise RuntimeError("Dataset operations are available after the edit exits")
         return self._operations
+
+    @property
+    def commit_result(self) -> CommitResponse | None:
+        """The API commit response, or ``None`` when no client was configured."""
+
+        if not self._finished:
+            raise RuntimeError("The commit result is available after the edit exits")
+        return self._commit_result
 
     def put(self, *, src: str | Path, dest: str) -> None:
         """Queue a local file to be added at ``dest`` in the dataset."""
@@ -110,7 +132,7 @@ class DatasetEditor:
     def _finalize_operations(self) -> None:
         operations: list[Operation] = []
         for pending in self._pending_operations:
-            if isinstance(pending, (RemoveFileOperation, RemoveDirOperation)):
+            if not isinstance(pending, _PendingAdd):
                 operations.append(pending)
                 continue
             digest = hashlib.sha256()
@@ -124,10 +146,15 @@ class DatasetEditor:
                     path=pending.destination,
                     hash=digest.hexdigest(),
                     size=size,
+                    source=pending.source,
                 )
             )
         self._operations = tuple(operations)
         self._pending_operations.clear()
+        if self._client is not None and self._operations:
+            if self._repo_slug is None:
+                raise RuntimeError("repo_slug is required to commit dataset edits")
+            self._commit_result = self._client.apply(self._repo_slug, self._operations)
 
 
 def _normalize_repo_path(path: str) -> str:

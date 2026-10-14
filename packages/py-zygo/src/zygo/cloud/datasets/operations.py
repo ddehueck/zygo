@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 __all__ = [
     "AddFileOperation",
@@ -21,6 +24,7 @@ class AddFileOperation:
     path: str
     hash: str
     size: int
+    source: Path
 
 
 @dataclass(frozen=True)
