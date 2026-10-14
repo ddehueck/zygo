@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import hashlib
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
+
+from blake3 import blake3
 
 from zygo.cloud.datasets.operations import (
     AddFileOperation,
@@ -38,7 +39,9 @@ class DatasetEditor:
         client: DataRepositoryApiClient | None = None,
     ) -> None:
         if client is not None and repo_slug is None:
-            raise ValueError("repo_slug is required when a data repository client is set")
+            raise ValueError(
+                "repo_slug is required when a data repository client is set"
+            )
         self._repo_slug = repo_slug
         self._client = client
         self._pending_operations: list[Operation | _PendingAdd] = []
@@ -135,7 +138,7 @@ class DatasetEditor:
             if not isinstance(pending, _PendingAdd):
                 operations.append(pending)
                 continue
-            digest = hashlib.sha256()
+            digest = blake3(max_threads=blake3.AUTO)
             size = 0
             with pending.source.open("rb") as source_file:
                 while chunk := source_file.read(1024 * 1024):

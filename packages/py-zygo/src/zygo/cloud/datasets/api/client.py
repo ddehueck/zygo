@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-import hashlib
 from typing import TYPE_CHECKING, Literal
 from urllib.error import HTTPError
 from urllib.parse import quote, urlsplit
 from urllib.request import Request, urlopen
+
+from blake3 import blake3
 
 from zygo.cloud.datasets.api.errors import DataRepositoryApiError, error_message
 from zygo.cloud.datasets.api.types import (
@@ -83,7 +84,7 @@ class DataRepositoryApiClient:
         for operation in operations:
             if not isinstance(operation, AddFileOperation):
                 continue
-            blob = ApiBlob(sha256=operation.hash, size_bytes=operation.size)
+            blob = ApiBlob(blake3=operation.hash, size_bytes=operation.size)
             previous_blob = blobs_by_hash.get(operation.hash)
             if previous_blob is not None and previous_blob.size_bytes != operation.size:
                 raise ValueError(f"Hash {operation.hash} has conflicting file sizes")
@@ -95,10 +96,10 @@ class DataRepositoryApiClient:
             UploadRequest(blobs=list(blobs_by_hash.values())),
         )
         for upload in upload_response.uploads:
-            operation = additions.get(upload.sha256)
+            operation = additions.get(upload.blake3)
             if operation is None:
                 raise RuntimeError(
-                    f"Upload response requested an unknown blob hash: {upload.sha256}"
+                    f"Upload response requested an unknown blob hash: {upload.blake3}"
                 )
             # TODO: parallelize uploads?
             self._upload_blob(upload.upload_url, operation)
@@ -135,7 +136,7 @@ class DataRepositoryApiClient:
             raise ValueError("Presigned upload URL must use HTTPS or loopback HTTP")
 
         data = operation.source.read_bytes()
-        digest = hashlib.sha256(data).hexdigest()
+        digest = blake3(data, max_threads=blake3.AUTO).hexdigest()
         if digest != operation.hash or len(data) != operation.size:
             raise RuntimeError(
                 f"Local file changed after it was hashed: {operation.source}"
@@ -160,7 +161,7 @@ def _to_api_operation(operation: Operation) -> ApiOperation:
         return ApiAddFileOperation(
             type="add_file",
             path=operation.path,
-            sha256=operation.hash,
+            blake3=operation.hash,
             size_bytes=operation.size,
         )
     if isinstance(operation, RemoveFileOperation):

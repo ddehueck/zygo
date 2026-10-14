@@ -20,7 +20,7 @@ __all__ = [
     "UploadResponse",
 ]
 
-Sha256 = Annotated[str, StringConstraints(pattern=r"^[a-f0-9]{64}$")]
+Blake3 = Annotated[str, StringConstraints(pattern=r"^[a-f0-9]{64}$")]
 CommitId = Annotated[str, StringConstraints(pattern=r"^drc_[0-9A-HJKMNP-TV-Z]{26}$")]
 RepositoryPath = Annotated[
     str,
@@ -33,7 +33,7 @@ class _ApiModel(BaseModel):
 
 
 class ApiBlob(_ApiModel):
-    sha256: Sha256
+    blake3: Blake3
     size_bytes: int = Field(ge=0)
 
 
@@ -42,7 +42,7 @@ class UploadRequest(_ApiModel):
 
 
 class RequiredUpload(_ApiModel):
-    sha256: Sha256
+    blake3: Blake3
     upload_url: str
 
     @field_validator("upload_url")
@@ -62,7 +62,7 @@ class UploadResponse(_ApiModel):
 class ApiAddFileOperation(_ApiModel):
     type: Literal["add_file"]
     path: RepositoryPath
-    sha256: Sha256
+    blake3: Blake3
     size_bytes: int = Field(ge=0)
 
 
