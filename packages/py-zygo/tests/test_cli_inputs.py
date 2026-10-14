@@ -19,7 +19,6 @@ from zygo.cli.v0.inputs import (
 from zygo.cli.v0.types import (
     HttpConfig,
     JobRunArgs,
-    ModelTrainCommand,
     StoreConfig,
     WorkflowRunJobCommand,
 )
@@ -51,23 +50,13 @@ def test_job_input_maps_explicitly_to_protocol():
 def test_store_input_preserves_backend_json_types():
     kwargs = {"nested": [None, True, 1, 1.5, "value", {"token": "secret"}]}
     model = StoreConfigInput.model_validate({
-        "root_uri": "memory:///dataset",
+        "root_uri": "memory:///store",
         "kwargs": kwargs,
     })
     protocol = model.to_protocol()
     assert isinstance(protocol, StoreConfig)
     assert protocol.kwargs == kwargs
-    parsed = parse_command(
-        json.dumps({
-            "command": "model_train",
-            "target": "pkg:model",
-            "dataset_config": {"root_uri": "memory:///dataset", "kwargs": kwargs},
-            "store_config": {"root_uri": "memory:///store"},
-        })
-    )
-    assert isinstance(parsed, ModelTrainCommand)
-    assert parsed.dataset_config == protocol
-    assert StoreConfigInput(root_uri="memory:///dataset").kwargs == {}
+    assert StoreConfigInput(root_uri="memory:///store").kwargs == {}
     nested = model.kwargs["nested"]
     assert isinstance(nested, list)
     assert type(nested[1]) is bool
@@ -101,16 +90,7 @@ def test_store_input_normalizes_local_paths(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     protocol = StoreConfigInput(root_uri="results").to_protocol()
     assert protocol.root_uri == f"file://{tmp_path / 'results'}"
-    parsed = parse_command(
-        json.dumps({
-            "command": "model_train",
-            "target": "pkg:model",
-            "dataset_config": {"root_uri": "memory:///dataset"},
-            "store_config": {"root_uri": "results"},
-        })
-    )
-    assert isinstance(parsed, ModelTrainCommand)
-    assert parsed.store_config == protocol
+    assert protocol.root_uri == f"file://{tmp_path / 'results'}"
 
 
 def test_http_input_maps_normalized_defaults_to_protocol():
@@ -155,22 +135,9 @@ def test_backend_options_reject_nested_nonfinite_values(value):
 def test_backend_options_reject_non_json_python_values(kwargs):
     with pytest.raises(ValidationError):
         StoreConfigInput.model_validate({
-            "root_uri": "memory:///dataset",
+            "root_uri": "memory:///store",
             "kwargs": kwargs,
         })
-
-
-@pytest.mark.parametrize("uri", ["", None, True, 1])
-def test_dataset_root_uri_is_a_nonempty_strict_string(uri):
-    with pytest.raises(argparse.ArgumentTypeError, match=r"dataset_config\.root_uri"):
-        parse_command(
-            json.dumps({
-                "command": "model_train",
-                "target": "pkg:model",
-                "dataset_config": {"root_uri": uri},
-                "store_config": {"root_uri": "memory:///store"},
-            })
-        )
 
 
 def test_nested_unknown_fields_report_the_option_path_without_input():
@@ -253,7 +220,7 @@ def test_invalid_header_value_is_not_exposed_in_diagnostics():
 
 
 def test_input_defaults_are_not_shared():
-    first = StoreConfigInput(root_uri="memory:///dataset")
-    second = StoreConfigInput(root_uri="memory:///dataset")
+    first = StoreConfigInput(root_uri="memory:///store")
+    second = StoreConfigInput(root_uri="memory:///store")
     first.kwargs["auto_mkdir"] = True
     assert second.kwargs == {}

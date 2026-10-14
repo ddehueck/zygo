@@ -7,7 +7,6 @@ requires-python = ">=3.12"
 dependencies = [
     "fsspec>=2026.7.0",
     "pathspec>=1.1.1",
-    "pyarrow>=25.0.1",
     "pydantic>=2.13.5",
     "rich>=15.0.0",
 ]
@@ -15,13 +14,11 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "pillow>=11.0.0",
     "datamodel-code-generator>=0.82.0,<0.83.0",
     "pytest>=9.0.2",
     "python-dotenv>=1.2.1",
     "ruff>=0.14.4",
     "ty>=0.0.8",
-    "pyarrow-stubs>=20.0.0.20260819",
 ]
 
 [build-system]

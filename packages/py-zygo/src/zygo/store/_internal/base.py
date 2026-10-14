@@ -1,4 +1,4 @@
-"""Filesystem operations shared by workflow and model stores."""
+"""Filesystem operations shared by workflow stores."""
 
 from __future__ import annotations
 

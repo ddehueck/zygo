@@ -2,10 +2,9 @@ import argparse
 from collections.abc import Sequence
 
 from zygo.cli.log import configure_cli_logging
-from zygo.cli.v0 import ml, workflow
+from zygo.cli.v0 import workflow
 from zygo.cli.v0.arguments import parse_command
 from zygo.cli.v0.types import (
-    ModelTrainCommand,
     WorkflowGetMetadataCommand,
     WorkflowRunJobCommand,
 )
@@ -14,7 +13,7 @@ from zygo.cli.v0.types import (
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m zygo.cli.v0",
-        description="Execute workflow and model commands for the Zygo runtime.",
+        description="Execute workflow commands for the Zygo runtime.",
         allow_abbrev=False,
     )
     parser.add_argument(
@@ -35,8 +34,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     match command:
         case WorkflowRunJobCommand() | WorkflowGetMetadataCommand():
             workflow.execute(command)
-        case ModelTrainCommand():
-            ml.execute(command)
         case _:
             parser.error("Unsupported command")
 
