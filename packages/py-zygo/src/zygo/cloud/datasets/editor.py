@@ -13,6 +13,7 @@ from zygo.cloud.datasets.operations import (
     RemoveDirOperation,
     RemoveFileOperation,
 )
+from zygo.cloud.datasets.progress import ProgressTracker
 
 if TYPE_CHECKING:
     from types import TracebackType
@@ -59,10 +60,10 @@ class DatasetEditor:
     def __exit__(
         self,
         exc_type: type[BaseException] | None,
-        exc_value: BaseException | None,
+        exc_val: BaseException | None,
         traceback: TracebackType | None,
     ) -> None:
-        del exc_value, traceback
+        del exc_val, traceback
         self._finished = True
         if exc_type is None:
             self._finalize_operations()
@@ -134,30 +135,64 @@ class DatasetEditor:
 
     def _finalize_operations(self) -> None:
         operations: list[Operation] = []
-        for pending in self._pending_operations:
-            if not isinstance(pending, _PendingAdd):
-                operations.append(pending)
-                continue
-            digest = blake3(max_threads=blake3.AUTO)
-            size = 0
-            with pending.source.open("rb") as source_file:
-                while chunk := source_file.read(1024 * 1024):
-                    digest.update(chunk)
-                    size += len(chunk)
-            operations.append(
-                AddFileOperation(
-                    path=pending.destination,
-                    hash=digest.hexdigest(),
-                    size=size,
-                    source=pending.source,
-                )
+        tracker = ProgressTracker()
+        additions = sum(
+            isinstance(item, _PendingAdd) for item in self._pending_operations
+        )
+        file_removals = sum(
+            isinstance(item, RemoveFileOperation) for item in self._pending_operations
+        )
+        directory_removals = sum(
+            isinstance(item, RemoveDirOperation) for item in self._pending_operations
+        )
+        if self._pending_operations:
+            tracker.display_data_change_summary(
+                additions=additions,
+                file_removals=file_removals,
+                directory_removals=directory_removals,
             )
+
+        hashed_additions: list[tuple[str, int]] = []
+        if additions:
+            with tracker.stage(f"Hash data ({additions} files)"):
+                hashed_additions = [
+                    _hash_file(pending.source)
+                    for pending in self._pending_operations
+                    if isinstance(pending, _PendingAdd)
+                ]
+
+        hashed = iter(hashed_additions)
+        for pending in self._pending_operations:
+            if isinstance(pending, _PendingAdd):
+                digest, size = next(hashed)
+                operations.append(
+                    AddFileOperation(
+                        path=pending.destination,
+                        hash=digest,
+                        size=size,
+                        source=pending.source,
+                    )
+                )
+            else:
+                operations.append(pending)
         self._operations = tuple(operations)
         self._pending_operations.clear()
         if self._client is not None and self._operations:
             if self._repo_slug is None:
                 raise RuntimeError("repo_slug is required to commit dataset edits")
-            self._commit_result = self._client.apply(self._repo_slug, self._operations)
+            self._commit_result = self._client.apply(
+                self._repo_slug, self._operations, progress=tracker
+            )
+
+
+def _hash_file(path: Path) -> tuple[str, int]:
+    digest = blake3(max_threads=blake3.AUTO)
+    size = 0
+    with path.open("rb") as source_file:
+        while chunk := source_file.read(1024 * 1024):
+            digest.update(chunk)
+            size += len(chunk)
+    return digest.hexdigest(), size
 
 
 def _normalize_repo_path(path: str) -> str:

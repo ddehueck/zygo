@@ -15,7 +15,12 @@ __all__ = [
     "ApiRemoveFileOperation",
     "CommitRequest",
     "CommitResponse",
+    "DirectoryEntry",
+    "EntriesResponse",
+    "Entry",
+    "FileEntry",
     "RequiredUpload",
+    "ResolveResponse",
     "UploadRequest",
     "UploadResponse",
 ]
@@ -88,4 +93,44 @@ class CommitRequest(_ApiModel):
 
 
 class CommitResponse(_ApiModel):
+    model_config = ConfigDict(strict=True, extra="ignore", frozen=True)
+
+    commit_id: CommitId | None
+
+
+class FileEntry(_ApiModel):
+    path: RepositoryPath
+    type: Literal["file"]
+    size_bytes: int = Field(ge=0)
+    blake3: Blake3
+
+
+class DirectoryEntry(_ApiModel):
+    path: RepositoryPath
+    type: Literal["directory"]
+
+
+type Entry = Annotated[
+    FileEntry | DirectoryEntry,
+    Field(discriminator="type"),
+]
+
+
+class EntriesResponse(_ApiModel):
+    commit_id: CommitId | None
+    entries: list[Entry]
+    next_cursor: str | None
+
+
+class ResolveResponse(_ApiModel):
     commit_id: CommitId
+    entry: FileEntry
+    download_url: str
+
+    @field_validator("download_url")
+    @classmethod
+    def validate_download_url(cls, value: str) -> str:
+        parsed = urlsplit(value)
+        if not parsed.scheme or not parsed.netloc:
+            raise ValueError("download_url must be an absolute URI")
+        return value

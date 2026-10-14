@@ -13,7 +13,6 @@ import pytest
 
 if TYPE_CHECKING:
     from http.client import HTTPResponse
-    from pathlib import Path
     from types import TracebackType
 
     from zygo.cli.v0.transport import IpcTransport
