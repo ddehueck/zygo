@@ -24,7 +24,7 @@ Blake3 = Annotated[str, StringConstraints(pattern=r"^[a-f0-9]{64}$")]
 CommitId = Annotated[str, StringConstraints(pattern=r"^drc_[0-9A-HJKMNP-TV-Z]{26}$")]
 RepositoryPath = Annotated[
     str,
-    StringConstraints(min_length=1, max_length=1024, pattern=r"^(?!.*\/$).+$"),
+    StringConstraints(min_length=1, max_length=1024, pattern=r"^.*[^/]$"),
 ]
 
 
