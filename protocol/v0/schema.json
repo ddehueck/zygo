@@ -12,21 +12,18 @@
   ],
   "definitions": {
     "CliCommand": {
-      "description": "A single JSON command supplied to python -m zygo.cli.v0 --args JSON. The command field selects the request variant.",
+      "description": "A single JSON workflow command supplied to python -m zygo.cli.v0 --args JSON. The command field selects the request variant.",
       "oneOf": [
         {
           "$ref": "./workflow.json#/definitions/WorkflowRunJobCommand"
         },
         {
           "$ref": "./workflow.json#/definitions/WorkflowGetMetadataCommand"
-        },
-        {
-          "$ref": "./model.json#/definitions/ModelTrainCommand"
         }
       ]
     },
     "CliOutput": {
-      "description": "Explicit command results, distinct from side-effect publications. Workflow execution and model training have no separate result payload. Their completion is reported by process exit status.",
+      "description": "Explicit command results, distinct from side-effect publications. Workflow execution has no separate result payload. Completion is reported by process exit status.",
       "oneOf": [
         {
           "$ref": "./workflow.json#/definitions/WorkflowGetMetadataOutput"

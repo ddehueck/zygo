@@ -36,18 +36,9 @@ The cache is shared by executions using the same root, not by all projects or us
 
 Store backend options are passed to `fsspec.filesystem`. Each consumer enforces its own read and write requirements.
 
-## Model training
-
-`model_train` trains the target model. The model validates its training parameters and uses its declared defaults when parameters are omitted. Dataset loading enforces its format and read requirements.
-
-The runtime allocates an output store for each training attempt. Artifact publications report completed writes, not successful training or a complete model artifact set. After successful training, the artifact set must remain unchanged so later loads are reproducible.
-
-
-An inference command is not yet defined. Model loading happens inside the process that uses the model, not through a separate CLI command.
-
 ## Completion
 
-Workflow execution and model training have no separate result payload. The CLI reports completion through its exit status and does not emit started, succeeded, failed, or cancelled events.
+Workflow execution has no separate result payload. The CLI reports completion through its exit status and does not emit started, succeeded, failed, or cancelled events.
 
 The runtime marks an attempt running after a successful process launch. It determines the final state from process completion, publication acceptance, and cancellation. Exit status 0 is not enough if required publications did not reach the runtime. Uncaught errors and publication failures cause a nonzero exit. Error details go to stderr.
 

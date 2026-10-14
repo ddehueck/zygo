@@ -71,16 +71,6 @@ class ChannelMetadata:
 
 
 @dataclass
-class ModelTrainCommand:
-    command: Literal["model_train"]
-    target: str
-    dataset_config: StoreConfig
-    store_config: StoreConfig
-    params: dict[str, Any] | None = None
-    http_config: HttpConfig | None = None
-
-
-@dataclass
 class WorkflowRunJobCommand:
     command: Literal["workflow_run_job"]
     target: str
@@ -107,7 +97,7 @@ class WorkflowGetMetadataOutput:
 type CliOutput = WorkflowGetMetadataOutput
 
 
-type CliCommand = WorkflowRunJobCommand | WorkflowGetMetadataCommand | ModelTrainCommand
+type CliCommand = WorkflowRunJobCommand | WorkflowGetMetadataCommand
 
 
 @dataclass

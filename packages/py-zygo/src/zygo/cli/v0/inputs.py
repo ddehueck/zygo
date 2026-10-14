@@ -18,7 +18,6 @@ from pydantic import (
 from zygo.cli.v0.types import (
     HttpConfig,
     JobRunArgs,
-    ModelTrainCommand,
     StoreConfig,
     WorkflowGetMetadataCommand,
     WorkflowRunJobCommand,
@@ -161,35 +160,7 @@ class WorkflowGetMetadataCommandInput(CliInput):
         return WorkflowGetMetadataCommand(command=self.command, target=self.target)
 
 
-class ModelTrainCommandInput(CliInput):
-    command: Literal["model_train"]
-    target: NonemptyString
-    dataset_config: StoreConfigInput
-    store_config: StoreConfigInput
-    params: dict[str, JsonValue] | None = None
-    http_config: HttpConfigInput | None = None
-
-    @field_validator("params", mode="before")
-    @classmethod
-    def reject_null_params(cls, value: object) -> object:
-        if value is None:
-            raise ValueError("must be a JSON object when supplied")
-        return value
-
-    def to_protocol(self) -> ModelTrainCommand:
-        return ModelTrainCommand(
-            command=self.command,
-            target=self.target,
-            dataset_config=self.dataset_config.to_protocol(),
-            store_config=self.store_config.to_protocol(),
-            params=self.params,
-            http_config=self.http_config.to_protocol() if self.http_config else None,
-        )
-
-
 type CliCommandInput = Annotated[
-    WorkflowRunJobCommandInput
-    | WorkflowGetMetadataCommandInput
-    | ModelTrainCommandInput,
+    WorkflowRunJobCommandInput | WorkflowGetMetadataCommandInput,
     Field(discriminator="command"),
 ]

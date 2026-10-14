@@ -13,7 +13,6 @@ import pytest
 
 if TYPE_CHECKING:
     from http.client import HTTPResponse
-    from pathlib import Path
     from types import TracebackType
 
     from zygo.cli.v0.transport import IpcTransport
@@ -27,7 +26,6 @@ from zygo.cli.v0.types import (
     ChannelItemInserted,
     DataReferenceInserted,
     JobRunArgs,
-    ModelTrainCommand,
     StoreConfig,
     TagInserted,
     WorkflowRunJobCommand,
@@ -99,49 +97,6 @@ def _run_command(**fields: object) -> str:
     })
 
 
-def _train_command(**fields: object) -> str:
-    body: dict[str, object] = {
-        "command": "model_train",
-        "target": "pkg:model",
-        "dataset_config": {"root_uri": "memory:///dataset"},
-        "store_config": {"root_uri": "memory:///store"},
-    }
-    body.update(fields)
-    return json.dumps(body)
-
-
-def test_parse_store_config() -> None:
-    parsed = parse_command(
-        _train_command(
-            store_config={
-                "root_uri": "file:///custom-results",
-                "kwargs": {"auto_mkdir": True},
-            }
-        )
-    )
-    assert isinstance(parsed, ModelTrainCommand)
-    assert parsed.store_config.root_uri == "file:///custom-results"
-    assert parsed.store_config.kwargs == {"auto_mkdir": True}
-
-    defaults = parse_command(
-        _train_command(store_config={"root_uri": "memory:///results"})
-    )
-    assert isinstance(defaults, ModelTrainCommand)
-    assert defaults.store_config.kwargs == {}
-
-
-@pytest.mark.parametrize("root_uri", ["results", "absolute"])
-def test_parse_store_config_assumes_local_path(
-    root_uri: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.chdir(tmp_path)
-    path = str(tmp_path / root_uri) if root_uri == "absolute" else root_uri
-    parsed = parse_command(_train_command(store_config={"root_uri": path}))
-    assert isinstance(parsed, ModelTrainCommand)
-    assert parsed.store_config.root_uri == f"file://{tmp_path / root_uri}"
-    assert parsed.store_config.kwargs == {}
-
-
 def test_parse_zygo_store_and_input_uris_without_backend_credentials() -> None:
     parsed = parse_command(
         json.dumps({
@@ -180,32 +135,9 @@ def test_parse_zygo_store_and_input_uris_without_backend_credentials() -> None:
     [
         ("{", "valid JSON"),
         ("[]", "JSON object"),
-        (_train_command(store_config={"root_uri": ""}), "store_config.root_uri"),
-        (
-            _train_command(store_config={"root_uri": "unknown-protocol://results"}),
-            "store_config.root_uri",
-        ),
-        (
-            _train_command(store_config={"root_uri": "file:///tmp", "extra": 1}),
-            "unknown fields",
-        ),
-        (
-            _train_command(store_config={"root_uri": "file:///tmp", "kwargs": []}),
-            "store_config.kwargs",
-        ),
-        (
-            _train_command(
-                store_config={"root_uri": "file:///tmp", "kwargs": {"token": None}}
-            ).replace('"token": null', '"token": NaN'),
-            "store_config.kwargs",
-        ),
-        (
-            _train_command(store_config={"root_uri": "file:///tmp", "kwargs": None}),
-            "store_config.kwargs",
-        ),
     ],
 )
-def test_parse_store_config_rejects_invalid(raw: str, error: str) -> None:
+def test_parse_command_reports_json_errors(raw: str, error: str) -> None:
     with pytest.raises(argparse.ArgumentTypeError, match=error):
         parse_command(raw)
 

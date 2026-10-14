@@ -1,5 +1,53 @@
-"""Run Zygo training on Zygo Cloud."""
+"""Cloud storage integrations for Zygo."""
 
-from zygo.cloud.train import ModelTrainingRun, train
+from zygo.cloud.datasets import (
+    AddFileOperation,
+    ApiAddFileOperation,
+    ApiBlob,
+    ApiOperation,
+    ApiRemoveDirOperation,
+    ApiRemoveFileOperation,
+    CommitRequest,
+    CommitResponse,
+    DataRepositoryApiClient,
+    DataRepositoryApiError,
+    Dataset,
+    DatasetEditor,
+    DirectoryEntry,
+    EntriesResponse,
+    Entry,
+    FileEntry,
+    Operation,
+    RemoveDirOperation,
+    RemoveFileOperation,
+    RequiredUpload,
+    ResolveResponse,
+    UploadRequest,
+    UploadResponse,
+)
 
-__all__ = ["ModelTrainingRun", "train"]
+__all__ = [
+    "AddFileOperation",
+    "ApiAddFileOperation",
+    "ApiBlob",
+    "ApiOperation",
+    "ApiRemoveDirOperation",
+    "ApiRemoveFileOperation",
+    "CommitRequest",
+    "CommitResponse",
+    "DataRepositoryApiClient",
+    "DataRepositoryApiError",
+    "Dataset",
+    "DatasetEditor",
+    "DirectoryEntry",
+    "EntriesResponse",
+    "Entry",
+    "FileEntry",
+    "Operation",
+    "RemoveDirOperation",
+    "RemoveFileOperation",
+    "RequiredUpload",
+    "ResolveResponse",
+    "UploadRequest",
+    "UploadResponse",
+]

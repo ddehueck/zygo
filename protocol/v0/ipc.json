@@ -4,7 +4,7 @@
   "description": "Side-effect publications and their HTTP transport configuration.",
   "definitions": {
     "HttpConfig": {
-      "description": "Reusable HTTP publication configuration nested inside WorkflowRunJobCommand.http_config or ModelTrainCommand.http_config. Optional settings use CLI defaults. The runtime binds the callback URL or configured headers to a specific execution attempt. The CLI forwards headers on every request without interpreting execution identity.",
+      "description": "Reusable HTTP publication configuration nested inside WorkflowRunJobCommand.http_config. Optional settings use CLI defaults. The runtime binds the callback URL or configured headers to a specific execution attempt. The CLI forwards headers on every request without interpreting execution identity.",
       "type": "object",
       "properties": {
         "url": {
@@ -78,7 +78,7 @@
       ]
     },
     "DataReferenceInserted": {
-      "description": "Emitted after an artifact write completes successfully, including writes through a writable store context manager. Does not indicate that training or the owning execution succeeded, or that a model artifact set is ready.",
+      "description": "Emitted after an artifact write completes successfully, including writes through a writable store context manager. Does not indicate that the owning execution succeeded.",
       "type": "object",
       "properties": {
         "type": {
