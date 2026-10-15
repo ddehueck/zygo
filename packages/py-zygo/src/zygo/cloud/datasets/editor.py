@@ -154,12 +154,13 @@ class DatasetEditor:
 
         hashed_additions: list[tuple[str, int]] = []
         if additions:
-            with tracker.stage(f"Hash data ({additions} files)"):
-                hashed_additions = [
-                    _hash_file(pending.source)
-                    for pending in self._pending_operations
-                    if isinstance(pending, _PendingAdd)
-                ]
+            with tracker.stage(
+                f"Hash data ({additions} files)", total=additions, unit="files"
+            ):
+                for pending in self._pending_operations:
+                    if isinstance(pending, _PendingAdd):
+                        hashed_additions.append(_hash_file(pending.source))
+                        tracker.advance_stage()
 
         hashed = iter(hashed_additions)
         for pending in self._pending_operations:

@@ -47,7 +47,8 @@ class DataRepositoryApiClient:
         api_host: str | None = None,
         api_bearer_auth: str | None = None,
         *,
-        timeout: float = 30,
+        timeout: float = 120,
+        upload_batch_size: int = 50,
     ) -> None:
         resolved_host = api_host if api_host is not None else get_api_host()
         resolved_key = api_bearer_auth if api_bearer_auth is not None else get_api_key()
@@ -55,6 +56,12 @@ class DataRepositoryApiClient:
             raise ValueError("api_host must be provided")
         if not resolved_key:
             raise ValueError("Set ZYGO_CLOUD_API_KEY or provide api_bearer_auth")
+        if (
+            isinstance(upload_batch_size, bool)
+            or not isinstance(upload_batch_size, int)
+            or upload_batch_size <= 0
+        ):
+            raise ValueError("upload_batch_size must be a positive integer")
 
         if urlsplit(resolved_host).scheme != "https" and not is_local_http(
             resolved_host
@@ -64,6 +71,7 @@ class DataRepositoryApiClient:
         self._api_host = resolved_host.rstrip("/")
         self._api_bearer_auth = resolved_key
         self._timeout = timeout
+        self._upload_batch_size = upload_batch_size
 
     def prepare_upload(self, repo_slug: str, request: UploadRequest) -> UploadResponse:
         """Ask which content blobs are missing and read the current repository head."""
@@ -135,39 +143,57 @@ class DataRepositoryApiClient:
 
         upload_stage = progress.stage("Upload data") if progress else nullcontext()
         with upload_stage:
-            upload_response = self.prepare_upload(
-                repo_slug,
-                UploadRequest(blobs=list(blobs_by_hash.values())),
-            )
-            uploads = []
-            for upload in upload_response.uploads:
-                operation = additions.get(upload.blake3)
-                if operation is None:
-                    raise RuntimeError(
-                        f"Upload response requested an unknown blob hash: {upload.blake3}"
-                    )
-                uploads.append((upload, operation))
-
             if progress:
-                progress.configure_upload(
-                    total_blobs=len(blobs_by_hash),
-                    upload_blobs=len(uploads),
-                    upload_bytes=sum(operation.size for _, operation in uploads),
-                )
+                progress.configure_upload_batches(len(blobs_by_hash))
 
-            for upload, operation in uploads:
-                file_progress = (
-                    progress.upload_file(operation.path, operation.size)
-                    if progress
-                    else nullcontext(lambda _: None)
+            blob_items = list(blobs_by_hash.items())
+            batch_count = max(
+                1,
+                (len(blob_items) + self._upload_batch_size - 1)
+                // self._upload_batch_size,
+            )
+            head_commit_id: str | None = None
+            for batch_index in range(batch_count):
+                start = batch_index * self._upload_batch_size
+                batch = blob_items[start : start + self._upload_batch_size]
+                batch_additions = {
+                    blob_hash: additions[blob_hash] for blob_hash, _ in batch
+                }
+                upload_response = self.prepare_upload(
+                    repo_slug,
+                    UploadRequest(blobs=[blob for _, blob in batch]),
                 )
-                with file_progress as on_progress:
-                    self._upload_blob(
-                        upload.upload_url, operation, on_progress=on_progress
+                if batch_index == 0:
+                    head_commit_id = upload_response.head_commit_id
+
+                uploads = []
+                for upload in upload_response.uploads:
+                    operation = batch_additions.get(upload.blake3)
+                    if operation is None:
+                        raise RuntimeError(
+                            "Upload response requested an unknown blob hash: "
+                            f"{upload.blake3}"
+                        )
+                    uploads.append((upload, operation))
+
+                if progress:
+                    progress.record_uploads_already_present(
+                        len(batch) - len(uploads)
                     )
+
+                for upload, operation in uploads:
+                    file_progress = (
+                        progress.upload_file(operation.path, operation.size)
+                        if progress
+                        else nullcontext(lambda _: None)
+                    )
+                    with file_progress as on_progress:
+                        self._upload_blob(
+                            upload.upload_url, operation, on_progress=on_progress
+                        )
 
         request = CommitRequest(
-            expected_head_commit_id=upload_response.head_commit_id,
+            expected_head_commit_id=head_commit_id,
             operations=[_to_api_operation(operation) for operation in operations],
         )
         commit_stage = progress.stage("Commit changes") if progress else nullcontext()
