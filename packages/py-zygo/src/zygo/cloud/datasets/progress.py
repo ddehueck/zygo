@@ -51,6 +51,7 @@ class ProgressTracker:
         self._stage_next_log = 1
         self._stage_last_reported = 0
         self._upload_total_blobs = 0
+        self._upload_total_bytes = 0
         self._upload_completed_blobs = 0
         self._upload_already_present = 0
         self._upload_batch_mode = False
@@ -119,7 +120,8 @@ class ProgressTracker:
 
         self._stage_completed += amount
         if self._progress is not None and self._stage_task_id is not None:
-            self._progress.advance(self._stage_task_id, amount)
+            if not self._upload_batch_mode:
+                self._progress.advance(self._stage_task_id, amount)
         elif (
             self._stage_total is not None
             and self._stage_completed >= self._stage_next_log
@@ -182,11 +184,12 @@ class ProgressTracker:
                 total=None,
             )
 
-    def configure_upload_batches(self, total_blobs: int) -> None:
-        """Initialize blob-count progress for uploads prepared in batches."""
+    def configure_upload_batches(self, total_blobs: int, total_bytes: int) -> None:
+        """Initialize byte progress for uploads prepared in batches."""
 
         self._upload_batch_mode = True
         self._upload_total_blobs = total_blobs
+        self._upload_total_bytes = total_bytes
         self._upload_completed_blobs = 0
         self._upload_already_present = 0
         self._stage_total = total_blobs
@@ -197,20 +200,23 @@ class ProgressTracker:
             self._progress.update(
                 self._stage_task_id,
                 description=self._upload_description(),
-                total=total_blobs,
+                total=total_bytes,
                 completed=0,
             )
 
-    def record_uploads_already_present(self, count: int) -> None:
+    def record_uploads_already_present(self, count: int, byte_count: int = 0) -> None:
         """Count blobs that the server already has and did not request."""
 
         self._upload_already_present += count
+        if self._upload_batch_mode:
+            self._upload_total_bytes = max(0, self._upload_total_bytes - byte_count)
         if count:
             self.advance_stage(count)
         if self._progress is not None and self._stage_task_id is not None:
             self._progress.update(
                 self._stage_task_id,
                 description=self._upload_description(),
+                total=self._upload_total_bytes,
             )
         elif count:
             self._log(
@@ -226,6 +232,7 @@ class ProgressTracker:
         if self._progress is None:
             yield lambda _: None
             self._upload_completed_blobs += 1
+            self._log(f"  ✓ {path}", style="green")
             if self._upload_batch_mode:
                 self.advance_stage()
             return
@@ -242,17 +249,22 @@ class ProgressTracker:
                     self._stage_task_id,
                     description=self._upload_description(),
                 )
+            self._log(f"  ✓ {path}", style="green")
             if self._upload_batch_mode:
                 self.advance_stage()
+        finally:
+            self._progress.remove_task(task_id)
 
     def _advance_upload(self, task_id: TaskID, amount: int) -> None:
         if self._progress is None:
             return
         self._progress.advance(task_id, amount)
-        if not self._upload_batch_mode and self._stage_task_id is not None:
+        if self._stage_task_id is not None:
             self._progress.advance(self._stage_task_id, amount)
 
     def _upload_description(self) -> str:
+        if not self._upload_total_blobs:
+            return "Upload data · no blobs to upload"
         description = (
             f"Upload data · {self._upload_completed_blobs}/"
             f"{self._upload_total_blobs} blobs"

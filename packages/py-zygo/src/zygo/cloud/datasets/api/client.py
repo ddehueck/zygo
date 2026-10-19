@@ -167,7 +167,10 @@ class DataRepositoryApiClient:
         upload_stage = progress.stage("Upload data") if progress else nullcontext()
         with upload_stage:
             if progress:
-                progress.configure_upload_batches(len(blobs_by_hash))
+                progress.configure_upload_batches(
+                    len(blobs_by_hash),
+                    sum(blob.size_bytes for blob in blobs_by_hash.values()),
+                )
 
             blob_items = list(blobs_by_hash.items())
             batch_count = max(
@@ -200,8 +203,14 @@ class DataRepositoryApiClient:
                     uploads.append((upload, operation))
 
                 if progress:
+                    upload_hashes = {upload.blake3 for upload, _ in uploads}
                     progress.record_uploads_already_present(
-                        len(batch) - len(uploads)
+                        len(batch) - len(uploads),
+                        byte_count=sum(
+                            blob.size_bytes
+                            for blob_hash, blob in batch
+                            if blob_hash not in upload_hashes
+                        ),
                     )
 
                 for upload, operation in uploads:
