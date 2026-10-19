@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
+from http.client import HTTPException
+import logging
+import time
 from typing import TYPE_CHECKING, Literal
 from urllib.error import HTTPError
 from urllib.parse import quote, urlencode, urlsplit
@@ -29,6 +32,7 @@ from zygo.cloud.env import api_host as get_api_host, api_key as get_api_key
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Mapping
+    from typing import BinaryIO
 
     from pydantic import BaseModel
 
@@ -37,6 +41,23 @@ if TYPE_CHECKING:
     from zygo.cloud.datasets.progress import ProgressTracker
 
 __all__ = ["DataRepositoryApiClient"]
+
+# Gateway and capacity failures are usually transient. Client errors are not.
+_RETRYABLE_STATUS_CODES = frozenset({408, 429, 500, 502, 503, 504})
+_DEFAULT_MAX_RETRIES = 4
+_DEFAULT_RETRY_INTERVAL = 0.5
+_MAX_RETRY_DELAY = 8.0
+_RETRY_BACKOFF_FACTOR = 2
+_logger = logging.getLogger(__name__)
+
+
+class _RetryableRequestError(Exception):
+    """A request failed in a way that a later attempt may succeed."""
+
+    def __init__(self, failure: Exception, cause: BaseException) -> None:
+        super().__init__(str(failure))
+        self.failure = failure
+        self.cause = cause
 
 
 class DataRepositoryApiClient:
@@ -72,6 +93,8 @@ class DataRepositoryApiClient:
         self._api_bearer_auth = resolved_key
         self._timeout = timeout
         self._upload_batch_size = upload_batch_size
+        self._max_retries = _DEFAULT_MAX_RETRIES
+        self._retry_interval = _DEFAULT_RETRY_INTERVAL
 
     def prepare_upload(self, repo_slug: str, request: UploadRequest) -> UploadResponse:
         """Ask which content blobs are missing and read the current repository head."""
@@ -213,13 +236,7 @@ class DataRepositoryApiClient:
             },
             method="POST",
         )
-        try:
-            with urlopen(request, timeout=self._timeout) as response:  # ruff: ignore[suspicious-url-open-usage]
-                return response.read()
-        except HTTPError as error:
-            raise DataRepositoryApiError(
-                error.code, error_message(error.read())
-            ) from error
+        return self._send(lambda: request)
 
     def _get(
         self,
@@ -235,13 +252,32 @@ class DataRepositoryApiClient:
             headers={"Authorization": f"Bearer {self._api_bearer_auth}"},
             method="GET",
         )
-        try:
-            with urlopen(request, timeout=self._timeout) as response:  # ruff: ignore[suspicious-url-open-usage]
-                return response.read()
-        except HTTPError as error:
-            raise DataRepositoryApiError(
-                error.code, error_message(error.read())
-            ) from error
+        return self._send(lambda: request)
+
+    def _send(self, build_request: Callable[[], Request]) -> bytes:
+        """Send a request, retrying transient gateway and network failures."""
+
+        last_error: _RetryableRequestError | None = None
+        for attempt in range(self._max_retries + 1):
+            try:
+                return _read_once(build_request(), self._timeout)
+            except _RetryableRequestError as error:
+                last_error = error
+                if attempt >= self._max_retries:
+                    break
+                delay = _retry_delay(self._retry_interval, attempt)
+                _logger.warning(
+                    "Data repository request failed (%s); retrying in %.1fs (%s/%s)",
+                    _failure_label(error.failure),
+                    delay,
+                    attempt + 1,
+                    self._max_retries,
+                )
+                time.sleep(delay)
+
+        if last_error is None:
+            raise RuntimeError("retry loop exited without a result")
+        raise last_error.failure from last_error.cause
 
     def _upload_blob(
         self,
@@ -264,40 +300,87 @@ class DataRepositoryApiClient:
                     f"Local file changed after it was hashed: {operation.source}"
                 )
 
-            source_file.seek(0)
-            upload_digest = blake3(max_threads=blake3.AUTO)
-            uploaded_size = 0
+            upload_state = _UploadState()
 
-            def chunks() -> Iterator[bytes]:
-                nonlocal uploaded_size
-                while chunk := source_file.read(1024 * 1024):
-                    upload_digest.update(chunk)
-                    uploaded_size += len(chunk)
-                    yield chunk
-                    if on_progress is not None:
-                        on_progress(len(chunk))
+            def build_request() -> Request:
+                upload_state.reset(source_file, on_progress)
+                return Request(  # ruff: ignore[suspicious-url-open-usage]
+                    url,
+                    data=upload_state.chunks(source_file, on_progress),
+                    headers={"Content-Length": str(operation.size)},
+                    method="PUT",
+                )
 
-            request = Request(  # ruff: ignore[suspicious-url-open-usage]
-                url,
-                data=chunks(),
-                headers={"Content-Length": str(operation.size)},
-                method="PUT",
-            )
-            try:
-                with urlopen(request, timeout=self._timeout) as response:  # ruff: ignore[suspicious-url-open-usage]
-                    response.read()
-            except HTTPError as error:
-                raise DataRepositoryApiError(
-                    error.code, error_message(error.read())
-                ) from error
+            self._send(build_request)
 
-            if (
-                upload_digest.hexdigest() != operation.hash
-                or uploaded_size != operation.size
-            ):
+            if upload_state.changed(operation):
                 raise RuntimeError(
                     f"Local file changed after it was hashed: {operation.source}"
                 )
+
+
+class _UploadState:
+    """Hash and progress for one blob PUT, reset when that PUT is retried."""
+
+    def __init__(self) -> None:
+        self._digest = blake3(max_threads=blake3.AUTO)
+        self._size = 0
+        self._reported = 0
+
+    def reset(
+        self,
+        source_file: BinaryIO,
+        on_progress: Callable[[int], None] | None,
+    ) -> None:
+        if self._reported and on_progress is not None:
+            on_progress(-self._reported)
+        self._reported = 0
+        self._digest = blake3(max_threads=blake3.AUTO)
+        self._size = 0
+        source_file.seek(0)
+
+    def chunks(
+        self,
+        source_file: BinaryIO,
+        on_progress: Callable[[int], None] | None,
+    ) -> Iterator[bytes]:
+        while chunk := source_file.read(1024 * 1024):
+            self._digest.update(chunk)
+            self._size += len(chunk)
+            yield chunk
+            self._reported += len(chunk)
+            if on_progress is not None:
+                on_progress(len(chunk))
+
+    def changed(self, operation: AddFileOperation) -> bool:
+        return (
+            self._digest.hexdigest() != operation.hash or self._size != operation.size
+        )
+
+
+def _read_once(request: Request, timeout: float) -> bytes:
+    try:
+        with urlopen(request, timeout=timeout) as response:  # ruff: ignore[suspicious-url-open-usage]
+            body = response.read()
+    except HTTPError as error:
+        failure = DataRepositoryApiError(error.code, error_message(error.read()))
+        if error.code not in _RETRYABLE_STATUS_CODES:
+            raise failure from error
+        raise _RetryableRequestError(failure, error) from error
+    except (HTTPException, OSError) as error:
+        raise _RetryableRequestError(error, error) from error
+    return body
+
+
+def _retry_delay(interval: float, attempt: int) -> float:
+    delay = interval * (_RETRY_BACKOFF_FACTOR**attempt)
+    return min(delay, _MAX_RETRY_DELAY)
+
+
+def _failure_label(failure: Exception) -> str:
+    if isinstance(failure, DataRepositoryApiError):
+        return f"HTTP {failure.status_code}"
+    return type(failure).__name__
 
 
 def _to_api_operation(operation: Operation) -> ApiOperation:
