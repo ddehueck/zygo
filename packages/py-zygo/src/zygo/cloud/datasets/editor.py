@@ -87,7 +87,7 @@ class DatasetEditor:
             raise RuntimeError("The commit result is available after the edit exits")
         return self._commit_result
 
-    def put(self, *, src: str | Path, dest: str) -> None:
+    def put(self, src: str | Path, dest: str | None = None) -> None:
         """Queue a local file to be added at ``dest`` in the dataset."""
 
         self._ensure_editing()
@@ -95,7 +95,9 @@ class DatasetEditor:
         if not source.is_file():
             raise FileNotFoundError(source)
         self._pending_operations.append(
-            _PendingAdd(source=source, destination=_normalize_repo_path(dest))
+            _PendingAdd(
+                source=source, destination=_normalize_repo_path(dest or source.name)
+            )
         )
 
     def put_dir(self, src: str | Path, dest: str | None = None) -> None:
