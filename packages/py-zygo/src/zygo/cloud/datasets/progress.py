@@ -92,36 +92,37 @@ class ProgressTracker:
         self._stage_log_interval = max(1, ((total or 1) + 19) // 20)
         self._stage_next_log = self._stage_log_interval
         self._stage_last_reported = 0
+        progress: Progress | None = None
+        if self._rich:
+            progress = Progress(
+                SpinnerColumn(),
+                TextColumn("{task.description}", markup=False),
+                BarColumn(bar_width=18),
+                _TaskProgressColumn(binary_units=False),
+                _TaskSpeedColumn(),
+                console=self._console,
+                transient=False,
+            )
+            progress.start()
+            self._progress = progress
+            self._stage_task_id = progress.add_task(label, total=total, unit=unit)
+        else:
+            self._log(f"▶ {label}")
         try:
-            if self._rich:
-                with Progress(
-                    SpinnerColumn(),
-                    TextColumn("{task.description}", markup=False),
-                    BarColumn(bar_width=18),
-                    _TaskProgressColumn(binary_units=False),
-                    _TaskSpeedColumn(),
-                    console=self._console,
-                    transient=False,
-                ) as progress:
-                    self._progress = progress
-                    self._stage_task_id = progress.add_task(
-                        label, total=total, unit=unit
-                    )
-                    yield
-                    succeeded = True
-            else:
-                self._log(f"▶ {label}")
-                yield
-                if (
-                    self._stage_total is not None
-                    and self._stage_completed != self._stage_last_reported
-                ):
-                    self._report_stage_progress()
-                succeeded = True
+            yield
+            if (
+                not self._rich
+                and self._stage_total is not None
+                and self._stage_completed != self._stage_last_reported
+            ):
+                self._report_stage_progress()
+            succeeded = True
         except BaseException:
             self._log(f"✗ {label}", style="red")
             raise
         finally:
+            if progress is not None:
+                progress.stop()
             self._progress = None
             self._stage_task_id = None
             self._stage_total = None
@@ -224,9 +225,7 @@ class ProgressTracker:
                 description=self._upload_description(),
             )
         elif count:
-            self._log(
-                f"  {self._upload_already_present} blobs already present"
-            )
+            self._log(f"  {self._upload_already_present} blobs already present")
 
     @contextmanager
     def upload_file(
@@ -235,10 +234,14 @@ class ProgressTracker:
         """Display an indented transfer row and yield its byte progress callback."""
 
         if self._progress is None:
-            yield lambda _: None
-            self._upload_completed_blobs += 1
-            self.advance_stage()
-            self._log(f"  ✓ {path}", style="green")
+            try:
+                yield lambda _: None
+            except BaseException:
+                raise
+            else:
+                self._upload_completed_blobs += 1
+                self.advance_stage()
+                self._log(f"  ✓ {path}", style="green")
             return
 
         task_id = self._progress.add_task(f"  {path}", total=size)

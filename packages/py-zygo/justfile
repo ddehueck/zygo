@@ -48,7 +48,7 @@ fmt-check:
 # Lint with ruff
 [group('lint')]
 lint:
-    uvx ruff check {{ src_dirs }}
+    uvx ruff check --no-fix {{ src_dirs }}
 
 # Lint and auto-fix with ruff
 [group('lint')]

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Collection
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
@@ -17,6 +16,7 @@ from zygo.cloud.datasets.operations import (
 from zygo.cloud.datasets.progress import ProgressTracker
 
 if TYPE_CHECKING:
+    from collections.abc import Collection
     from types import TracebackType
 
     from zygo.cloud.datasets.api import CommitResponse, DataRepositoryApiClient
@@ -119,21 +119,16 @@ class DatasetEditor:
         destination_root = _normalize_repo_path(dest or source.name)
         ignored_names = frozenset(ignore or ())
         for path in sorted(source.rglob("*")):
-            if path.is_file():
-                relative_path = path.relative_to(source).as_posix()
-                if path.name in ignored_names:
-                    tracker = self._progress_tracker
-                    if tracker is None:
-                        tracker = ProgressTracker()
-                        self._progress_tracker = tracker
-                    tracker.log_ignored_file(relative_path)
-                    continue
-                destination = _normalize_repo_path(
-                    f"{destination_root}/{relative_path}"
-                )
-                self._pending_operations.append(
-                    _PendingAdd(source=path, destination=destination)
-                )
+            if not path.is_file():
+                continue
+            relative_path = path.relative_to(source).as_posix()
+            if path.name in ignored_names:
+                self._log_ignored_file(relative_path)
+                continue
+            destination = _normalize_repo_path(f"{destination_root}/{relative_path}")
+            self._pending_operations.append(
+                _PendingAdd(source=path, destination=destination)
+            )
 
     def remove_file(self, path: str) -> None:
         """Queue a file removal by its dataset path."""
@@ -150,6 +145,13 @@ class DatasetEditor:
     def _ensure_editing(self) -> None:
         if not self._entered or self._finished:
             raise RuntimeError("Dataset changes must be added inside the edit context")
+
+    def _log_ignored_file(self, relative_path: str) -> None:
+        tracker = self._progress_tracker
+        if tracker is None:
+            tracker = ProgressTracker()
+            self._progress_tracker = tracker
+        tracker.log_ignored_file(relative_path)
 
     def _finalize_operations(self) -> None:
         operations: list[Operation] = []
@@ -171,15 +173,7 @@ class DatasetEditor:
                 directory_removals=directory_removals,
             )
 
-        hashed_additions: list[tuple[str, int]] = []
-        if additions:
-            with tracker.stage(
-                f"Hash data ({additions} files)", total=additions, unit="files"
-            ):
-                for pending in self._pending_operations:
-                    if isinstance(pending, _PendingAdd):
-                        hashed_additions.append(_hash_file(pending.source))
-                        tracker.advance_stage()
+        hashed_additions = self._hash_additions(additions, tracker)
 
         hashed = iter(hashed_additions)
         for pending in self._pending_operations:
@@ -203,6 +197,23 @@ class DatasetEditor:
             self._commit_result = self._client.apply(
                 self._repo_slug, self._operations, progress=tracker
             )
+
+    def _hash_additions(
+        self, additions: int, tracker: ProgressTracker
+    ) -> list[tuple[str, int]]:
+        if not additions:
+            return []
+
+        hashed_additions: list[tuple[str, int]] = []
+        with tracker.stage(
+            f"Hash data ({additions} files)", total=additions, unit="files"
+        ):
+            for pending in self._pending_operations:
+                if not isinstance(pending, _PendingAdd):
+                    continue
+                hashed_additions.append(_hash_file(pending.source))
+                tracker.advance_stage()
+        return hashed_additions
 
 
 def _hash_file(path: Path) -> tuple[str, int]:
