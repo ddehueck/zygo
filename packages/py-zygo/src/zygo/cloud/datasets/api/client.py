@@ -200,7 +200,9 @@ class DataRepositoryApiClient:
                     uploads.append((upload, operation))
 
                 if progress:
-                    progress.record_uploads_already_present(len(batch) - len(uploads))
+                    progress.record_uploads_already_present(
+                        len(batch) - len(uploads)
+                    )
 
                 for upload, operation in uploads:
                     file_progress = (
