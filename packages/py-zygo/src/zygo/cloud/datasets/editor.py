@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
@@ -48,6 +49,7 @@ class DatasetEditor:
         self._pending_operations: list[Operation | _PendingAdd] = []
         self._operations: tuple[Operation, ...] = ()
         self._commit_result: CommitResponse | None = None
+        self._progress_tracker: ProgressTracker | None = None
         self._entered = False
         self._finished = False
 
@@ -100,8 +102,14 @@ class DatasetEditor:
             )
         )
 
-    def put_dir(self, src: str | Path, dest: str | None = None) -> None:
-        """Queue every file in a local directory, preserving its tree."""
+    def put_dir(
+        self,
+        src: str | Path,
+        dest: str | None = None,
+        *,
+        ignore: Collection[str] | None = None,
+    ) -> None:
+        """Queue files in a local directory, skipping matching file names."""
 
         self._ensure_editing()
         source = Path(src)
@@ -109,9 +117,17 @@ class DatasetEditor:
             raise NotADirectoryError(source)
 
         destination_root = _normalize_repo_path(dest or source.name)
+        ignored_names = frozenset(ignore or ())
         for path in sorted(source.rglob("*")):
             if path.is_file():
                 relative_path = path.relative_to(source).as_posix()
+                if path.name in ignored_names:
+                    tracker = self._progress_tracker
+                    if tracker is None:
+                        tracker = ProgressTracker()
+                        self._progress_tracker = tracker
+                    tracker.log_ignored_file(relative_path)
+                    continue
                 destination = _normalize_repo_path(
                     f"{destination_root}/{relative_path}"
                 )
@@ -137,7 +153,8 @@ class DatasetEditor:
 
     def _finalize_operations(self) -> None:
         operations: list[Operation] = []
-        tracker = ProgressTracker()
+        tracker = self._progress_tracker or ProgressTracker()
+        self._progress_tracker = tracker
         additions = sum(
             isinstance(item, _PendingAdd) for item in self._pending_operations
         )

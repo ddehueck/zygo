@@ -44,10 +44,7 @@ __all__ = ["DataRepositoryApiClient"]
 
 # Gateway and capacity failures are usually transient. Client errors are not.
 _RETRYABLE_STATUS_CODES = frozenset({408, 429, 500, 502, 503, 504})
-_DEFAULT_MAX_RETRIES = 4
-_DEFAULT_RETRY_INTERVAL = 0.5
-_MAX_RETRY_DELAY = 8.0
-_RETRY_BACKOFF_FACTOR = 2
+_RETRY_DELAYS_SECONDS = (0.5, 1.0, 2.0, 4.0, 30.0, 60.0)
 _logger = logging.getLogger(__name__)
 
 
@@ -93,8 +90,6 @@ class DataRepositoryApiClient:
         self._api_bearer_auth = resolved_key
         self._timeout = timeout
         self._upload_batch_size = upload_batch_size
-        self._max_retries = _DEFAULT_MAX_RETRIES
-        self._retry_interval = _DEFAULT_RETRY_INTERVAL
 
     def prepare_upload(self, repo_slug: str, request: UploadRequest) -> UploadResponse:
         """Ask which content blobs are missing and read the current repository head."""
@@ -167,10 +162,7 @@ class DataRepositoryApiClient:
         upload_stage = progress.stage("Upload data") if progress else nullcontext()
         with upload_stage:
             if progress:
-                progress.configure_upload_batches(
-                    len(blobs_by_hash),
-                    sum(blob.size_bytes for blob in blobs_by_hash.values()),
-                )
+                progress.configure_upload_batches(len(blobs_by_hash))
 
             blob_items = list(blobs_by_hash.items())
             batch_count = max(
@@ -203,15 +195,7 @@ class DataRepositoryApiClient:
                     uploads.append((upload, operation))
 
                 if progress:
-                    upload_hashes = {upload.blake3 for upload, _ in uploads}
-                    progress.record_uploads_already_present(
-                        len(batch) - len(uploads),
-                        byte_count=sum(
-                            blob.size_bytes
-                            for blob_hash, blob in batch
-                            if blob_hash not in upload_hashes
-                        ),
-                    )
+                    progress.record_uploads_already_present(len(batch) - len(uploads))
 
                 for upload, operation in uploads:
                     file_progress = (
@@ -267,20 +251,20 @@ class DataRepositoryApiClient:
         """Send a request, retrying transient gateway and network failures."""
 
         last_error: _RetryableRequestError | None = None
-        for attempt in range(self._max_retries + 1):
+        for attempt in range(len(_RETRY_DELAYS_SECONDS) + 1):
             try:
                 return _read_once(build_request(), self._timeout)
             except _RetryableRequestError as error:
                 last_error = error
-                if attempt >= self._max_retries:
+                if attempt >= len(_RETRY_DELAYS_SECONDS):
                     break
-                delay = _retry_delay(self._retry_interval, attempt)
+                delay = _RETRY_DELAYS_SECONDS[attempt]
                 _logger.warning(
                     "Data repository request failed (%s); retrying in %.1fs (%s/%s)",
                     _failure_label(error.failure),
                     delay,
                     attempt + 1,
-                    self._max_retries,
+                    len(_RETRY_DELAYS_SECONDS),
                 )
                 time.sleep(delay)
 
@@ -379,11 +363,6 @@ def _read_once(request: Request, timeout: float) -> bytes:
     except (HTTPException, OSError) as error:
         raise _RetryableRequestError(error, error) from error
     return body
-
-
-def _retry_delay(interval: float, attempt: int) -> float:
-    delay = interval * (_RETRY_BACKOFF_FACTOR**attempt)
-    return min(delay, _MAX_RETRY_DELAY)
 
 
 def _failure_label(failure: Exception) -> str:
