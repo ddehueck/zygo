@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
 from blake3 import blake3
+from pathspec import GitIgnoreSpec
 
 from zygo.cloud.datasets.operations import (
     AddFileOperation,
@@ -16,6 +17,7 @@ from zygo.cloud.datasets.operations import (
 from zygo.cloud.datasets.progress import ProgressTracker
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from types import TracebackType
 
     from zygo.cloud.datasets.api import CommitResponse, DataRepositoryApiClient
@@ -48,6 +50,7 @@ class DatasetEditor:
         self._pending_operations: list[Operation | _PendingAdd] = []
         self._operations: tuple[Operation, ...] = ()
         self._commit_result: CommitResponse | None = None
+        self._progress_tracker: ProgressTracker | None = None
         self._entered = False
         self._finished = False
 
@@ -100,8 +103,23 @@ class DatasetEditor:
             )
         )
 
-    def put_dir(self, src: str | Path, dest: str | None = None) -> None:
-        """Queue every file in a local directory, preserving its tree."""
+    def put_dir(
+        self,
+        src: str | Path,
+        dest: str | None = None,
+        *,
+        ignore: Sequence[str] | None = None,
+    ) -> None:
+        """Queue files from a directory, skipping paths matched by ``ignore``.
+
+        ``ignore`` is an ordered sequence of gitignore-style patterns applied
+        to POSIX paths relative to ``src``. For example, ``*.tmp`` matches
+        files with that suffix at any depth, ``/data/*.csv`` anchors at the
+        source root, and ``cache/`` skips matching directories and their
+        contents. Prefix a pattern with ``!`` to re-include a path. As in
+        ``.gitignore``, a child cannot be re-included when its parent directory
+        is ignored.
+        """
 
         self._ensure_editing()
         source = Path(src)
@@ -109,15 +127,20 @@ class DatasetEditor:
             raise NotADirectoryError(source)
 
         destination_root = _normalize_repo_path(dest or source.name)
-        for path in sorted(source.rglob("*")):
-            if path.is_file():
-                relative_path = path.relative_to(source).as_posix()
-                destination = _normalize_repo_path(
-                    f"{destination_root}/{relative_path}"
-                )
-                self._pending_operations.append(
-                    _PendingAdd(source=path, destination=destination)
-                )
+        ignore_spec = GitIgnoreSpec.from_lines(ignore or ())
+        files_to_add, ignored_paths = _collect_directory_paths(source, ignore_spec)
+        for relative_path, is_directory in sorted(ignored_paths):
+            if is_directory:
+                self._log_ignored_dir(relative_path)
+            else:
+                self._log_ignored_file(relative_path)
+
+        for path in sorted(files_to_add):
+            relative_path = path.relative_to(source).as_posix()
+            destination = _normalize_repo_path(f"{destination_root}/{relative_path}")
+            self._pending_operations.append(
+                _PendingAdd(source=path, destination=destination)
+            )
 
     def remove_file(self, path: str) -> None:
         """Queue a file removal by its dataset path."""
@@ -135,9 +158,24 @@ class DatasetEditor:
         if not self._entered or self._finished:
             raise RuntimeError("Dataset changes must be added inside the edit context")
 
+    def _log_ignored_file(self, relative_path: str) -> None:
+        tracker = self._progress_tracker
+        if tracker is None:
+            tracker = ProgressTracker()
+            self._progress_tracker = tracker
+        tracker.log_ignored_file(relative_path)
+
+    def _log_ignored_dir(self, relative_path: str) -> None:
+        tracker = self._progress_tracker
+        if tracker is None:
+            tracker = ProgressTracker()
+            self._progress_tracker = tracker
+        tracker.log_ignored_dir(relative_path)
+
     def _finalize_operations(self) -> None:
         operations: list[Operation] = []
-        tracker = ProgressTracker()
+        tracker = self._progress_tracker or ProgressTracker()
+        self._progress_tracker = tracker
         additions = sum(
             isinstance(item, _PendingAdd) for item in self._pending_operations
         )
@@ -154,15 +192,7 @@ class DatasetEditor:
                 directory_removals=directory_removals,
             )
 
-        hashed_additions: list[tuple[str, int]] = []
-        if additions:
-            with tracker.stage(
-                f"Hash data ({additions} files)", total=additions, unit="files"
-            ):
-                for pending in self._pending_operations:
-                    if isinstance(pending, _PendingAdd):
-                        hashed_additions.append(_hash_file(pending.source))
-                        tracker.advance_stage()
+        hashed_additions = self._hash_additions(additions, tracker)
 
         hashed = iter(hashed_additions)
         for pending in self._pending_operations:
@@ -187,6 +217,23 @@ class DatasetEditor:
                 self._repo_slug, self._operations, progress=tracker
             )
 
+    def _hash_additions(
+        self, additions: int, tracker: ProgressTracker
+    ) -> list[tuple[str, int]]:
+        if not additions:
+            return []
+
+        hashed_additions: list[tuple[str, int]] = []
+        with tracker.stage(
+            f"Hash data ({additions} files)", total=additions, unit="files"
+        ):
+            for pending in self._pending_operations:
+                if not isinstance(pending, _PendingAdd):
+                    continue
+                hashed_additions.append(_hash_file(pending.source))
+                tracker.advance_stage()
+        return hashed_additions
+
 
 def _hash_file(path: Path) -> tuple[str, int]:
     digest = blake3(max_threads=blake3.AUTO)
@@ -196,6 +243,61 @@ def _hash_file(path: Path) -> tuple[str, int]:
             digest.update(chunk)
             size += len(chunk)
     return digest.hexdigest(), size
+
+
+def _collect_directory_paths(
+    source: Path,
+    ignore_spec: GitIgnoreSpec,
+) -> tuple[list[Path], list[tuple[str, bool]]]:
+    files_to_add: list[Path] = []
+    ignored_paths: list[tuple[str, bool]] = []
+    for directory, child_dirs, filenames in source.walk(top_down=True):
+        relative_directory = directory.relative_to(source)
+        ignored_child_dirs = [
+            child_dir
+            for child_dir in child_dirs
+            if _is_ignored(
+                ignore_spec,
+                f"{(relative_directory / child_dir).as_posix()}/",
+            )
+        ]
+        ignored_paths.extend(
+            ((relative_directory / child_dir).as_posix(), True)
+            for child_dir in ignored_child_dirs
+        )
+        child_dirs[:] = [
+            child_dir for child_dir in child_dirs if child_dir not in ignored_child_dirs
+        ]
+        for filename in filenames:
+            path, ignored_path = _classify_directory_file(
+                source, directory / filename, ignore_spec
+            )
+            if ignored_path is not None:
+                ignored_paths.append(ignored_path)
+            if path is not None:
+                files_to_add.append(path)
+    return sorted(files_to_add), ignored_paths
+
+
+def _classify_directory_file(
+    source: Path,
+    path: Path,
+    ignore_spec: GitIgnoreSpec,
+) -> tuple[Path | None, tuple[str, bool] | None]:
+    relative_path = path.relative_to(source).as_posix()
+    if path.is_dir():
+        if _is_ignored(ignore_spec, f"{relative_path}/"):
+            return None, (relative_path, True)
+        return None, None
+    if not path.is_file():
+        return None, None
+    if _is_ignored(ignore_spec, relative_path):
+        return None, (relative_path, False)
+    return path, None
+
+
+def _is_ignored(ignore_spec: GitIgnoreSpec, relative_path: str) -> bool:
+    return ignore_spec.match_file(relative_path)
 
 
 def _normalize_repo_path(path: str) -> str:

@@ -194,9 +194,7 @@ class Dataset(AbstractFileSystem):
         )
         self.invalidate_cache()
 
-    def _api_list_entries(
-        self, path: str, *, limit: int
-    ) -> EntriesResponse:
+    def _api_list_entries(self, path: str, *, limit: int) -> EntriesResponse:
         try:
             return self._api_client().list_entries(
                 self._id,
@@ -372,5 +370,3 @@ def _to_fsspec_entry(entry: Entry) -> dict[str, object]:
     if isinstance(entry, DirectoryEntry):
         return {"name": entry.path, "size": 0, "type": "directory"}
     raise TypeError(f"Unsupported repository entry: {entry!r}")
-
-

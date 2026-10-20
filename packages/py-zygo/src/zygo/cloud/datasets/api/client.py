@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 
     from pydantic import BaseModel
 
-    from zygo.cloud.datasets.api.types import ApiOperation
+    from zygo.cloud.datasets.api.types import ApiOperation, RequiredUpload
     from zygo.cloud.datasets.operations import Operation
     from zygo.cloud.datasets.progress import ProgressTracker
 
@@ -44,10 +44,7 @@ __all__ = ["DataRepositoryApiClient"]
 
 # Gateway and capacity failures are usually transient. Client errors are not.
 _RETRYABLE_STATUS_CODES = frozenset({408, 429, 500, 502, 503, 504})
-_DEFAULT_MAX_RETRIES = 4
-_DEFAULT_RETRY_INTERVAL = 0.5
-_MAX_RETRY_DELAY = 8.0
-_RETRY_BACKOFF_FACTOR = 2
+_RETRY_DELAYS_SECONDS = (0.5, 1.0, 2.0, 4.0, 30.0, 60.0)
 _logger = logging.getLogger(__name__)
 
 
@@ -58,6 +55,23 @@ class _RetryableRequestError(Exception):
         super().__init__(str(failure))
         self.failure = failure
         self.cause = cause
+
+
+def _collect_upload_blobs(
+    operations: tuple[Operation, ...],
+) -> tuple[dict[str, AddFileOperation], dict[str, ApiBlob]]:
+    additions: dict[str, AddFileOperation] = {}
+    blobs_by_hash: dict[str, ApiBlob] = {}
+    for operation in operations:
+        if not isinstance(operation, AddFileOperation):
+            continue
+        blob = ApiBlob(blake3=operation.hash, size_bytes=operation.size)
+        previous_blob = blobs_by_hash.get(operation.hash)
+        if previous_blob is not None and previous_blob.size_bytes != operation.size:
+            raise ValueError(f"Hash {operation.hash} has conflicting file sizes")
+        blobs_by_hash[operation.hash] = blob
+        additions.setdefault(operation.hash, operation)
+    return additions, blobs_by_hash
 
 
 class DataRepositoryApiClient:
@@ -93,8 +107,6 @@ class DataRepositoryApiClient:
         self._api_bearer_auth = resolved_key
         self._timeout = timeout
         self._upload_batch_size = upload_batch_size
-        self._max_retries = _DEFAULT_MAX_RETRIES
-        self._retry_interval = _DEFAULT_RETRY_INTERVAL
 
     def prepare_upload(self, repo_slug: str, request: UploadRequest) -> UploadResponse:
         """Ask which content blobs are missing and read the current repository head."""
@@ -152,77 +164,10 @@ class DataRepositoryApiClient:
         if not operations:
             return None
 
-        additions: dict[str, AddFileOperation] = {}
-        blobs_by_hash: dict[str, ApiBlob] = {}
-        for operation in operations:
-            if not isinstance(operation, AddFileOperation):
-                continue
-            blob = ApiBlob(blake3=operation.hash, size_bytes=operation.size)
-            previous_blob = blobs_by_hash.get(operation.hash)
-            if previous_blob is not None and previous_blob.size_bytes != operation.size:
-                raise ValueError(f"Hash {operation.hash} has conflicting file sizes")
-            blobs_by_hash[operation.hash] = blob
-            additions.setdefault(operation.hash, operation)
-
-        upload_stage = progress.stage("Upload data") if progress else nullcontext()
-        with upload_stage:
-            if progress:
-                progress.configure_upload_batches(
-                    len(blobs_by_hash),
-                    sum(blob.size_bytes for blob in blobs_by_hash.values()),
-                )
-
-            blob_items = list(blobs_by_hash.items())
-            batch_count = max(
-                1,
-                (len(blob_items) + self._upload_batch_size - 1)
-                // self._upload_batch_size,
-            )
-            head_commit_id: str | None = None
-            for batch_index in range(batch_count):
-                start = batch_index * self._upload_batch_size
-                batch = blob_items[start : start + self._upload_batch_size]
-                batch_additions = {
-                    blob_hash: additions[blob_hash] for blob_hash, _ in batch
-                }
-                upload_response = self.prepare_upload(
-                    repo_slug,
-                    UploadRequest(blobs=[blob for _, blob in batch]),
-                )
-                if batch_index == 0:
-                    head_commit_id = upload_response.head_commit_id
-
-                uploads = []
-                for upload in upload_response.uploads:
-                    operation = batch_additions.get(upload.blake3)
-                    if operation is None:
-                        raise RuntimeError(
-                            "Upload response requested an unknown blob hash: "
-                            f"{upload.blake3}"
-                        )
-                    uploads.append((upload, operation))
-
-                if progress:
-                    upload_hashes = {upload.blake3 for upload, _ in uploads}
-                    progress.record_uploads_already_present(
-                        len(batch) - len(uploads),
-                        byte_count=sum(
-                            blob.size_bytes
-                            for blob_hash, blob in batch
-                            if blob_hash not in upload_hashes
-                        ),
-                    )
-
-                for upload, operation in uploads:
-                    file_progress = (
-                        progress.upload_file(operation.path, operation.size)
-                        if progress
-                        else nullcontext(lambda _: None)
-                    )
-                    with file_progress as on_progress:
-                        self._upload_blob(
-                            upload.upload_url, operation, on_progress=on_progress
-                        )
+        additions, blobs_by_hash = _collect_upload_blobs(operations)
+        head_commit_id = self._upload_blobs(
+            repo_slug, additions, blobs_by_hash, progress
+        )
 
         request = CommitRequest(
             expected_head_commit_id=head_commit_id,
@@ -231,6 +176,68 @@ class DataRepositoryApiClient:
         commit_stage = progress.stage("Commit changes") if progress else nullcontext()
         with commit_stage:
             return self.commit(repo_slug, request)
+
+    def _upload_blobs(
+        self,
+        repo_slug: str,
+        additions: dict[str, AddFileOperation],
+        blobs_by_hash: dict[str, ApiBlob],
+        progress: ProgressTracker | None,
+    ) -> str | None:
+        upload_stage = progress.stage("Upload data") if progress else nullcontext()
+        with upload_stage:
+            if progress:
+                progress.configure_upload_batches(len(blobs_by_hash))
+
+            blob_items = list(blobs_by_hash.items())
+            batch_starts = range(0, max(1, len(blob_items)), self._upload_batch_size)
+            head_commit_id: str | None = None
+            for batch_index, start in enumerate(batch_starts):
+                batch = blob_items[start : start + self._upload_batch_size]
+                response = self.prepare_upload(
+                    repo_slug,
+                    UploadRequest(blobs=[blob for _, blob in batch]),
+                )
+                if batch_index == 0:
+                    head_commit_id = response.head_commit_id
+                self._upload_batch(batch, response.uploads, additions, progress)
+        return head_commit_id
+
+    def _upload_batch(
+        self,
+        batch: list[tuple[str, ApiBlob]],
+        requested_uploads: list[RequiredUpload],
+        additions: dict[str, AddFileOperation],
+        progress: ProgressTracker | None,
+    ) -> None:
+        batch_additions = {blob_hash: additions[blob_hash] for blob_hash, _ in batch}
+        uploads: list[tuple[RequiredUpload, AddFileOperation]] = []
+        for upload in requested_uploads:
+            operation = batch_additions.get(upload.blake3)
+            if operation is None:
+                raise RuntimeError(
+                    f"Upload response requested an unknown blob hash: {upload.blake3}"
+                )
+            uploads.append((upload, operation))
+
+        if progress:
+            progress.record_uploads_already_present(len(batch) - len(uploads))
+        for upload, operation in uploads:
+            self._upload_one_blob(upload, operation, progress)
+
+    def _upload_one_blob(
+        self,
+        upload: RequiredUpload,
+        operation: AddFileOperation,
+        progress: ProgressTracker | None,
+    ) -> None:
+        file_progress = (
+            progress.upload_file(operation.path, operation.size)
+            if progress
+            else nullcontext(lambda _: None)
+        )
+        with file_progress as on_progress:
+            self._upload_blob(upload.upload_url, operation, on_progress=on_progress)
 
     def _post(
         self, repo_slug: str, action: Literal["upload", "commit"], body: BaseModel
@@ -267,20 +274,20 @@ class DataRepositoryApiClient:
         """Send a request, retrying transient gateway and network failures."""
 
         last_error: _RetryableRequestError | None = None
-        for attempt in range(self._max_retries + 1):
+        for attempt in range(len(_RETRY_DELAYS_SECONDS) + 1):
             try:
                 return _read_once(build_request(), self._timeout)
             except _RetryableRequestError as error:
                 last_error = error
-                if attempt >= self._max_retries:
+                if attempt >= len(_RETRY_DELAYS_SECONDS):
                     break
-                delay = _retry_delay(self._retry_interval, attempt)
+                delay = _RETRY_DELAYS_SECONDS[attempt]
                 _logger.warning(
                     "Data repository request failed (%s); retrying in %.1fs (%s/%s)",
                     _failure_label(error.failure),
                     delay,
                     attempt + 1,
-                    self._max_retries,
+                    len(_RETRY_DELAYS_SECONDS),
                 )
                 time.sleep(delay)
 
@@ -379,11 +386,6 @@ def _read_once(request: Request, timeout: float) -> bytes:
     except (HTTPException, OSError) as error:
         raise _RetryableRequestError(error, error) from error
     return body
-
-
-def _retry_delay(interval: float, attempt: int) -> float:
-    delay = interval * (_RETRY_BACKOFF_FACTOR**attempt)
-    return min(delay, _MAX_RETRY_DELAY)
 
 
 def _failure_label(failure: Exception) -> str:
