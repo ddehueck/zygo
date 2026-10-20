@@ -75,9 +75,16 @@ class ProgressTracker:
         )
 
     def log_ignored_file(self, path: str) -> None:
-        """Report a file skipped by a directory ignore list."""
+        """Report a file skipped by an ignore pattern."""
 
-        self._log(f"  Ignoring file: {path} (matched ignore list)", style="yellow")
+        self._log(f"  Ignoring file: {path} (matched ignore pattern)", style="yellow")
+
+    def log_ignored_dir(self, path: str) -> None:
+        """Report a directory skipped by an ignore pattern."""
+
+        self._log(
+            f"  Ignoring directory: {path} (matched ignore pattern)", style="yellow"
+        )
 
     @contextmanager
     def stage(
