@@ -1,6 +1,8 @@
+from collections.abc import Callable
 import inspect
 from types import FunctionType, NoneType, UnionType
 from typing import (
+    Any,
     Union,
     cast,
     get_args,
@@ -8,6 +10,7 @@ from typing import (
     get_type_hints,
 )
 
+from zygo.workflow.channel import Channel
 from zygo.workflow.context import JobContext
 
 CONTEXTUAL_JOB_PARAMETER_COUNT = 2
@@ -17,8 +20,8 @@ CONTEXTUAL_JOB_PARAMETER_COUNT = 2
 def validate_job(
     func: FunctionType,
     *,
-    input_channel_type: type[object],
-    output_channel_type: type[object],
+    input: Channel[Any],  # pyright: ignore[reportExplicitAny]
+    output: Channel[Any],  # pyright: ignore[reportExplicitAny]
 ) -> None:
     """Validate a given job function.
 
@@ -52,8 +55,8 @@ def validate_job(
         func,
         input_parameter=input_parameter,
         type_hints=type_hints,
-        input_type=input_channel_type,
-        output_type=output_channel_type,
+        input=input,
+        output=output,
     )
 
     if len(parameters) == CONTEXTUAL_JOB_PARAMETER_COUNT:
@@ -78,16 +81,24 @@ def _validate_channel_types(
     *,
     input_parameter: inspect.Parameter,
     type_hints: dict[str, object],
-    input_type: type[object],
-    output_type: type[object],
+    input: Channel[Any],  # pyright: ignore[reportExplicitAny]
+    output: Channel[Any],  # pyright: ignore[reportExplicitAny]
 ) -> None:
+    input_type = input.value_type
+    output_type = output.value_type
+    accepts_output_type = getattr(output.codec, "accepts_output_type", None)
+
     input_annotation = type_hints.get(input_parameter.name, inspect.Parameter.empty)
     if input_annotation != input_type:
         message = f"Job {func.__name__!r} input parameter {input_parameter.name!r} must be annotated with the input channel type {input_type!r}, not {input_annotation!r}"
         raise ValueError(message)
 
     return_annotation = type_hints.get("return", inspect.Signature.empty)
-    if not _is_valid_return_annotation(return_annotation, output_type=output_type):
+    if not _is_valid_return_annotation(
+        return_annotation,
+        output_type=output_type,
+        accepts_output_type=accepts_output_type,
+    ):
         message = f"Job {func.__name__!r} return value must be annotated with the output channel type {output_type!r}, list[{output_type!r}], or a union of those types and None, not {return_annotation!r}"
         raise ValueError(message)
 
@@ -96,8 +107,13 @@ def _is_valid_return_annotation(
     annotation: object,
     *,
     output_type: type[object],
+    accepts_output_type: Callable[[object], bool] | None,
 ) -> bool:
-    if _is_output_annotation(annotation, output_type=output_type):
+    if _is_output_annotation(
+        annotation,
+        output_type=output_type,
+        accepts_output_type=accepts_output_type,
+    ):
         return True
 
     if get_origin(annotation) not in {Union, UnionType}:
@@ -105,7 +121,12 @@ def _is_valid_return_annotation(
 
     union_members = cast("tuple[object, ...]", get_args(annotation))
     return any(member is not NoneType for member in union_members) and all(
-        member is NoneType or _is_output_annotation(member, output_type=output_type)
+        member is NoneType
+        or _is_output_annotation(
+            member,
+            output_type=output_type,
+            accepts_output_type=accepts_output_type,
+        )
         for member in union_members
     )
 
@@ -114,11 +135,19 @@ def _is_output_annotation(
     annotation: object,
     *,
     output_type: type[object],
+    accepts_output_type: Callable[[object], bool] | None,
 ) -> bool:
     if annotation == output_type:
         return True
 
-    return get_origin(annotation) is list and get_args(annotation) == (output_type,)
+    if get_origin(annotation) is list:
+        args = get_args(annotation)
+        return len(args) == 1 and (
+            args[0] == output_type
+            or (accepts_output_type is not None and accepts_output_type(args[0]))
+        )
+
+    return accepts_output_type is not None and accepts_output_type(annotation)
 
 
 def _validate_context_parameter(

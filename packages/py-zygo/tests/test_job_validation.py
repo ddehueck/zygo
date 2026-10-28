@@ -51,24 +51,33 @@ def test_job_accepts_all_supported_return_annotations() -> None:
 
 
 def test_job_rejects_list_of_wrong_output_type() -> None:
+    input_channel = Channel(id="input", codec=Integer)
+    output_channel = Channel(id="output", codec=String)
+
     def invalid(value: int) -> list[int]:
         return [value]
 
     with pytest.raises(ValueError, match="return value must be annotated"):
-        validate_job(invalid, input_channel_type=int, output_channel_type=str)
+        validate_job(invalid, input=input_channel, output=output_channel)
 
 
 def test_job_rejects_union_containing_wrong_output_type() -> None:
+    input_channel = Channel(id="input", codec=Integer)
+    output_channel = Channel(id="output", codec=String)
+
     def invalid(value: int) -> str | list[int]:
         return str(value)
 
     with pytest.raises(ValueError, match="return value must be annotated"):
-        validate_job(invalid, input_channel_type=int, output_channel_type=str)
+        validate_job(invalid, input=input_channel, output=output_channel)
 
 
 def test_job_rejects_none_without_an_output_type() -> None:
+    input_channel = Channel(id="input", codec=Integer)
+    output_channel = Channel(id="output", codec=String)
+
     def invalid(value: int) -> None:
         del value
 
     with pytest.raises(ValueError, match="return value must be annotated"):
-        validate_job(invalid, input_channel_type=int, output_channel_type=str)
+        validate_job(invalid, input=input_channel, output=output_channel)

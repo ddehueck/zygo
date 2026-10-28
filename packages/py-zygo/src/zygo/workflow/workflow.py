@@ -128,8 +128,8 @@ class Workflow:
             job_fn = cast("FunctionType", fn)
             validate_job(
                 job_fn,
-                input_channel_type=input.value_type,
-                output_channel_type=output.value_type,
+                input=input,
+                output=output,
             )
             self.jobs.set(
                 job=job_fn,

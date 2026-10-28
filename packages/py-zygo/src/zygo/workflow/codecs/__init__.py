@@ -9,6 +9,7 @@ from zygo.workflow.codecs.base import (
     FileExtension,
     FileFormat,
 )
+from zygo.workflow.codecs.files import Csv, Txt
 from zygo.workflow.codecs.fs import (
     File as _File,
     FileMap as _FileMap,
@@ -40,6 +41,7 @@ __all__ = [
     "CodecDecodeError",
     "CodecEncodeError",
     "CodecError",
+    "Csv",
     "File",
     "FileExtension",
     "FileFormat",
@@ -49,4 +51,5 @@ __all__ = [
     "Integer",
     "Json",
     "String",
+    "Txt",
 ]

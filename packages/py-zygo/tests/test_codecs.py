@@ -1,6 +1,8 @@
+from pandas import DataFrame, read_csv
+from pandas.testing import assert_frame_equal
 import pytest
 
-from zygo import Channel
+from zygo import Channel, Csv
 from zygo.workflow.codecs import (
     Boolean,
     Bytes,
@@ -29,6 +31,16 @@ def test_codec_formats_use_only_normalized_file_extensions() -> None:
 
     assert [format.extension for format in formats] == ["bin", "txt", "json"]
     assert all(not hasattr(format, "content_type") for format in formats)
+
+
+def test_csv_codec_round_trips_pandas_dataframe_through_file_path() -> None:
+    dataframe = DataFrame({"name": ["alpha", "beta"], "count": [1, 2]})
+
+    decoded = Csv.decode(Csv.encode(dataframe))
+
+    assert decoded.path.suffix == ".csv"
+    assert_frame_equal(read_csv(decoded.path), dataframe)
+    decoded.close()
 
 
 @pytest.mark.parametrize(
