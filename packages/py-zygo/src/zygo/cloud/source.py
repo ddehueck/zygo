@@ -13,7 +13,6 @@ from zygo.cloud.api import (
     SourceAwaitingUpload,
     SourceReady,
     SourceRequest,
-    SourceResponse,
 )
 from zygo.cloud.api.types import source_response_adapter
 
@@ -23,7 +22,6 @@ if TYPE_CHECKING:
 __all__ = ["SourceApiClient"]
 
 _SOURCE_PATH = "/api/v1/source"
-_MAX_UPLOAD_ROUNDS = 3
 
 
 class SourceApiClient:
@@ -48,32 +46,35 @@ class SourceApiClient:
         """Resolve a source archive, uploading it when the server requests it."""
 
         source_hash = sha256(archive).hexdigest()
-        for attempt in range(_MAX_UPLOAD_ROUNDS + 1):
-            response = self.resolve(source_hash)
-            if isinstance(response, SourceReady):
-                if response.source_hash != source_hash:
-                    raise CloudApiError(
-                        None,
-                        "Source API returned a source hash that does not match the archive",
-                    )
-                return response
-
-            if not isinstance(response, SourceAwaitingUpload):
-                raise CloudApiError(None, "Source API returned an unsupported status")
-            if response.source_hash != source_hash:
-                raise CloudApiError(
-                    None,
-                    "Source API requested an upload for a different source hash",
-                )
-            if attempt == _MAX_UPLOAD_ROUNDS:
-                break
-            self._client.put_presigned(
-                response.upload_url,
-                archive,
-                content_type="application/zip",
+        response = self.resolve(source_hash)
+        if isinstance(response, SourceReady):
+            return self._validate_ready_source(response, source_hash)
+        if not isinstance(response, SourceAwaitingUpload):
+            raise CloudApiError(None, "Source API returned an unsupported status")
+        if response.source_hash != source_hash:
+            raise CloudApiError(
+                None,
+                "Source API requested an upload for a different source hash",
             )
 
-        raise CloudApiError(
-            None,
-            "Source upload completed, but the source API did not return a ready source",
+        self._client.put_presigned(
+            response.upload_url,
+            archive,
+            content_type="application/zip",
         )
+        response = self.resolve(source_hash)
+        if not isinstance(response, SourceReady):
+            raise CloudApiError(
+                None,
+                "Source upload completed, but the source API did not return a ready source",
+            )
+        return self._validate_ready_source(response, source_hash)
+
+    @staticmethod
+    def _validate_ready_source(response: SourceReady, source_hash: str) -> SourceReady:
+        if response.source_hash != source_hash:
+            raise CloudApiError(
+                None,
+                "Source API returned a source hash that does not match the archive",
+            )
+        return response

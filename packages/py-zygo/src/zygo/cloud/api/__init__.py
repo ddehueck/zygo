@@ -10,11 +10,13 @@ from zygo.cloud.api.types import (
     ImageInputUpload,
     ImageResponse,
     ImageStarted,
+    PythonTarget,
     PythonVersion,
     SourceAwaitingUpload,
     SourceReady,
     SourceRequest,
     SourceResponse,
+    WorkflowId,
 )
 
 __all__ = [
@@ -27,9 +29,11 @@ __all__ = [
     "ImageInputUpload",
     "ImageResponse",
     "ImageStarted",
+    "PythonTarget",
     "PythonVersion",
     "SourceAwaitingUpload",
     "SourceReady",
     "SourceRequest",
     "SourceResponse",
+    "WorkflowId",
 ]

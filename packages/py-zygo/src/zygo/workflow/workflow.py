@@ -1,4 +1,5 @@
 from collections.abc import Callable
+import inspect
 from typing import (
     TYPE_CHECKING,
     ClassVar,
@@ -70,6 +71,16 @@ class Workflow:
         input: Channel[T_workflow_in],
         output: Channel[T_workflow_out],
     ) -> None:
+        frame = inspect.currentframe()
+        caller = frame.f_back if frame is not None else None
+        module_name = caller.f_globals.get("__name__") if caller else None
+        module_file = caller.f_globals.get("__file__") if caller else None
+        self._definition_module_name = (
+            module_name if isinstance(module_name, str) else None
+        )
+        self._definition_file = module_file if isinstance(module_file, str) else None
+        del caller, frame
+
         self.id = WorkflowId(id)
         self.input_channel = input
         self.output_channel = output

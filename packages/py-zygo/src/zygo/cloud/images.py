@@ -22,7 +22,6 @@ if TYPE_CHECKING:
 __all__ = ["ImageApiClient"]
 
 _IMAGES_PATH = "/api/v1/images"
-_MAX_UPLOAD_ROUNDS = 3
 
 
 class ImageApiClient:
@@ -52,33 +51,36 @@ class ImageApiClient:
             "uv_lock": (uv_lock, uv_lock_hash),
         }
 
-        for attempt in range(_MAX_UPLOAD_ROUNDS + 1):
-            response_payload = self._client.post_json(
-                _IMAGES_PATH, request.model_dump(mode="json")
-            )
-            try:
-                response = image_response_adapter.validate_python(response_payload)
-            except ValidationError as error:
+        response = self._create_image(request)
+        if isinstance(response, ImageStarted):
+            return response
+        if not isinstance(response, ImageAwaitingUpload):
+            raise CloudApiError(None, "Image API returned an unsupported status")
+
+        for upload in response.uploads:
+            content, content_hash = file_inputs[upload.file]
+            if upload.hash != content_hash:
                 raise CloudApiError(
-                    None, f"Invalid image API response: {error}"
-                ) from error
-            if isinstance(response, ImageStarted):
-                return response
-            if not isinstance(response, ImageAwaitingUpload):
-                raise CloudApiError(None, "Image API returned an unsupported status")
-            if attempt == _MAX_UPLOAD_ROUNDS:
-                break
+                    None,
+                    f"Image API requested an unexpected hash for {upload.file}",
+                )
+            self._client.put_presigned(upload.upload_url, content)
 
-            for upload in response.uploads:
-                content, content_hash = file_inputs[upload.file]
-                if upload.hash != content_hash:
-                    raise CloudApiError(
-                        None,
-                        f"Image API requested an unexpected hash for {upload.file}",
-                    )
-                self._client.put_presigned(upload.upload_url, content)
+        response = self._create_image(request)
+        if not isinstance(response, ImageStarted):
+            raise CloudApiError(
+                None,
+                "Image inputs uploaded, but the image API did not return a started build",
+            )
+        return response
 
-        raise CloudApiError(
-            None,
-            "Image inputs uploaded, but the image API did not return a started build",
+    def _create_image(
+        self, request: CreateImageRequest
+    ) -> ImageStarted | ImageAwaitingUpload:
+        response_payload = self._client.post_json(
+            _IMAGES_PATH, request.model_dump(mode="json")
         )
+        try:
+            return image_response_adapter.validate_python(response_payload)
+        except ValidationError as error:
+            raise CloudApiError(None, f"Invalid image API response: {error}") from error

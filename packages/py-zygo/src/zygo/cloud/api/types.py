@@ -23,11 +23,13 @@ __all__ = [
     "ImageInputUpload",
     "ImageResponse",
     "ImageStarted",
+    "PythonTarget",
     "PythonVersion",
     "SourceAwaitingUpload",
     "SourceReady",
     "SourceRequest",
     "SourceResponse",
+    "WorkflowId",
 ]
 
 Id = Annotated[str, StringConstraints(min_length=1, max_length=255)]
