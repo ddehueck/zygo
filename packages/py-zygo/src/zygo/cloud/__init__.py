@@ -1,5 +1,6 @@
 """Cloud storage integrations for Zygo."""
 
+from zygo.cloud.api import CloudApiClient, CloudApiError
 from zygo.cloud.datasets import (
     AddFileOperation,
     ApiAddFileOperation,
@@ -25,6 +26,13 @@ from zygo.cloud.datasets import (
     UploadRequest,
     UploadResponse,
 )
+from zygo.cloud.images import ImageApiClient
+from zygo.cloud.source import SourceApiClient
+from zygo.cloud.workflow import (
+    DeployWorkflowResponse,
+    WorkflowApiClient,
+    deploy_workflow,
+)
 
 __all__ = [
     "AddFileOperation",
@@ -33,21 +41,28 @@ __all__ = [
     "ApiOperation",
     "ApiRemoveDirOperation",
     "ApiRemoveFileOperation",
+    "CloudApiClient",
+    "CloudApiError",
     "CommitRequest",
     "CommitResponse",
     "DataRepositoryApiClient",
     "DataRepositoryApiError",
     "Dataset",
     "DatasetEditor",
+    "DeployWorkflowResponse",
     "DirectoryEntry",
     "EntriesResponse",
     "Entry",
     "FileEntry",
+    "ImageApiClient",
     "Operation",
     "RemoveDirOperation",
     "RemoveFileOperation",
     "RequiredUpload",
     "ResolveResponse",
+    "SourceApiClient",
     "UploadRequest",
     "UploadResponse",
+    "WorkflowApiClient",
+    "deploy_workflow",
 ]
