@@ -51,7 +51,7 @@ class CloudApiClient:
 
         if not path.startswith("/") or path.startswith("//"):
             raise ValueError("API path must be an absolute path on api_host")
-        request = Request(  # noqa: S310
+        request = Request(  # ruff: ignore[suspicious-url-open-usage]
             f"{self._api_host}{path}",
             data=json.dumps(body).encode(),
             headers={
@@ -61,7 +61,7 @@ class CloudApiClient:
             method="POST",
         )
         try:
-            with cast("IO[bytes]", urlopen(request, timeout=self._timeout)) as response:  # noqa: S310
+            with cast("IO[bytes]", urlopen(request, timeout=self._timeout)) as response:  # ruff: ignore[suspicious-url-open-usage]
                 payload = response.read()
         except HTTPError as error:
             raise CloudApiError(error.code, error_message(error.read())) from error
@@ -83,7 +83,7 @@ class CloudApiClient:
 
         if not path.startswith("/") or path.startswith("//"):
             raise ValueError("API path must be an absolute path on api_host")
-        request = Request(  # noqa: S310
+        request = Request(  # ruff: ignore[suspicious-url-open-usage]
             f"{self._api_host}{path}",
             headers={
                 "Authorization": f"Bearer {self._api_bearer_auth}",
@@ -92,7 +92,7 @@ class CloudApiClient:
             method="GET",
         )
         try:
-            with cast("IO[bytes]", urlopen(request, timeout=self._timeout)) as response:  # noqa: S310
+            with cast("IO[bytes]", urlopen(request, timeout=self._timeout)) as response:  # ruff: ignore[suspicious-url-open-usage]
                 yield from _event_data(response)
         except HTTPError as error:
             raise CloudApiError(error.code, error_message(error.read())) from error
@@ -113,14 +113,14 @@ class CloudApiClient:
             "Content-Length": str(len(content)),
             "Content-Type": content_type or "application/octet-stream",
         }
-        request = Request(  # noqa: S310
+        request = Request(  # ruff: ignore[suspicious-url-open-usage]
             url,
             data=content,
             headers=headers,
             method="PUT",
         )
         try:
-            with cast("IO[bytes]", urlopen(request, timeout=self._timeout)) as response:  # noqa: S310
+            with cast("IO[bytes]", urlopen(request, timeout=self._timeout)) as response:  # ruff: ignore[suspicious-url-open-usage]
                 response.read()
         except HTTPError as error:
             raise CloudApiError(error.code, error_message(error.read())) from error

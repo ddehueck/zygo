@@ -139,9 +139,7 @@ class Workflow:
         *,
         input: Channel[T_job_in],
         output: Channel[Any],  # pyright: ignore[reportExplicitAny]
-    ) -> _FileJobDecorator[T_job_in] | _JobDecorator[
-        T_job_in, Any
-    ]:  # pyright: ignore[reportExplicitAny]
+    ) -> _FileJobDecorator[T_job_in] | _JobDecorator[T_job_in, Any]:  # pyright: ignore[reportExplicitAny]
         """
         Decorator to register a job function with the workflow.
 
@@ -164,12 +162,8 @@ class Workflow:
         """
 
         def decorator(
-            fn: Callable[[T_job_in], object]
-            | _JobWithContext[T_job_in, object],
-        ) -> (
-            Callable[[T_job_in], object]
-            | _JobWithContext[T_job_in, object]
-        ):
+            fn: Callable[[T_job_in], object] | _JobWithContext[T_job_in, object],
+        ) -> Callable[[T_job_in], object] | _JobWithContext[T_job_in, object]:
             job_fn = cast("FunctionType", fn)
             validate_job(
                 job_fn,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime  # noqa: TC003
+from datetime import datetime  # ruff: ignore[typing-only-standard-library-import]
 from typing import Annotated, Literal
 from urllib.parse import urlsplit
 

@@ -57,9 +57,7 @@ class Csv(_TemporaryFileValue):
         for method_name in ("to_csv", "write_csv"):
             method = getattr(value, method_name, None)
             if callable(method):
-                return cls._encode_writer_result(
-                    method, method_name
-                )
+                return cls._encode_writer_result(method, method_name)
 
         to_list = getattr(value, "tolist", None)
         if callable(to_list):
@@ -77,13 +75,7 @@ class Csv(_TemporaryFileValue):
         cls, method: Callable[..., object], method_name: str
     ) -> bytes:
         try:
-            if method_name == "to_csv":
-                try:
-                    result = method(index=False)
-                except TypeError:
-                    result = method()
-            else:
-                result = method()
+            result = cls._call_writer(method, method_name)
         except Exception as error:
             raise CodecEncodeError(str(error)) from error
 
@@ -94,6 +86,15 @@ class Csv(_TemporaryFileValue):
         raise CodecEncodeError(
             f"{method_name}() must return str or bytes, got {type(result).__name__}"
         )
+
+    @staticmethod
+    def _call_writer(method: Callable[..., object], method_name: str) -> object:
+        if method_name != "to_csv":
+            return method()
+        try:
+            return method(index=False)
+        except TypeError:
+            return method()
 
     @classmethod
     def _encode_rows(cls, rows: object) -> bytes:
