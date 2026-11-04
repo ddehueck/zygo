@@ -2,6 +2,7 @@ from collections.abc import Callable
 import inspect
 from typing import (
     TYPE_CHECKING,
+    Any,
     ClassVar,
     Protocol,
     TypeVar,
@@ -16,6 +17,7 @@ if TYPE_CHECKING:
 from zygo._internal.meta.jobs import validate_job
 from zygo._internal.utils.hash import hash_to_str
 from zygo.workflow.channel import Channel
+from zygo.workflow.codecs import Csv, Txt
 from zygo.workflow.context import JobContext
 from zygo.workflow.jobs import JobRegistry
 from zygo.workflow.types import WorkflowId
@@ -27,6 +29,7 @@ T_job_in = TypeVar("T_job_in")
 T_job_out = TypeVar("T_job_out")
 T_job_in_contra = TypeVar("T_job_in_contra", contravariant=True)
 T_job_out_co = TypeVar("T_job_out_co", covariant=True)
+T_file_job_out = TypeVar("T_file_job_out")
 
 
 class _JobWithContext(Protocol[T_job_in_contra, T_job_out_co]):
@@ -54,6 +57,22 @@ class _JobDecorator(Protocol[T_job_in, T_job_out]):
         self,
         fn: Callable[[T_job_in], _JobReturn[T_job_out]],
     ) -> Callable[[T_job_in], _JobReturn[T_job_out]]: ...
+
+
+class _FileJobDecorator(Protocol[T_job_in]):
+    """Job decorator for codecs that can serialize multiple Python types."""
+
+    @overload
+    def __call__(
+        self,
+        fn: _JobWithContext[T_job_in, T_file_job_out],
+    ) -> _JobWithContext[T_job_in, T_file_job_out]: ...
+
+    @overload
+    def __call__(
+        self,
+        fn: Callable[[T_job_in], T_file_job_out],
+    ) -> Callable[[T_job_in], T_file_job_out]: ...
 
 
 @final
@@ -91,12 +110,38 @@ class Workflow:
         job_hashes = [bytes(entry.hash, "utf-8") for entry in self.jobs]
         return hash_to_str(job_hashes)
 
+    @overload
+    def job(
+        self,
+        *,
+        input: Channel[T_job_in],
+        output: Channel[Csv],
+    ) -> _FileJobDecorator[T_job_in]: ...
+
+    @overload
+    def job(
+        self,
+        *,
+        input: Channel[T_job_in],
+        output: Channel[Txt],
+    ) -> _FileJobDecorator[T_job_in]: ...
+
+    @overload
     def job(
         self,
         *,
         input: Channel[T_job_in],
         output: Channel[T_job_out],
-    ) -> _JobDecorator[T_job_in, T_job_out]:
+    ) -> _JobDecorator[T_job_in, T_job_out]: ...
+
+    def job(
+        self,
+        *,
+        input: Channel[T_job_in],
+        output: Channel[Any],  # pyright: ignore[reportExplicitAny]
+    ) -> _FileJobDecorator[T_job_in] | _JobDecorator[
+        T_job_in, Any
+    ]:  # pyright: ignore[reportExplicitAny]
         """
         Decorator to register a job function with the workflow.
 
@@ -119,11 +164,11 @@ class Workflow:
         """
 
         def decorator(
-            fn: Callable[[T_job_in], _JobReturn[T_job_out]]
-            | _JobWithContext[T_job_in, _JobReturn[T_job_out]],
+            fn: Callable[[T_job_in], object]
+            | _JobWithContext[T_job_in, object],
         ) -> (
-            Callable[[T_job_in], _JobReturn[T_job_out]]
-            | _JobWithContext[T_job_in, _JobReturn[T_job_out]]
+            Callable[[T_job_in], object]
+            | _JobWithContext[T_job_in, object]
         ):
             job_fn = cast("FunctionType", fn)
             validate_job(
@@ -138,4 +183,7 @@ class Workflow:
             )
             return job_fn
 
-        return cast("_JobDecorator[T_job_in, T_job_out]", decorator)
+        return cast(
+            "_FileJobDecorator[T_job_in] | _JobDecorator[T_job_in, Any]",
+            decorator,
+        )  # pyright: ignore[reportExplicitAny]

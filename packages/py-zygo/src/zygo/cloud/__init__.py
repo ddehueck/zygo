@@ -26,6 +26,7 @@ from zygo.cloud.datasets import (
     UploadRequest,
     UploadResponse,
 )
+from zygo.cloud.image_build_logs import ImageBuildLogsApiClient
 from zygo.cloud.images import ImageApiClient
 from zygo.cloud.source import SourceApiClient
 from zygo.cloud.workflow import (
@@ -55,6 +56,7 @@ __all__ = [
     "Entry",
     "FileEntry",
     "ImageApiClient",
+    "ImageBuildLogsApiClient",
     "Operation",
     "RemoveDirOperation",
     "RemoveFileOperation",

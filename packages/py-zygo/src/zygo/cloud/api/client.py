@@ -14,7 +14,7 @@ from zygo.cloud.api.util import is_local_http
 from zygo.cloud.env import api_host as get_api_host, api_key as get_api_key
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Iterable, Iterator, Mapping
     from typing import IO
 
 
@@ -78,6 +78,25 @@ class CloudApiClient:
             )
         return cast("dict[str, object]", result)
 
+    def stream_events(self, path: str) -> Iterator[str]:
+        """GET an authenticated SSE stream and yield each event's data."""
+
+        if not path.startswith("/") or path.startswith("//"):
+            raise ValueError("API path must be an absolute path on api_host")
+        request = Request(  # noqa: S310
+            f"{self._api_host}{path}",
+            headers={
+                "Authorization": f"Bearer {self._api_bearer_auth}",
+                "Accept": "text/event-stream",
+            },
+            method="GET",
+        )
+        try:
+            with cast("IO[bytes]", urlopen(request, timeout=self._timeout)) as response:  # noqa: S310
+                yield from _event_data(response)
+        except HTTPError as error:
+            raise CloudApiError(error.code, error_message(error.read())) from error
+
     def put_presigned(
         self,
         url: str,
@@ -105,3 +124,17 @@ class CloudApiClient:
                 response.read()
         except HTTPError as error:
             raise CloudApiError(error.code, error_message(error.read())) from error
+
+
+def _event_data(lines: Iterable[bytes]) -> Iterator[str]:
+    data: list[str] = []
+    for raw_line in lines:
+        line = raw_line.decode("utf-8").rstrip("\r\n")
+        if not line:
+            if data:
+                yield "\n".join(data)
+                data.clear()
+            continue
+        field, separator, value = line.partition(":")
+        if field == "data":
+            data.append(value.removeprefix(" ") if separator else "")

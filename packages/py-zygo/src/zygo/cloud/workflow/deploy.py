@@ -7,6 +7,7 @@ import sys
 from typing import TYPE_CHECKING
 
 from zygo.cloud.api import CloudApiClient
+from zygo.cloud.image_build_logs import ImageBuildLogsApiClient
 from zygo.cloud.images import ImageApiClient
 from zygo.cloud.progress import ProgressLogger
 from zygo.cloud.source import SourceApiClient
@@ -28,17 +29,19 @@ __all__ = ["deploy_workflow"]
 
 
 def deploy_workflow(
-    workflow: Workflow,
     *,
+    workflow: Workflow,
     project_dir: str | Path,
 ) -> DeployWorkflowResponse:
-    """Deploy an already-loaded workflow from a local Python project.
+    """Deploy a workflow from a local Python project.
 
-    ``project_dir`` must contain ``pyproject.toml`` and ``uv.lock``. The
-    workflow's module-level binding determines the Python target. The selected
-    Python version is read from ``[tool.zygo.cloud].python_version`` in the
-    project's ``pyproject.toml`` or falls back to its ``.python-version`` file.
-    When both are present, they must resolve to the same Python version.
+    We assume the ``project_dir`` is a UV project to build the OCI image the workflow
+    needs to run in a cloud environment. Specifically, it must contain a
+    ``pyproject.toml`` file and a ``uv.lock`` file.
+
+    A python version must be specified in the ``pyproject.toml`` file in the
+    ``[tool.zygo.cloud]`` section or in a ``.python-version`` file.
+    If both are present, they must resolve to the same Python version.
     """
 
     if not isinstance(workflow, Workflow):
@@ -50,7 +53,7 @@ def deploy_workflow(
     del caller, frame
 
     progress = ProgressLogger()
-    with progress.stage("Preparing workflow project"):
+    with progress.stage(f"Packaging workflow source code from {project_dir!r}"):
         target, target_file = infer_workflow_target(
             project_dir, workflow, module_contexts
         )
@@ -62,21 +65,34 @@ def deploy_workflow(
         )
 
     client = CloudApiClient()
-    with progress.stage("Resolving workflow source"):
+    with progress.stage("Uploading workflow source code"):
         source = SourceApiClient(client).ensure_source(project.source_archive)
-    with progress.stage("Creating Python image"):
+
+    with progress.stage("Building Python image"):
         image = ImageApiClient(client).create(
             python_version=project.python_version,
             pyproject_toml=project.pyproject_toml,
             uv_lock=project.uv_lock,
         )
-    with progress.stage("Deploying workflow"):
+        if not image.reused:
+            _watch_image_build_logs(client, image.image_id, progress)
+
+    with progress.stage("Finalizing workflow deployment"):
         return WorkflowApiClient(client).deploy(
             workflow_id=project.workflow_id,
             target=project.target,
             source_id=source.source_id,
             image_id=image.image_id,
         )
+
+
+def _watch_image_build_logs(
+    client: CloudApiClient, image_id: str, progress: ProgressLogger
+) -> None:
+    progress.wait_for_logs("Waiting for image build logs…")
+    for event in ImageBuildLogsApiClient(client).watch(image_id):
+        if event.message is not None:
+            progress.log(event.message)
 
 
 def _deployment_module_contexts(

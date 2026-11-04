@@ -20,6 +20,7 @@ __all__ = [
     "DeployWorkflowRequest",
     "DeployWorkflowResponse",
     "ImageAwaitingUpload",
+    "ImageBuildLogLine",
     "ImageInputUpload",
     "ImageResponse",
     "ImageStarted",
@@ -112,6 +113,12 @@ class ImageStarted(_ApiModel):
     status: Literal["started"]
     image_id: Id
     reused: bool
+
+
+class ImageBuildLogLine(_ApiModel):
+    message: str | None = None
+    timestamp: int | None = None
+    ingestion_time: int | None = Field(default=None, alias="ingestionTime")
 
 
 type ImageResponse = Annotated[
