@@ -1,182 +1,52 @@
-# fsspec's untyped open signature obscures the binary mode in strict checking.
-# pyright: reportUnknownMemberType=false
-
-from collections.abc import Sequence
 from io import BytesIO
-import json
-from typing import IO, cast
-from urllib.request import Request
+from unittest.mock import MagicMock
 
+import fsspec
 import pytest
 
-from zygo.cli.v0.types import IpcMessage, StoreConfig
 from zygo.cloud import fsspec_backend
-from zygo.store import DataUri
-from zygo.workflow.store import WorkflowStore, WorkflowStoreConfig
-from zygo.workflow.types import JobRunContext, JobRunId, WorkflowRunId
+from zygo.cloud.datasets.api import CommitRequest, DataRepositoryApiClient, DataRepositoryApiError
 
 
-class _NoopTransport:
-    def emit(self, messages: IpcMessage | Sequence[IpcMessage]) -> None:
-        pass
+def test_environment_configuration(monkeypatch):
+    monkeypatch.setenv("ZYGO_CLOUD_API_HOST", "https://example.com")
+    monkeypatch.setenv("ZYGO_CLOUD_API_KEY", "scoped-token")
+    fs = fsspec.filesystem("zygo")
+    assert fs._client._api_host == "https://example.com"
+    assert fs._client._api_bearer_auth == "scoped-token"
 
 
-@pytest.fixture
-def transfers(
-    monkeypatch: pytest.MonkeyPatch,
-) -> list[tuple[str, str, bytes | None, str | None]]:
-    calls: list[tuple[str, str, bytes | None, str | None]] = []
-
-    def urlopen(request: Request, timeout: int) -> BytesIO:
-        url = request.full_url
-        calls.append((
-            request.get_method(),
-            url,
-            cast("bytes | None", request.data),
-            request.get_header("Authorization"),
-        ))
-        if url.endswith("/presign"):
-            assert timeout == 30
-            return BytesIO(
-                json.dumps({"url": "https://storage.example/object"}).encode()
-            )
-
-        assert timeout == 120
-        if request.get_method() == "GET":
-            return BytesIO(b"object contents")
-        return BytesIO()
-
-    monkeypatch.setattr(fsspec_backend, "urlopen", urlopen)
-    return calls
+def test_complete_uri_routes_to_repository(monkeypatch):
+    dataset = MagicMock()
+    dataset.id = "workflow-one"
+    dataset.open.return_value = BytesIO(b"upstream")
+    dataset.ls.return_value = [{"name": "jobs/output.csv", "type": "file", "size": 8}]
+    constructor = MagicMock(return_value=dataset)
+    monkeypatch.setattr(fsspec_backend, "Dataset", constructor)
+    fs = fsspec_backend.ZygoFileSystem(api_host="https://example.com", api_bearer_auth="token")
+    with fs.open("zygo://workflow-one/jobs/output.csv", "rb") as stream:
+        assert stream.read() == b"upstream"
+    constructor.assert_called_with("workflow-one", client=fs._client)
+    dataset.open.assert_called_once()
+    assert dataset.open.call_args.args == ("jobs/output.csv", "rb")
+    assert fs.ls("zygo://workflow-one/jobs", detail=False) == ["workflow-one/jobs/output.csv"]
 
 
-def test_read_streams_from_presigned_url(
-    transfers: list[tuple[str, str, bytes | None, str | None]],
-) -> None:
-    fs = fsspec_backend.ZygoFileSystem(
-        api_host="https://api.zygo.cloud",
-        api_bearer_auth="test-secret",
-        skip_instance_cache=True,
-    )
-
-    with cast("IO[bytes]", fs.open("zygo://folder/object name", "rb")) as file:
-        assert file.read(6) == b"object"
-        assert file.read() == b" contents"
-
-    assert transfers == [
-        (
-            "POST",
-            "https://api.zygo.cloud/v1/store/presign",
-            b'{"op": "GET", "uri": "zygo://folder/object name"}',
-            "Bearer test-secret",
-        ),
-        ("GET", "https://storage.example/object", None, None),
-    ]
+def test_commit_retries_new_head(monkeypatch):
+    commit = MagicMock(side_effect=[DataRepositoryApiError(409, "head changed"), "committed"])
+    monkeypatch.setattr(DataRepositoryApiClient, "commit", commit)
+    monkeypatch.setattr(fsspec_backend.time, "sleep", lambda _: None)
+    client = fsspec_backend._WorkflowRepositoryClient("https://example.com", "token")
+    client.prepare_upload = MagicMock(return_value=MagicMock(head_commit_id="new-head"))
+    request = MagicMock(spec=CommitRequest)
+    assert client.commit("workflow-one", request) == "committed"
+    request.model_copy.assert_called_once_with(update={"expected_head_commit_id": "new-head"})
 
 
-def test_store_put_with_zygo_backend(
-    transfers: list[tuple[str, str, bytes | None, str | None]],
-) -> None:
-    kwargs = {
-        "api_host": "https://api.zygo.cloud",
-        "api_bearer_auth": "test-secret",
-        "skip_instance_cache": True,
-    }
-    store = WorkflowStore(
-        context=JobRunContext(
-            workflow_run_id=WorkflowRunId("wf1"),
-            job_run_id=JobRunId("job1"),
-            input=DataUri("zygo://runs/input"),
-        ),
-        config=WorkflowStoreConfig(
-            job=StoreConfig(root_uri="zygo://runs/", kwargs=kwargs),
-            workflow=StoreConfig(root_uri="zygo://workflows/", kwargs=kwargs),
-            cache=StoreConfig(root_uri="zygo://cache/", kwargs=kwargs),
-        ),
-        ipc_transport=_NoopTransport(),
-    )
-
-    uri = store.scope("job").put("output.txt", b"output")
-
-    assert str(uri) == "zygo://runs/wr=wf1/jr=job1/output.txt"
-    assert transfers == [
-        (
-            "POST",
-            "https://api.zygo.cloud/v1/store/presign",
-            b'{"op": "PUT", "uri": "zygo://runs/wr=wf1/jr=job1/output.txt"}',
-            "Bearer test-secret",
-        ),
-        ("PUT", "https://storage.example/object", b"output", None),
-    ]
-
-
-def test_write_puts_once_on_close(
-    transfers: list[tuple[str, str, bytes | None, str | None]],
-) -> None:
-    fs = fsspec_backend.ZygoFileSystem(
-        api_host="https://api.zygo.cloud",
-        api_bearer_auth="test-secret",
-        skip_instance_cache=True,
-    )
-
-    with cast("IO[bytes]", fs.open("zygo://file", "wb")) as file:
-        file.write(b"first")
-        file.write(b" second")
-        assert transfers == []
-
-    assert transfers == [
-        (
-            "POST",
-            "https://api.zygo.cloud/v1/store/presign",
-            b'{"op": "PUT", "uri": "zygo://file"}',
-            "Bearer test-secret",
-        ),
-        ("PUT", "https://storage.example/object", b"first second", None),
-    ]
-
-
-def test_ls_strips_protocol_and_defaults_size(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def urlopen(request: Request, timeout: int) -> BytesIO:
-        assert request.full_url.endswith("/store/ls")
-        assert timeout == 30
-        return BytesIO(
-            json.dumps({
-                "entries": [
-                    {
-                        "name": "zygo://wsp_1/dsv/dsv_1/part-0.parquet",
-                        "type": "file",
-                        "size": 12,
-                    },
-                    {
-                        "name": "zygo://wsp_1/dsv/dsv_1/nested",
-                        "type": "directory",
-                    },
-                ]
-            }).encode()
-        )
-
-    monkeypatch.setattr(fsspec_backend, "urlopen", urlopen)
-    fs = fsspec_backend.ZygoFileSystem(
-        api_host="https://api.zygo.cloud",
-        api_bearer_auth="test-secret",
-        skip_instance_cache=True,
-    )
-
-    assert fs.ls("zygo://wsp_1/dsv/dsv_1/", detail=True) == [
-        {
-            "name": "wsp_1/dsv/dsv_1/part-0.parquet",
-            "type": "file",
-            "size": 12,
-        },
-        {
-            "name": "wsp_1/dsv/dsv_1/nested",
-            "type": "directory",
-            "size": 0,
-        },
-    ]
-    assert fs.ls("wsp_1/dsv/dsv_1/", detail=False) == [
-        "wsp_1/dsv/dsv_1/part-0.parquet",
-        "wsp_1/dsv/dsv_1/nested",
-    ]
+def test_permission_error_is_not_retried(monkeypatch):
+    commit = MagicMock(side_effect=DataRepositoryApiError(403, "denied"))
+    monkeypatch.setattr(DataRepositoryApiClient, "commit", commit)
+    client = fsspec_backend._WorkflowRepositoryClient("https://example.com", "token")
+    with pytest.raises(DataRepositoryApiError):
+        client.commit("workflow-one", MagicMock())
+    assert commit.call_count == 1
